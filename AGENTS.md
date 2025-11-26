@@ -4,7 +4,7 @@
 Agent logic sits in `src/eagent`. `graph.py` wires the LangGraph flow, `nodes/` contains worker and aggregator code, and `config.py`, `state.py`, plus `utils/` centralize settings and helpers. CLI entry points (`main.py`, `runner.py`) load `.env` before bootstrapping. Prompts stay in `prompts.py`, telemetry hooks in `telemetry.py`. Tests live in `tests/`, and LangSmith evaluation helpers in `evals/`. Co-locate new prompts, assets, or fixtures with their consuming module.
 
 ## Build, Test, and Development Commands
-- `uv sync` — install runtime and optional test dependencies from `pyproject.toml`; always run this on a fresh checkout.
+- `uv sync` — install runtime dependencies (run on every fresh checkout). Add `--extra test` when you plan to run `uv run pytest` so `pytest-asyncio` and related tooling are available.
 - `uv run eagent --model openai:gpt-4o --temperature 0.0` — execute the CLI agent end-to-end; adjust flags but keep the `uv run` prefix for reproducibility.
 - `uv run eagent -h` — show CLI help (short flag enabled via Typer context settings) to discover available subcommands and options.
 - `uv run eagent --version` — print the installed application version (sourced dynamically from package metadata) and exit; useful for debugging environments.
