@@ -6,6 +6,8 @@ Agent logic sits in `src/eagent`. `graph.py` wires the LangGraph flow, `nodes/` 
 ## Build, Test, and Development Commands
 - `uv sync` — install runtime and optional test dependencies from `pyproject.toml`; always run this on a fresh checkout.
 - `uv run eagent --model openai:gpt-4o --temperature 0.0` — execute the CLI agent end-to-end; adjust flags but keep the `uv run` prefix for reproducibility.
+- `uv run eagent -h` — show CLI help (short flag enabled via Typer context settings) to discover available subcommands and options.
+- `uv run eagent --version` — print the installed application version (sourced dynamically from package metadata) and exit; useful for debugging environments.
 - `uv run pytest` — run the async-aware test suite configured via `[tool.pytest.ini_options]`.
 - `uv run python tests/eval.py` — trigger LangSmith dataset evaluations once credentials are present.
 

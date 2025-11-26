@@ -2,12 +2,35 @@ import typer
 from rich.console import Console
 from rich.prompt import Prompt
 
+from eagent import __version__
 from eagent.runner import AnalysisSession
 from eagent.state import Task
 from eagent.utils.parsing import parse_pdf_structure
 
-app = typer.Typer()
+app = typer.Typer(context_settings={"help_option_names": ["-h", "--help"]})
 console = Console()
+
+
+def version_callback(value: bool):
+    if not value:
+        return
+    console.print(f"eagent {__version__}")
+    raise typer.Exit()
+
+
+@app.callback()
+def main(
+    ctx: typer.Context,
+    version: bool = typer.Option(
+        None,
+        "--version",
+        "-v",
+        help="Show the installed version and exit.",
+        callback=version_callback,
+        is_eager=True,
+    ),
+):
+    return
 
 
 @app.command()
