@@ -1,10 +1,10 @@
 import asyncio
 
 from langchain.evaluation import load_evaluator
-from langchain_openai import ChatOpenAI
 from langsmith import Client
 
 from eagent.graph import build_graph
+from eagent.llm import get_default_llm
 
 DATASET_NAME = "Literature-KV-Test"
 KV_EXAMPLES = [
@@ -22,7 +22,7 @@ KV_EXAMPLES = [
     }
 ]
 
-eval_llm = ChatOpenAI(model="gpt-4o")
+eval_llm = get_default_llm()
 
 
 def correct_extraction_evaluator(run, example):

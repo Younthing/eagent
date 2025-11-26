@@ -1,23 +1,16 @@
 from eagent.llm import get_default_llm
 from eagent.prompts import worker_prompt
 from eagent.state import AnalysisResult, Task
+from eagent.utils.parsing import get_section_context
 
 llm = get_default_llm()
-
-
-def extract_context(doc: dict, task: Task) -> str:
-    """Context Slicing: exact section first, fallback to truncated full doc."""
-    content = doc.get(task.section_filter)
-    if not content:
-        return str(doc)[:2000]
-    return content
 
 
 def worker_node(state: dict):
     task: Task = state["task"]
     doc = state["doc_structure"]
 
-    context = extract_context(doc, task)
+    context = get_section_context(doc, task.section_filter)
 
     max_retries = 3
     current_try = 0

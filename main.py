@@ -2,7 +2,7 @@ import typer
 from rich.console import Console
 from rich.prompt import Prompt
 
-from eagent.graph import build_graph
+from eagent.runner import AnalysisSession
 from eagent.state import Task
 from eagent.utils.parsing import parse_pdf_structure
 
@@ -14,51 +14,50 @@ console = Console()
 def analyze(file_path: str):
     """带 HITL 的文献分析流程。"""
     doc_structure = parse_pdf_structure(file_path)
-
-    app_graph = build_graph()
-    thread_config = {"configurable": {"thread_id": "session_user_1"}}
-
-    initial_state = {"doc_structure": doc_structure, "plan": [], "analyses": []}
+    session = AnalysisSession(doc_structure)
 
     console.print("[bold blue]🤖 AI 正在规划分析任务...[/bold blue]")
-
-    for _ in app_graph.stream(initial_state, thread_config):
-        pass
-
-    snapshot = app_graph.get_state(thread_config)
-    if not snapshot.values:
-        console.print("[red]Graph failed to start.[/red]")
+    plan = session.generate_plan()
+    if not plan:
+        console.print("[red]Graph failed to produce a plan.[/red]")
         return
 
-    current_plan = snapshot.values["plan"]
+    def show_plan(tasks: list[Task]) -> None:
+        console.print("\n[yellow]=== AI 提议的分析计划 ===[/yellow]")
+        for i, task in enumerate(tasks):
+            console.print(
+                f"{i+1}. 维度: [bold]{task.dimension}[/bold] -> 读取章节: [cyan]{task.section_filter}[/cyan]"
+            )
 
-    console.print("\n[yellow]=== AI 提议的分析计划 ===[/yellow]")
-    for i, task in enumerate(current_plan):
-        console.print(
-            f"{i+1}. 维度: [bold]{task.dimension}[/bold] -> 读取章节: [cyan]{task.section_filter}[/cyan]"
+    show_plan(plan)
+
+    while True:
+        action = Prompt.ask(
+            "\n下一步操作?", choices=["continue", "add", "quit"], default="continue"
         )
+        if action == "quit":
+            console.print("[yellow]已取消运行。[/yellow]")
+            return
+        if action == "continue":
+            break
 
-    user_action = Prompt.ask("\n下一步操作?", choices=["continue", "add", "quit"], default="continue")
-
-    if user_action == "quit":
-        return
-    elif user_action == "add":
         new_dim = Prompt.ask("输入新维度名称")
         new_key = Prompt.ask("输入读取章节Key", default="methods")
         new_task = Task(dimension=new_dim, section_filter=new_key, search_query=new_dim)
-        updated_plan = current_plan + [new_task]
-        app_graph.update_state(thread_config, {"plan": updated_plan})
-        console.print("[green]计划已更新，继续执行...[/green]")
+        updated_plan = plan + [new_task]
+        session.update_plan(updated_plan)
+        plan = session.plan
+        console.print("[green]计划已更新。[/green]")
+        show_plan(plan)
 
     console.print("🚀 并行分析中...")
-    final_output = None
-    for event in app_graph.stream(None, thread_config):
-        if "summarizer" in event:
-            final_output = event["summarizer"]
+    final_report = session.run()
+    if not final_report:
+        console.print("[red]分析未产生报告。[/red]")
+        return
 
-    if final_output:
-        console.print("\n[bold green]=== 最终报告 ===[/bold green]")
-        console.print(final_output["final_report"])
+    console.print("\n[bold green]=== 最终报告 ===[/bold green]")
+    console.print(final_report)
 
 
 if __name__ == "__main__":
