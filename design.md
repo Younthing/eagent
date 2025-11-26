@@ -1,6 +1,6 @@
-# Literature Agent Project Documentation
+# Literature Agent (Upgraded)
 
-一个基于 LangGraph 的文献分析智能体项目示例。该项目遵循生产级标准，包含完整的配置管理、异步支持、通用模型封装、LangSmith 评测以及单元测试最佳实践。
+并行 Map-Reduce 文献分析智能体示例，集成 LangChain Hub 提示词、LangSmith 追踪、上下文切片、节点级重试与 HITL 控制。
 
 ---
 
@@ -9,645 +9,277 @@
 ```text
 eagent/
 ├── .env.example                # 环境变量模版
-├── pyproject.toml              # 项目依赖与元数据
-├── main.py                     # [入口] CLI (Typer + Asyncio)
+├── pyproject.toml
+├── main.py                     # CLI + HITL
 ├── src/
 │   └── eagent/
 │       ├── __init__.py
-│       ├── config.py           # 静态环境配置 (Pydantic V2)
-│       ├── configuration.py    # 运行时动态配置 (LangGraph Configurable)
-│       ├── factory.py          # 通用 LLM 工厂 (init_chat_model)
-│       ├── state.py            # Graph State 定义
-│       ├── graph.py            # LangGraph 构建
+│       ├── state.py            # 数据结构
+│       ├── prompts.py          # Hub 拉取 + 本地兜底
+│       ├── graph.py            # 编排 (含 interrupt_before)
 │       ├── utils/
-│       │   └── doc_processor.py
-│       └── nodes/              # 业务逻辑节点 (Async)
-│           ├── __init__.py
-│           ├── planner.py
-│           ├── worker.py
-│           └── aggregator.py
-├── tests/                      # 测试套件
-│   ├── conftest.py             # Pytest Fixtures
-│   ├── unit/
-│   │   └── test_planner.py     # 单元测试 (Mock LLM)
-│   └── integration/
-│       └── test_graph.py       # 集成测试
-└── evals/                      # LangSmith 评测脚本
-    ├── __init__.py
-    ├── setup_dataset.py
-    └── run_eval.py
+│       │   └── parsing.py      # @traceable 文档解析
+│       └── nodes/
+│           ├── planner.py      # 规划 + Context Slicing
+│           ├── worker.py       # 重试 + 校验
+│           └── aggregator.py   # 汇总
+└── tests/
+    └── eval.py                 # LangSmith KV 评估
 ```
 
 ---
 
-## 2. 基础配置
-
-### 2.1 `pyproject.toml`
-
-```toml
-[project]
-name = "literature-agent"
-version = "0.1.0"
-description = "Production-ready LangGraph agent example"
-requires-python = ">=3.10"
-dependencies = [
-    "langchain>=0.3.0",
-    "langchain-core",
-    "langchain-openai",
-    "langchain-anthropic",
-    "langgraph",
-    "langsmith",
-    "pydantic>=2",
-    "pydantic-settings>=2",
-    "typer[all]",
-    "rich",
-    "python-dotenv",
-]
-
-[project.optional-dependencies]
-test = [
-    "pytest",
-    "pytest-asyncio",
-    "pytest-mock"
-]
-
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-testpaths = ["tests"]
-```
-
-### 2.2 `.env.example`
-
-```bash
-# LLM Providers
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-...
-
-# LangSmith / Tracing
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY=lsv2-...
-LANGCHAIN_PROJECT=literature-agent
-
-# Default Agent Settings
-AGENT_DEFAULT_MODEL=openai:gpt-4o
-AGENT_DEFAULT_TEMPERATURE=0.0
-```
-
----
-
-## 3. 核心源码 (`src/eagent`)
-
-### 3.1 `src/eagent/config.py` (环境配置)
-
-```python
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class Settings(BaseSettings):
-    # 默认模型 (格式 provider:model_name)
-    default_model: str = "openai:gpt-4o"
-    default_temperature: float = 0.0
-
-    # LangSmith
-    langchain_tracing_v2: bool = False
-    langchain_project: str = "literature-agent"
-
-    model_config = SettingsConfigDict(
-        env_prefix="AGENT_",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore"
-    )
-
-
-settings = Settings()
-```
-
-### 3.2 `src/eagent/configuration.py` (运行时配置)
-
-```python
-from dataclasses import dataclass, field
-from langchain_core.runnables import RunnableConfig
-from eagent.config import settings
-
-
-@dataclass(kw_only=True)
-class GraphConfig:
-    """允许在 invoke 时通过 configurable 字典动态覆盖的参数。"""
-    model_name: str = field(default=settings.default_model)
-    temperature: float = field(default=settings.default_temperature)
-
-    @classmethod
-    def from_runnable_config(cls, config: RunnableConfig | None = None) -> "GraphConfig":
-        configurable = (config or {}).get("configurable", {})
-        return cls(
-            model_name=configurable.get("model_name", settings.default_model),
-            temperature=configurable.get("temperature", settings.default_temperature),
-        )
-```
-
-### 3.3 `src/eagent/factory.py` (模型工厂)
-
-```python
-from langchain.chat_models import init_chat_model
-from langchain_core.language_models import BaseChatModel
-from eagent.configuration import GraphConfig
-
-
-def get_model(config: GraphConfig) -> BaseChatModel:
-    """通用模型初始化，支持 openai:gpt-4o, anthropic:claude-3-5-sonnet 等。"""
-    if ":" in config.model_name:
-        provider, model_name = config.model_name.split(":", 1)
-    else:
-        provider, model_name = "openai", config.model_name
-
-    return init_chat_model(
-        model_name,
-        model_provider=provider,
-        temperature=config.temperature
-    )
-```
-
-### 3.4 `src/eagent/state.py` (状态定义)
+## 2. 状态与模型 (`src/eagent/state.py`)
 
 ```python
 import operator
-from typing import Annotated, List, TypedDict
+from typing import Annotated, Dict, List
+from typing_extensions import TypedDict
 from pydantic import BaseModel, Field
 
-# --- Pydantic Models ---
-
-class AnalysisTask(BaseModel):
-    dimension: str = Field(..., description="分析维度，如'方法论'")
-    target_section: str = Field(..., description="关注的文档片段key")
-    description: str = Field(..., description="具体指令")
-
-class Plan(BaseModel):
-    tasks: List[AnalysisTask]
+class Task(BaseModel):
+    dimension: str
+    section_filter: str
+    search_query: str
 
 class AnalysisResult(BaseModel):
     dimension: str
-    score: int
-    findings: str
+    content: str
+    is_valid: bool = Field(default=True)
+    retry_count: int = Field(default=0)
 
-# --- Graph State ---
-
-class AgentState(TypedDict, total=False):
-    # 输入
-    raw_content: str
-    structured_doc: dict[str, str]
-    
-    # 编排
-    plan: Plan
-    
-    # 输出 (并行规约)
-    results: Annotated[List[AnalysisResult], operator.add]
+class AgentState(TypedDict):
+    doc_structure: Dict[str, str]
+    plan: List[Task]
+    analyses: Annotated[List[AnalysisResult], operator.add]
     final_report: str
 ```
 
-### 3.5 `src/eagent/utils/doc_processor.py`
-
-```python
-def parse_document_structure(text: str) -> dict[str, str]:
-    """模拟文档分段解析。"""
-    return {
-        "abstract": text[:500] if len(text) > 500 else text,
-        "full": text,
-    }
-
-def get_relevant_context(doc: dict[str, str], section_key: str) -> str:
-    """返回指定分段或全文作为上下文。"""
-    return doc.get(section_key, doc.get("full", ""))
-```
-
 ---
 
-## 4. 节点实现 (`src/eagent/nodes`)
-
-### 4.1 `src/eagent/nodes/planner.py`
+## 3. Prompt Hub (`src/eagent/prompts.py`)
 
 ```python
-import logging
-from langchain_core.runnables import RunnableConfig
+from langchain import hub
 from langchain_core.prompts import ChatPromptTemplate
 
-from eagent.state import AgentState, Plan
-from eagent.factory import get_model
-from eagent.configuration import GraphConfig
-
-logger = logging.getLogger(__name__)
-
-PLANNER_PROMPT = ChatPromptTemplate.from_template(
-    "阅读以下摘要并生成分析计划：\n{abstract}"
+_DEFAULT_PLANNER = ChatPromptTemplate.from_template(
+    "分析文档结构: {doc_keys}。\n"
+    "请生成分析计划。对于每个维度，务必指定最相关的 'section_filter' (章节Key)。"
 )
 
-async def planner_node(state: AgentState, config: RunnableConfig) -> dict:
-    conf = GraphConfig.from_runnable_config(config)
-    llm = get_model(conf)
-    
-    abstract = state.get("structured_doc", {}).get("abstract", "")
-    
-    chain = PLANNER_PROMPT | llm.with_structured_output(Plan)
-    plan: Plan = await chain.ainvoke({"abstract": abstract})
-    
-    logger.info("Planner generated %d tasks (Model: %s)", len(plan.tasks), conf.model_name)
-    return {"plan": plan}
-```
-
-### 4.2 `src/eagent/nodes/worker.py`
-
-```python
-import logging
-from typing import TypedDict
-from langchain_core.runnables import RunnableConfig
-from langchain_core.prompts import ChatPromptTemplate
-
-from eagent.state import AnalysisTask, AnalysisResult
-from eagent.factory import get_model
-from eagent.configuration import GraphConfig
-from eagent.utils.doc_processor import get_relevant_context
-
-logger = logging.getLogger(__name__)
-
-class WorkerInput(TypedDict):
-    task: AnalysisTask
-    structured_doc: dict[str, str]
-
-WORKER_PROMPT = ChatPromptTemplate.from_template(
-    "维度: {dimension}\n指令: {instruction}\n内容: {context}"
+_DEFAULT_WORKER = ChatPromptTemplate.from_template(
+    "你负责分析 {dimension}。\n"
+    "请仅基于以下提供的片段进行分析，不要编造。\n"
+    "片段内容:\n{context}"
 )
 
-async def worker_node(state: WorkerInput, config: RunnableConfig) -> dict:
-    conf = GraphConfig.from_runnable_config(config)
-    llm = get_model(conf)
-    
-    task = state["task"]
-    context = get_relevant_context(state["structured_doc"], task.target_section)
-    
+def get_prompt(repo_id: str, default: ChatPromptTemplate) -> ChatPromptTemplate:
     try:
-        chain = WORKER_PROMPT | llm.with_structured_output(AnalysisResult)
-        result = await chain.ainvoke({
-            "dimension": task.dimension,
-            "instruction": task.description,
-            "context": context
-        })
+        return hub.pull(repo_id)
     except Exception as exc:
-        logger.exception("Worker failed for %s", task.dimension)
-        # 容错处理：返回占位结果，保证聚合数量闭环
-        result = AnalysisResult(
-            dimension=task.dimension, 
-            score=0, 
-            findings=f"Error analyzing section: {exc}"
-        )
-    
-    # 补全 Pydantic 缺失字段 (如果 LLM 未返回)
-    result.dimension = task.dimension
-    
-    return {"results": [result]}
-```
+        print(f"⚠️ Warning: Failed to pull prompt {repo_id}, using default. Error: {exc}")
+        return default
 
-### 4.3 `src/eagent/nodes/aggregator.py`
-
-```python
-import logging
-from langchain_core.runnables import RunnableConfig
-from langchain_core.prompts import ChatPromptTemplate
-
-from eagent.state import AgentState
-from eagent.factory import get_model
-from eagent.configuration import GraphConfig
-
-logger = logging.getLogger(__name__)
-
-REPORT_PROMPT = ChatPromptTemplate.from_template(
-    "根据以下分析结果撰写总结报告:\n{results_text}"
-)
-
-async def aggregator_node(state: AgentState, config: RunnableConfig) -> dict:
-    conf = GraphConfig.from_runnable_config(config)
-    llm = get_model(conf)
-    
-    results = state.get("results", [])
-    if not results:
-        logger.warning("Aggregator received no results; returning empty report.")
-        return {"final_report": "No results to aggregate."}
-    
-    text_blobs = [f"## {r.dimension}\nFindings: {r.findings}" for r in results]
-    
-    response = await (REPORT_PROMPT | llm).ainvoke({"results_text": "\n\n".join(text_blobs)})
-    
-    logger.info("Report generated.")
-    return {"final_report": response.content}
+planner_prompt = get_prompt("my-org/paper-analysis-planner", _DEFAULT_PLANNER)
+worker_prompt = get_prompt("my-org/paper-section-analyzer", _DEFAULT_WORKER)
 ```
 
 ---
 
-## 5. 图构建 (`src/eagent/graph.py`)
+## 4. Traceable 解析 (`src/eagent/utils/parsing.py`)
 
 ```python
-from langgraph.graph import StateGraph
-from langgraph.constants import Send, START, END
+from typing import Dict
+from langsmith import traceable
 
+@traceable(run_type="parser", name="PDF Structure Parser")
+def parse_pdf_structure(file_path: str) -> Dict[str, str]:
+    return {
+        "abstract": "This paper proposes a new Transformer architecture...",
+        "methods": "We utilized a 12-layer attention mechanism with...",
+        "results": "Our model achieved 98.5% accuracy on the test set...",
+        "conclusion": "Future work includes...",
+    }
+```
+
+---
+
+## 5. 节点实现
+
+### 5.1 Planner (`src/eagent/nodes/planner.py`)
+
+```python
+from typing import List
+from langchain_openai import ChatOpenAI
+from pydantic import BaseModel
+from eagent.prompts import planner_prompt
+from eagent.state import AgentState, Task
+
+llm = ChatOpenAI(model="gpt-4o", temperature=0)
+
+class PlanningOutput(BaseModel):
+    tasks: List[Task]
+
+def plan_node(state: AgentState):
+    doc_keys = list(state["doc_structure"].keys())
+    chain = planner_prompt | llm.with_structured_output(PlanningOutput)
+    result: PlanningOutput = chain.invoke({"doc_keys": str(doc_keys)})
+    return {"plan": result.tasks}
+```
+
+### 5.2 Worker (`src/eagent/nodes/worker.py`)
+
+```python
+from langchain_openai import ChatOpenAI
+from eagent.prompts import worker_prompt
+from eagent.state import AnalysisResult, Task
+
+llm = ChatOpenAI(model="gpt-4o", temperature=0)
+
+def extract_context(doc: dict, task: Task) -> str:
+    content = doc.get(task.section_filter)
+    if not content:
+        return str(doc)[:2000]
+    return content
+
+def worker_node(state: dict):
+    task: Task = state["task"]
+    doc = state["doc_structure"]
+    context = extract_context(doc, task)
+
+    max_retries = 3
+    current_try = 0
+    last_error = None
+
+    while current_try < max_retries:
+        try:
+            chain = worker_prompt | llm.with_structured_output(AnalysisResult)
+            result: AnalysisResult = chain.invoke(
+                {"dimension": task.dimension, "context": context}
+            )
+            if len(result.content) < 10:
+                raise ValueError("Content too short, looks like hallucination.")
+            result.retry_count = current_try
+            return {"analyses": [result]}
+        except Exception as exc:
+            current_try += 1
+            last_error = exc
+            print(f"Node retry {current_try}/{max_retries} for {task.dimension}: {exc}")
+
+    return {
+        "analyses": [
+            AnalysisResult(
+                dimension=task.dimension,
+                content=f"Analysis Failed after retries. Error: {last_error}",
+                is_valid=False,
+                retry_count=current_try,
+            )
+        ]
+    }
+```
+
+### 5.3 Aggregator (`src/eagent/nodes/aggregator.py`)
+
+```python
 from eagent.state import AgentState
-from eagent.nodes.planner import planner_node
-from eagent.nodes.worker import worker_node
+
+def aggregator_node(state: AgentState):
+    texts = [
+        f"## {a.dimension}\n{a.content}"
+        for a in state.get("analyses", [])
+        if a.is_valid
+    ]
+    return {"final_report": "\n\n".join(texts)}
+```
+
+---
+
+## 6. 图编排 (`src/eagent/graph.py`)
+
+```python
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.constants import Send, START, END
+from langgraph.graph import StateGraph
+
 from eagent.nodes.aggregator import aggregator_node
-from eagent.utils.doc_processor import parse_document_structure
+from eagent.nodes.planner import plan_node
+from eagent.nodes.worker import worker_node
+from eagent.state import AgentState
 
-async def doc_parser(state: AgentState) -> dict:
-    return {"structured_doc": parse_document_structure(state["raw_content"])}
-
-def map_tasks(state: AgentState):
-    """Fan-out to workers."""
+def map_analyses(state: AgentState):
     return [
-        Send("worker", {"task": t, "structured_doc": state["structured_doc"]})
-        for t in state["plan"].tasks
+        Send("analyzer", {"task": task, "doc_structure": state["doc_structure"]})
+        for task in state["plan"]
     ]
 
-def check_finished(state: AgentState):
-    """检查并行 Worker 是否全部完成，只在收敛时进入 aggregator。"""
-    plan = state.get("plan")
-    results = state.get("results", [])
-    
-    if not plan or not plan.tasks:
-        return END
-    
-    if len(results) >= len(plan.tasks):
-        return "aggregator"
-    
-    return END
-
-def build_graph() -> StateGraph:
+def build_graph():
     workflow = StateGraph(AgentState)
-
-    workflow.add_node("parser", doc_parser)
-    workflow.add_node("planner", planner_node)
-    workflow.add_node("worker", worker_node)
-    workflow.add_node("aggregator", aggregator_node)
-
-    workflow.add_edge(START, "parser")
-    workflow.add_edge("parser", "planner")
-    workflow.add_conditional_edges("planner", map_tasks)
-    workflow.add_conditional_edges("worker", check_finished)
-    workflow.add_edge("aggregator", END)
-
-    return workflow
+    workflow.add_node("planner", plan_node)
+    workflow.add_node("analyzer", worker_node)
+    workflow.add_node("summarizer", aggregator_node)
+    workflow.add_edge(START, "planner")
+    workflow.add_conditional_edges("planner", map_analyses, ["analyzer"])
+    workflow.add_edge("analyzer", "summarizer")
+    workflow.add_edge("summarizer", END)
+    checkpointer = MemorySaver()
+    return workflow.compile(checkpointer=checkpointer, interrupt_before=["analyzer"])
 ```
 
 ---
 
-## 6. 测试 (`tests/`)
-
-### 6.1 `tests/conftest.py`
+## 7. HITL CLI (`main.py`)
 
 ```python
-import pytest
-from unittest.mock import MagicMock
-
-@pytest.fixture
-def mock_llm_structured():
-    """创建一个 Mock 对象，模拟 .with_structured_output().ainvoke() 的行为"""
-    def _create_mock(return_value):
-        mock_llm = MagicMock()
-        mock_runnable = MagicMock()
-        mock_runnable.ainvoke.return_value = return_value
-        mock_llm.with_structured_output.return_value = mock_runnable
-        return mock_llm
-    return _create_mock
-```
-
-### 6.2 `tests/unit/test_planner.py`
-
-```python
-import pytest
-from unittest.mock import patch
-from eagent.nodes.planner import planner_node
-from eagent.state import Plan, AnalysisTask
-
-@pytest.mark.asyncio
-async def test_planner_node_success(mock_llm_structured):
-    # 1. 准备 Mock 数据
-    expected_plan = Plan(tasks=[
-        AnalysisTask(dimension="Test", target_section="abstract", description="Do it")
-    ])
-    
-    # 2. Patch factory.get_model
-    with patch("eagent.nodes.planner.get_model") as mock_get_model:
-        mock_get_model.return_value = mock_llm_structured(expected_plan)
-        
-        # 3. 执行 Node
-        state = {"structured_doc": {"abstract": "paper content"}}
-        config = {"configurable": {"model_name": "mock-model"}}
-        
-        output = await planner_node(state, config)
-        
-        # 4. 断言
-        assert output["plan"] == expected_plan
-        assert len(output["plan"].tasks) == 1
-```
-
-### 6.3 `tests/integration/test_graph.py`
-
-```python
-from eagent.graph import build_graph
-
-def test_graph_compilation():
-    graph = build_graph()
-    app = graph.compile()
-    assert app is not None
-    # 验证图结构完整性
-    assert "planner" in app.nodes
-    assert "worker" in app.nodes
-```
-
----
-
-## 7. 入口文件 (`main.py`)
-
-```python
-import asyncio
 import typer
-from dotenv import load_dotenv
 from rich.console import Console
+from rich.prompt import Prompt
 from eagent.graph import build_graph
+from eagent.state import Task
+from eagent.utils.parsing import parse_pdf_structure
 
 app = typer.Typer()
 console = Console()
 
 @app.command()
-def analyze(
-    text: str = "这是一个关于人工智能的文献摘要...",
-    model: str = "openai:gpt-4o",
-    temperature: float = 0.0
-):
-    """
-    运行 Agent 分析任务。
-    示例: python main.py --model ollama:llama3
-    """
-    load_dotenv()
-    async def _run():
-        graph = build_graph().compile()
-        
-        # 运行时配置覆盖
-        config = {
-            "configurable": {
-                "model_name": model,
-                "temperature": temperature
-            }
-        }
-        
-        initial_state = {"raw_content": text, "results": []}
-        
-        console.print(f"[bold green]Starting analysis using {model}...[/bold green]")
-        
-        final_state = await graph.ainvoke(initial_state, config=config)
-        
-        console.print("\n[bold blue]=== FINAL REPORT ===[/bold blue]")
-        console.print(final_state.get("final_report", "No report generated."))
+def analyze(file_path: str):
+    doc_structure = parse_pdf_structure(file_path)
+    app_graph = build_graph()
+    thread_config = {"configurable": {"thread_id": "session_user_1"}}
+    initial_state = {"doc_structure": doc_structure, "plan": [], "analyses": []}
 
-    asyncio.run(_run())
+    console.print("[bold blue]🤖 AI 正在规划分析任务...[/bold blue]")
+    for _ in app_graph.stream(initial_state, thread_config):
+        pass
 
-if __name__ == "__main__":
-    app()
+    snapshot = app_graph.get_state(thread_config)
+    current_plan = snapshot.values["plan"]
+
+    console.print("\n[yellow]=== AI 提议的分析计划 ===[/yellow]")
+    for i, task in enumerate(current_plan):
+        console.print(f"{i+1}. 维度: {task.dimension} -> 章节: {task.section_filter}")
+
+    action = Prompt.ask("下一步操作?", choices=["continue", "add", "quit"], default="continue")
+    if action == "quit":
+        return
+    if action == "add":
+        new_dim = Prompt.ask("输入新维度名称")
+        new_key = Prompt.ask("输入读取章节Key", default="methods")
+        new_task = Task(dimension=new_dim, section_filter=new_key, search_query=new_dim)
+        app_graph.update_state(thread_config, {"plan": current_plan + [new_task]})
+
+    console.print("🚀 并行分析中...")
+    final_output = None
+    for event in app_graph.stream(None, thread_config):
+        if "summarizer" in event:
+            final_output = event["summarizer"]
+    if final_output:
+        console.print("\n[bold green]=== 最终报告 ===[/bold green]")
+        console.print(final_output["final_report"])
 ```
 
 ---
 
-## 8. 评测系统 (`evals/`)
+## 8. 评估 (`tests/eval.py`)
 
-基于 LangSmith `evaluate` API 的自动化评测流程。
-
-### 8.1 目录结构更新
-
-```text
-eagent/
-├── ...
-└── evals/
-    ├── __init__.py
-    ├── setup_dataset.py    # [工具] 创建/上传测试数据集
-    └── run_eval.py         # [脚本] 运行评测
-```
-
-### 8.2 `evals/setup_dataset.py` (数据集准备)
-
-```python
-from langsmith import Client
-
-client = Client()
-
-dataset_name = "Literature Agent Test Set"
-
-# 示例数据：包含输入文本和期望的关键结论
-examples = [
-    {
-        "inputs": {
-            "raw_content": (
-                "摘要：本文提出了Transformer架构，通过自注意力机制..."
-                "结论：该模型在机器翻译任务上得分为 28.4 BLEU。"
-            )
-        },
-        "outputs": {
-            "expected_facts": "Transformer架构; 自注意力机制; BLEU 28.4"
-        }
-    },
-    {
-        "inputs": {
-            "raw_content": "摘要：我们研究了光合作用在低光照下的效率..."
-        },
-        "outputs": {
-            "expected_facts": "光合作用; 低光照; 效率研究"
-        }
-    }
-]
-
-def create_dataset():
-    if client.has_dataset(dataset_name=dataset_name):
-        print(f"数据集 '{dataset_name}' 已存在。")
-        return
-
-    dataset = client.create_dataset(dataset_name=dataset_name)
-    client.create_examples(
-        inputs=[e["inputs"] for e in examples],
-        outputs=[e["outputs"] for e in examples],
-        dataset_id=dataset.id,
-    )
-    print(f"数据集 '{dataset_name}' 创建成功。")
-
-if __name__ == "__main__":
-    create_dataset()
-```
-
-### 8.3 `evals/run_eval.py` (评测逻辑)
-
-```python
-import asyncio
-from pydantic import BaseModel, Field
-from langsmith import evaluate
-from langsmith.schemas import Run, Example
-from langchain_core.prompts import ChatPromptTemplate
-
-from eagent.graph import build_graph
-from eagent.factory import get_model
-from eagent.configuration import GraphConfig
-
-# 1. 定义待评测的系统 (Target)
-async def agent_target(inputs: dict):
-    """将 Dataset 输入映射到 Graph 输入，并返回最终结果。"""
-    graph = build_graph().compile()
-    # 使用 invoke/ainvoke
-    result = await graph.ainvoke({
-        "raw_content": inputs["raw_content"],
-        "results": [] # 初始化空列表
-    })
-    return result.get("final_report", "")
-
-# 2. 定义评估器 (Evaluators)
-class ScoreSchema(BaseModel):
-    score: float = Field(ge=0.0, le=1.0)
-    reasoning: str
-
-async def correctness_evaluator(run: Run, example: Example) -> dict:
-    """LLM-as-a-judge: 对比 Agent 生成报告与 Dataset 参考答案。"""
-    
-    # 获取 Judge 模型 (可以使用专门的配置，这里复用默认)
-    conf = GraphConfig(model_name="openai:gpt-4o", temperature=0.0)
-    judge_llm = get_model(conf)
-
-    agent_output = run.outputs
-    expected = example.outputs.get("expected_facts", "")
-
-    # 构造评分 Prompt
-    prompt = ChatPromptTemplate.from_template(
-        "你是一个评分专家。\n\n"
-        "参考事实: {expected}\n"
-        "Agent 生成报告: {actual}\n\n"
-        "请判断生成的报告是否包含了参考事实中的关键信息。\n"
-        "请返回一个 0 到 1 之间的分数，并说明理由。"
-    )
-
-    chain = prompt | judge_llm.with_structured_output(ScoreSchema)
-    response: ScoreSchema = await chain.ainvoke({
-        "expected": expected,
-        "actual": agent_output
-    })
-
-    bounded_score = max(0.0, min(response.score, 1.0))
-
-    return {
-        "key": "accuracy",
-        "score": bounded_score,
-        "comment": response.reasoning
-    }
-
-# 3. 运行评测
-if __name__ == "__main__":
-    dataset_name = "Literature Agent Test Set"
-    
-    evaluate(
-        agent_target,
-        data=dataset_name,
-        evaluators=[correctness_evaluator],
-        experiment_prefix="lit-agent-v1",
-        max_concurrency=4,  # 并发控制
-    )
-```
+基于 LangSmith KV 数据集的自动化评估，使用 `load_evaluator("labeled_criteria")` 或自定义 LLM-as-a-judge。

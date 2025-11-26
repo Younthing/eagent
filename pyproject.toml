@@ -1,16 +1,39 @@
 [project]
-name = "eagent"
+name = "literature-agent"
 version = "0.1.0"
-description = "Add your description here"
+description = "Production-ready LangGraph agent example"
 readme = "README.md"
 authors = [
     { name = "liuyan", email = "lyfx99@icloud.com" }
 ]
-requires-python = ">=3.13"
-dependencies = []
+requires-python = ">=3.10"
+dependencies = [
+    "langchain>=0.3.0",
+    "langchain-core",
+    "langchain-openai",
+    "langchain-anthropic",
+    "langgraph",
+    "langsmith",
+    "pydantic>=2",
+    "pydantic-settings>=2",
+    "typer[all]",
+    "rich",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-mock",
+]
 
 [project.scripts]
-eagent = "eagent:main"
+eagent = "main:app"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
 
 [build-system]
 requires = ["uv_build>=0.9.5,<0.10.0"]
