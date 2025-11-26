@@ -1,4 +1,3 @@
-from langchain import hub
 from langchain_core.prompts import ChatPromptTemplate
 
 _DEFAULT_PLANNER = ChatPromptTemplate.from_template(
@@ -13,14 +12,6 @@ _DEFAULT_WORKER = ChatPromptTemplate.from_template(
 )
 
 
-def get_prompt(repo_id: str, default: ChatPromptTemplate) -> ChatPromptTemplate:
-    """尝试从 LangChain Hub 拉取，失败则使用本地默认。"""
-    try:
-        return hub.pull(repo_id)
-    except Exception as exc:
-        print(f"⚠️ Warning: Failed to pull prompt {repo_id}, using default. Error: {exc}")
-        return default
 
-
-planner_prompt = get_prompt("my-org/paper-analysis-planner", _DEFAULT_PLANNER)
-worker_prompt = get_prompt("my-org/paper-section-analyzer", _DEFAULT_WORKER)
+planner_prompt =  _DEFAULT_PLANNER
+worker_prompt = _DEFAULT_WORKER
