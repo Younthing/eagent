@@ -1,37 +1,43 @@
-## Literature Agent (LangGraph 示例)
+## Literature Agent (LangGraph Example)
 
-并行 Map-Reduce 架构的文献分析智能体示例，包含 LangChain Hub 提示词、LangSmith 追踪、上下文切片、节点重试与 HITL 控制。
+This is a parallel Map-Reduce research analysis agent that showcases LangChain Hub prompts, LangSmith tracing, context chunking, node retries, and HITL controls.
 
-### 快速开始
-- 安装依赖：`uv sync`（如需运行测试或评估，额外执行 `uv sync --extra test` 安装测试依赖）。
-- 复制环境变量：`cp .env.example .env`，并根据 LangGraph 观察性文档配置 `LANGSMITH_API_KEY`、`LANGSMITH_ENDPOINT`、`LANGSMITH_PROJECT`、`LANGSMITH_TRACING=true`。
-- 运行 CLI：`uv run eagent analyze ./sample.pdf`
+### Quickstart
+- Install dependencies: `uv sync`. Run `uv sync --extra test` when you also need the testing stack (Docling, pytest plugins, etc.).
+- Copy environment variables: `cp .env.example .env`, then set `LANGSMITH_API_KEY`, `LANGSMITH_ENDPOINT`, `LANGSMITH_PROJECT`, and `LANGSMITH_TRACING=true` according to the LangGraph observability docs.
+- Run the CLI: `uv run eagent analyze ./sample.pdf`
 
-### 关键特性
-- LangGraph 并行 fan-out/fan-in，支持 interrupt_before + MemorySaver 实现 HITL。
-- Worker 节点内置重试、校验与占位回退，避免整体中断。
-- LangSmith `traceable` 解析器与 KV 评测脚本。
-- 轻量级解析器只负责加载原始文本，确保 CLI 在无额外依赖时也能运行。
+### Highlights
+- LangGraph fan-out/fan-in execution with `interrupt_before` + `MemorySaver` for HITL pauses.
+- Worker nodes ship with retries, validation, and placeholder fallbacks so failures do not stop the entire graph.
+- LangSmith `@traceable` parsers and key/value evaluation scripts for replayability.
+- Parsing pipeline based on `langchain_docling.DoclingLoader`, which reads PDF/DOCX/PPTX files while preserving traceable context.
 
-### 架构概览
-下面的模块关系图展示了从 CLI 到 LangGraph 节点以及遥测/评估链路的主要流向：
+### Architecture Overview
+The diagram below shows how the CLI, LangGraph nodes, telemetry, and evaluation helpers connect end-to-end:
 
 ```mermaid
 flowchart TD
     CLI["Typer CLI<br/>src/eagent/main.py"] --> Runner["AnalysisSession<br/>src/eagent/runner.py"]
     Runner --> Parser["PDF Parser<br/>src/eagent/utils/parsing.py"]
-    Runner --> Graph["LangGraph 构建<br/>src/eagent/graph.py"]
+    Runner --> Graph["LangGraph Builder<br/>src/eagent/graph.py"]
     Graph --> Planner["Planner Node<br/>nodes/planner.py"]
     Planner --> Workers["Worker Nodes (fan-out)<br/>nodes/worker.py"]
     Workers --> Aggregator["Aggregator Node (fan-in)<br/>nodes/aggregator.py"]
-    Aggregator --> Report["最终报告<br/>state.Task / telemetry"]
-    Report --> Console["Rich Console 输出"]
-    Graph --> Telemetry["LangSmith 追踪<br/>telemetry.py"]
-    Graph --> Prompts["Prompt 管理<br/>prompts.py + LangChain Hub"]
-    Graph --> Config["配置/状态<br/>config.py, state.py"]
+    Aggregator --> Report["Final Report<br/>state.Task / telemetry"]
+    Report --> Console["Rich Console Output"]
+    Graph --> Telemetry["LangSmith Tracing<br/>telemetry.py"]
+    Graph --> Prompts["Prompt Management<br/>prompts.py + LangChain Hub"]
+    Graph --> Config["Config/State<br/>config.py, state.py"]
 ```
 
-- CLI 由 Typer (`main.py`) 驱动，负责解析命令、展示 HITL 交互，并通过 `AnalysisSession` 触发分析流程。
-- `AnalysisSession` 调用 `parse_pdf_structure` 生成 `Task` 队列，随后利用 `graph.build_graph()` 构建 LangGraph，并注入配置/状态。
-- Graph 的 planner 节点拆解任务，worker 节点并发处理章节摘要，失败路径通过回退与占位结果保证 aggregator 可继续运行。
-- Aggregator 汇总 worker 结果生成最终报告；过程中 telemetry 钩子会向 LangSmith 推送追踪，评估脚本 (`tests/eval.py`) 可基于相同 graph 运行数据集回放。
+- Typer (`main.py`) powers the CLI, handles command parsing + HITL prompts, and hands execution to `AnalysisSession`.
+- `AnalysisSession` calls `parse_pdf_structure` to produce the initial `Task` queue, then uses `graph.build_graph()` with the configured state.
+- The planner node breaks the work into dimensions, worker nodes summarize sections in parallel, and failures fall back to placeholders so the aggregator can continue.
+- The aggregator combines worker outputs into the final report. Telemetry hooks push traces to LangSmith, and the evaluation harness (`tests/eval.py`) reuses the same graph for dataset playback.
+- Docling converts source files into normalized text while logging parsing steps in LangSmith traces for provenance.
+
+### Docling Parsing
+- Uses `langchain_docling.DoclingLoader` with `ExportType.DOC_CHUNKS`. Each chunk stores page numbers, bounding boxes, and other metadata before being concatenated into `doc_structure["body"]`.
+- If Docling fails or is unavailable, the loader falls back to UTF-8 plain-text ingestion. The trace still records the fallback for diagnostics.
+- Installing with `uv sync --extra test` brings in `langchain-docling`; you can also run `uv add langchain-docling` manually. GPU setups can follow Docling’s official guide for faster layout analysis.
