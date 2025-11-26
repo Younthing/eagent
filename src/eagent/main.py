@@ -34,7 +34,9 @@ def main(
 
 
 @app.command()
-def analyze(file_path: str):
+def analyze(
+    file_path: str = typer.Argument(..., help="待分析文档路径。"),
+):
     """带 HITL 的文献分析流程。"""
     doc_structure = parse_pdf_structure(file_path)
     session = AnalysisSession(doc_structure)
