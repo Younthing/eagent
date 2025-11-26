@@ -2,8 +2,12 @@
 
 from typing import Dict, List, Optional
 
+from dotenv import load_dotenv
+
 from eagent.graph import build_graph
 from eagent.state import Task
+
+load_dotenv()
 
 
 class AnalysisSession:
