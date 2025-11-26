@@ -1,9 +1,8 @@
-from langchain_openai import ChatOpenAI
-
+from eagent.llm import get_default_llm
 from eagent.prompts import worker_prompt
 from eagent.state import AnalysisResult, Task
 
-llm = ChatOpenAI(model="gpt-4o", temperature=0)
+llm = get_default_llm()
 
 
 def extract_context(doc: dict, task: Task) -> str:

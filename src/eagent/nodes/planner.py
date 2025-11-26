@@ -1,12 +1,12 @@
 from typing import List
 
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
+from eagent.llm import get_default_llm
 from eagent.prompts import planner_prompt
 from eagent.state import AgentState, Task
 
-llm = ChatOpenAI(model="gpt-4o", temperature=0)
+llm = get_default_llm()
 
 
 class PlanningOutput(BaseModel):

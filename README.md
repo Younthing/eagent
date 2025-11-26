@@ -4,7 +4,7 @@
 
 ### 快速开始
 - 安装依赖：`uv pip install -e ".[test]"` 或使用 `pip`。
-- 复制环境变量：`cp .env.example .env` 并填入 API Key。
+- 复制环境变量：`cp .env.example .env`，并根据 LangGraph 观察性文档配置 `LANGSMITH_API_KEY`、`LANGSMITH_ENDPOINT`、`LANGSMITH_PROJECT`、`LANGSMITH_TRACING=true`。
 - 运行 CLI：`python main.py --model openai:gpt-4o --temperature 0.0`
 
 ### 关键特性
