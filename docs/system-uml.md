@@ -1,4 +1,6 @@
-# System UML Diagram
+# System UML Diagram (Current Implementation)
+
+This diagram reflects the current code structure, not the target architecture described in the requirements.
 
 The following Mermaid class diagram captures the major modules, data models, and runtime interactions across the CLI, LangGraph workflow, parsing utilities, and telemetry helpers.
 
