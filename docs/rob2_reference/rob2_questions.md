@@ -1,3 +1,5 @@
+> 归档位置：`docs/rob2_reference/rob2_questions.md`（Standard ROB2）
+
 这是一个基于 Cochrane RoB 2（随机对照试验偏倚风险评估工具 2.0）标准的结构化表格。
 
 1.  **信号问题表 (Signaling Questions)**：包含每个领域的具体评估问题。

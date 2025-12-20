@@ -16,9 +16,9 @@
 
 ### 交付物（Deliverables）
 
-* 冻结版《需求说明文档》
-* 冻结版系统架构图
-* Domain 问题清单
+* 冻结版 requirements.md（当前为 `docs/requirements.md`）
+* 冻结版 architecture.md（当前为 `docs/architecture.md`）
+* Domain 问题清单（归档于 `docs/rob2_reference/`，当前为 `docs/rob2_reference/rob2_questions.md`）
 
 ### 完成定义（DoD）
 
