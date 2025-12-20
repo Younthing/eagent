@@ -26,7 +26,7 @@ class AnalysisResult(BaseModel):
 
 class AgentState(TypedDict):
     # 输入：结构化后的文档 (Section Name -> Content)
-    doc_structure: Dict[str, str]
+    doc_structure: Dict[str, object]
     # 中间状态
     plan: List[Task]
     # 输出结果 (并行追加)

@@ -15,19 +15,21 @@ classDiagram
     }
 
     class AnalysisSession {
-        -doc_structure Dict~str,str~
+        -doc_structure Dict~str,object~
         -thread_config Dict
         -graph CompiledGraph
         -_plan List~Task~
         -_planned bool
         +generate_plan() List~Task~
         +update_plan(tasks) void
-        +run() str
+        +run() Optional~str~
     }
 
     class GraphBuilder {
         +build_graph() CompiledGraph
         +map_analyses(state) List~Send~
+        -checkpointer MemorySaver
+        -interrupt_before List~str~
     }
     class PlannerNode {
         +plan_node(state) Dict
@@ -51,7 +53,7 @@ classDiagram
         retry_count int
     }
     class AgentState {
-        doc_structure Dict~str,str~
+        doc_structure Dict~str,object~
         plan List~Task~
         analyses List~AnalysisResult~
         final_report str
@@ -66,7 +68,13 @@ classDiagram
     }
 
     class ParsingUtils {
-        +parse_pdf_structure(source) Dict~str,str~
+        +parse_pdf_structure(source) Dict~str,object~
+    }
+    class MemorySaver
+
+    note for WorkerNode "Retries up to 3 times; invalid results set is_valid=false."
+    note for AggregatorNode "Aggregates only analyses where is_valid=true."
+    class ContextLookup {
         +get_section_context(doc, key) str
     }
     class Telemetry {
@@ -89,6 +97,7 @@ classDiagram
     GraphBuilder --> PlannerNode
     GraphBuilder --> WorkerNode
     GraphBuilder --> AggregatorNode
+    GraphBuilder --> MemorySaver : checkpoint
     Task "1" o-- "*" AgentState
     AnalysisResult "1" o-- "*" AgentState
     LLMFactory --> Settings : load defaults
@@ -96,11 +105,11 @@ classDiagram
     PlannerNode --> PromptRegistry
     WorkerNode --> LLMFactory
     WorkerNode --> PromptRegistry
-    WorkerNode --> ParsingUtils
     AggregatorNode --> AgentState
     ParsingUtils --> Telemetry
     Telemetry --> Settings
     CLICommands --> ParsingUtils : parse_pdf_structure()
+    WorkerNode --> ContextLookup : section context
     CLICommands --> AnalysisSession : orchestrates
 ```
 

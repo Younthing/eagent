@@ -1,7 +1,7 @@
 from eagent.llm import get_default_llm
 from eagent.prompts import worker_prompt
 from eagent.state import AnalysisResult, Task
-from eagent.utils.parsing import get_section_context
+from eagent.utils.context import get_section_context
 
 llm = get_default_llm()
 
