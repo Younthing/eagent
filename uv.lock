@@ -546,6 +546,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "rich" },
     { name = "typer" },
 ]
@@ -587,6 +588,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'test'" },
     { name = "pytest-mock", marker = "extra == 'test'" },
     { name = "python-dotenv" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich" },
     { name = "typer" },
 ]

@@ -1,4 +1,6 @@
 > 归档位置：`docs/rob2_reference/rob2_questions.md`（Standard ROB2）
+> 机器可读题库：`src/rob2/rob2_questions.yaml`
+> Domain 2 采用唯一 planner ID：assignment 使用 `q2a_*`，adherence 使用 `q2b_*`；`rob2_id` 保留原始 `q2_*` 编号。
 
 这是一个基于 Cochrane RoB 2（随机对照试验偏倚风险评估工具 2.0）标准的结构化表格。
 
