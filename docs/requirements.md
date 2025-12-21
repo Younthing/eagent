@@ -109,6 +109,7 @@
   * 页码信息
 * 提供全文字符串版本供 LLM 使用
 * 解析模型/管线配置可显式指定并记录
+* 默认 Docling chunker 模型：`malteos/PubMedNCL`（可通过 `DOCLING_CHUNKER_MODEL` 覆盖）
 
 ### 6.2 设计约束
 

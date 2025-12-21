@@ -45,6 +45,10 @@ ROB2 system evolves.
 4. **Evaluate**: Record changes in `docs/evaluation/`.
 5. **Milestones**: Keep `docs/Milestones.md` in sync with deliverables.
 
+## Quality Checks
+
+- After coding, run `uvx ty check` and `ruff` checks before finalizing changes.
+
 ## Notes
 
 - The system is **Standard ROB2 only** unless explicitly changed in requirements.

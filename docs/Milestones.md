@@ -43,7 +43,7 @@
   * paragraph_id
   * section hierarchy
   * page number
-* 记录结构化 section（如 Methods / Results / Supplement，若存在）
+* 记录结构化 section（如 Abstracts/ Methods / Results / Supplement，若存在）
 
 ### 交付物
 
@@ -53,7 +53,7 @@
 ### DoD
 
 * 任意 paragraph_id 都能回溯到 PDF
-* Docling 模型配置可显式指定并记录
+* Docling 模型配置可显式指定并记录（通过 .env）
 
 > ✅ 这是系统“反 hallucination”的第一道物理防线。
 

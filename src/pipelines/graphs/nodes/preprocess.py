@@ -3,31 +3,31 @@
 from __future__ import annotations
 
 import logging
-import os
 from hashlib import sha1
 from urllib.parse import urlparse
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import Any, Iterable, List, Optional, TYPE_CHECKING, cast
 
+from core.config import get_settings
+from langchain_docling.loader import DoclingLoader
 from schemas.internal.documents import BoundingBox, DocStructure, SectionSpan
 from utils.text import normalize_block
 
-try:  # optional dependency
-    from langchain_docling import DoclingLoader
-except Exception:  # pragma: no cover
-    DoclingLoader = None
-
 logger = logging.getLogger(__name__)
-_CONVERTER_CACHE: tuple[Optional[object], dict[str, object]] | None = None
+
+if TYPE_CHECKING:
+    from docling.datamodel.layout_model_specs import LayoutModelConfig
+    from docling.document_converter import DocumentConverter
+    from docling_core.transforms.chunker.base import BaseChunker
+    from langchain_core.documents import Document
+
+_CONVERTER_CACHE: tuple[Optional["DocumentConverter"], dict[str, object]] | None = None
+_CHUNKER_CACHE: tuple[Optional["BaseChunker"], dict[str, object]] | None = None
 
 
 def preprocess_node(state: dict) -> dict:
     """LangGraph node: parse PDF into a normalized document structure."""
-    source = (
-        state.get("pdf_path")
-        or state.get("source")
-        or state.get("file_path")
-    )
+    source = state.get("pdf_path") or state.get("source") or state.get("file_path")
     if not source:
         raise ValueError("preprocess_node requires 'pdf_path' or 'source'.")
 
@@ -37,11 +37,6 @@ def preprocess_node(state: dict) -> dict:
 
 def parse_docling_pdf(source: str | Path) -> DocStructure:
     """Parse a PDF into DocStructure using Docling metadata."""
-    if DoclingLoader is None:
-        raise RuntimeError(
-            "DoclingLoader is not available. Install langchain-docling."
-        )
-
     resolved_source = _resolve_docling_source(source)
     spans, body_text, docling_config = _load_with_docling(resolved_source)
 
@@ -63,10 +58,13 @@ def _load_with_docling(
     """Load content with Docling via LangChain DoclingLoader."""
     try:
         converter, config = _build_docling_converter()
-        loader_kwargs = {"file_path": source}
-        if converter is not None:
-            loader_kwargs["converter"] = converter
-        loader = DoclingLoader(**loader_kwargs)
+        chunker, chunker_config = _build_docling_chunker()
+        config = {**config, **chunker_config}
+        loader = DoclingLoader(
+            file_path=source,
+            converter=converter,
+            chunker=chunker,
+        )
         documents = loader.load()
         if not documents:
             raise ValueError("Docling returned no documents.")
@@ -83,7 +81,9 @@ def _load_with_docling(
         raise RuntimeError(f"Docling parsing failed for {source}") from exc
 
 
-def _build_docling_converter() -> tuple[Optional[object], dict[str, object]]:
+def _build_docling_converter() -> tuple[
+    Optional["DocumentConverter"], dict[str, object]
+]:
     """Build a Docling converter with explicit, configurable model settings.
 
     Environment:
@@ -101,9 +101,10 @@ def _build_docling_converter() -> tuple[Optional[object], dict[str, object]]:
     except Exception:
         return None, {}
 
+    settings = get_settings()
     config: dict[str, object] = {"pipeline": "standard_pdf"}
-    artifacts_path = os.getenv("DOCLING_ARTIFACTS_PATH")
-    layout_model_name = os.getenv("DOCLING_LAYOUT_MODEL")
+    artifacts_path = settings.docling_artifacts_path
+    layout_model_name = settings.docling_layout_model
 
     pipeline_options = PdfPipelineOptions()
     if artifacts_path:
@@ -137,24 +138,63 @@ def _build_docling_converter() -> tuple[Optional[object], dict[str, object]]:
     return _CONVERTER_CACHE
 
 
-def _resolve_layout_model(name: Optional[str]) -> Optional[object]:
+def _build_docling_chunker() -> tuple[Optional["BaseChunker"], dict[str, object]]:
+    """Build HybridChunker with configurable tokenizer and max tokens."""
+    global _CHUNKER_CACHE
+    if _CHUNKER_CACHE is not None:
+        return _CHUNKER_CACHE
+
+    try:
+        from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
+        from docling_core.transforms.chunker.tokenizer.huggingface import (
+            HuggingFaceTokenizer,
+        )
+        from transformers import AutoTokenizer
+    except Exception as exc:
+        raise RuntimeError(
+            "HybridChunker dependencies missing. Install docling-core[chunking]."
+        ) from exc
+
+    settings = get_settings()
+    model_id = (
+        settings.docling_chunker_model or "sentence-transformers/all-MiniLM-L6-v2"
+    )
+    max_tokens = settings.docling_chunker_max_tokens
+
+    raw_tokenizer = AutoTokenizer.from_pretrained(model_id)
+    if max_tokens is None:
+        tokenizer = HuggingFaceTokenizer(tokenizer=raw_tokenizer)
+    else:
+        tokenizer = HuggingFaceTokenizer(
+            tokenizer=raw_tokenizer,
+            max_tokens=max_tokens,
+        )
+    chunker = HybridChunker(tokenizer=tokenizer)
+    config: dict[str, object] = {
+        "chunker": "hybrid",
+        "chunker_model": model_id,
+        "chunker_max_tokens": max_tokens,
+    }
+    _CHUNKER_CACHE = (chunker, config)
+    return _CHUNKER_CACHE
+
+
+def _resolve_layout_model(name: Optional[str]) -> Optional["LayoutModelConfig"]:
     """Resolve a Docling layout model config from a name string."""
     if not name:
         return None
     try:
         from docling.datamodel import layout_model_specs
+        from docling.datamodel.layout_model_specs import LayoutModelConfig
     except Exception:
         return None
 
     normalized = name.strip().lower()
-    layout_config_type = getattr(layout_model_specs, "LayoutModelConfig", None)
-    if layout_config_type is None:
-        return None
 
     for attr in dir(layout_model_specs):
         value = getattr(layout_model_specs, attr)
-        if isinstance(value, layout_config_type):
-            if getattr(value, "name", "").lower() == normalized:
+        if isinstance(value, LayoutModelConfig):
+            if value.name.lower() == normalized:
                 return value
     return None
 
@@ -181,12 +221,11 @@ def _is_url(source: str) -> bool:
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
-def _documents_to_spans(documents: Iterable[object]) -> List[SectionSpan]:
+def _documents_to_spans(documents: Iterable["Document"]) -> List[SectionSpan]:
     """Convert LangChain Documents to SectionSpan with rich metadata."""
     spans: List[SectionSpan] = []
 
     for index, doc in enumerate(documents, start=1):
-        # ✅ 插件启用后直接可用page_content
         raw_text = doc.page_content if hasattr(doc, "page_content") else ""
         normalized_text = normalize_block(raw_text)
         if not normalized_text:
@@ -194,8 +233,12 @@ def _documents_to_spans(documents: Iterable[object]) -> List[SectionSpan]:
 
         # 核心：提取Docling的结构化metadata（不受插件影响）
         meta = getattr(doc, "metadata", {}) or {}
+        if not isinstance(meta, dict):
+            meta = {}
         dl_meta = meta.get("dl_meta") or {}
-        
+        if not isinstance(dl_meta, dict):
+            dl_meta = {}
+
         title = _coalesce_heading(dl_meta.get("headings")) or "body"
         doc_item_ids = _get_doc_item_ids(dl_meta)
         pages, bboxes_by_page = _get_pages_and_bboxes(dl_meta)
@@ -238,12 +281,9 @@ def _coalesce_heading(headings: object) -> str:
 
 
 def _get_pages_and_bboxes(
-    dl_meta: object,
+    dl_meta: dict[str, Any],
 ) -> tuple[List[int], dict[int, List[BoundingBox]]]:
     """Extract page numbers and bounding boxes from doc_items."""
-    if not isinstance(dl_meta, dict):
-        return [], {}
-
     doc_items = dl_meta.get("doc_items") or []
     bboxes_by_page: dict[int, List[BoundingBox]] = {}
     for item in doc_items:
@@ -254,6 +294,8 @@ def _get_pages_and_bboxes(
             if not isinstance(entry, dict):
                 continue
             page_no = entry.get("page_no")
+            if not isinstance(page_no, int):
+                continue
             bbox = _bbox_from_raw(entry.get("bbox"))
             if bbox is None or page_no is None:
                 continue
@@ -287,26 +329,35 @@ def _bbox_from_raw(raw_bbox: object) -> Optional[BoundingBox]:
     if not isinstance(raw_bbox, dict):
         return None
 
+    raw_bbox = cast(dict[str, Any], raw_bbox)
     try:
+        left = raw_bbox.get("l")
+        top = raw_bbox.get("t")
+        right = raw_bbox.get("r")
+        bottom = raw_bbox.get("b")
+        if not isinstance(left, (int, float, str)):
+            raise TypeError("Invalid bbox value types.")
+        if not isinstance(top, (int, float, str)):
+            raise TypeError("Invalid bbox value types.")
+        if not isinstance(right, (int, float, str)):
+            raise TypeError("Invalid bbox value types.")
+        if not isinstance(bottom, (int, float, str)):
+            raise TypeError("Invalid bbox value types.")
+        origin = raw_bbox.get("coord_origin")
         return BoundingBox(
-            left=float(raw_bbox["l"]),
-            top=float(raw_bbox["t"]),
-            right=float(raw_bbox["r"]),
-            bottom=float(raw_bbox["b"]),
-            origin=str(raw_bbox.get("coord_origin"))
-            if raw_bbox.get("coord_origin")
-            else None,
+            left=float(left),
+            top=float(top),
+            right=float(right),
+            bottom=float(bottom),
+            origin=str(origin) if origin else None,
         )
     except (KeyError, ValueError, TypeError):
         logger.debug("Invalid bbox format: %s", raw_bbox)
         return None
 
 
-def _get_doc_item_ids(dl_meta: object) -> Optional[List[str]]:
+def _get_doc_item_ids(dl_meta: dict[str, Any]) -> Optional[List[str]]:
     """Collect doc_item ids for strong paragraph backtrace."""
-    if not isinstance(dl_meta, dict):
-        return None
-
     doc_items = dl_meta.get("doc_items") or []
     ids: List[str] = []
     seen: set[str] = set()

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import gradio as gr
 import fitz  # PyMuPDF
@@ -108,8 +108,8 @@ def _build_table(spans: List[Dict[str, Any]]) -> List[List[Any]]:
 
 def _parse_pdf(file: Optional[Any]) -> Tuple[
     Dict[str, Any],
-    gr.update,
-    gr.update,
+    Dict[str, Any],
+    Dict[str, Any],
     Dict[str, Any],
     Optional[Image.Image],
     List[List[Any]],
@@ -179,7 +179,7 @@ def _render_view(
         return None, [], ""
 
     selected_span = _find_span_by_label(spans, paragraph_label)
-    selected_text = selected_span.get("text") if selected_span else ""
+    selected_text = str(selected_span.get("text") or "") if selected_span else ""
 
     with fitz.open(path) as pdf:
         if page_number < 1 or page_number > pdf.page_count:
@@ -187,7 +187,7 @@ def _render_view(
         page = pdf.load_page(page_number - 1)
         zoom = 2.0
         pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
-        image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
 
         page_rect = page.rect
         page_spans = [
@@ -347,7 +347,7 @@ def _on_paragraph_change(
     page_number: int,
     paragraph_label: Optional[str],
     show_all: bool,
-) -> Tuple[Optional[Image.Image], List[List[Any]], str, gr.update]:
+) -> Tuple[Optional[Image.Image], List[List[Any]], str, Dict[str, Any]]:
     spans = state.get("spans") or []
     selected = _find_span_by_label(spans, paragraph_label)
     if selected and isinstance(selected.get("page"), int):
@@ -398,9 +398,17 @@ def build_app() -> gr.Blocks:
                 label="Page Preview",
                 type="pil",
             )
+            dataframe_types: list[
+                Literal["str", "number", "bool", "date", "markdown", "html"]
+            ] = [
+                "str",
+                "str",
+                "number",
+                "str",
+            ]
             table_output = gr.Dataframe(
                 headers=["paragraph_id", "title", "page", "text_preview"],
-                datatype=["str", "str", "number", "str"],
+                datatype=dataframe_types,
                 label="Page Spans",
                 interactive=False,
             )
