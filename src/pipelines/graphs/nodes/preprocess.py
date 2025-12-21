@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 import os
+from hashlib import sha1
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Iterable, List, Optional
 
@@ -16,6 +18,7 @@ except Exception:  # pragma: no cover
     DoclingLoader = None
 
 logger = logging.getLogger(__name__)
+_CONVERTER_CACHE: tuple[Optional[object], dict[str, object]] | None = None
 
 
 def preprocess_node(state: dict) -> dict:
@@ -34,29 +37,13 @@ def preprocess_node(state: dict) -> dict:
 
 def parse_docling_pdf(source: str | Path) -> DocStructure:
     """Parse a PDF into DocStructure using Docling metadata."""
-    path = Path(str(source))
-    spans: List[SectionSpan] = []
-    body_text = ""
-    docling_config: dict[str, object] = {}
+    if DoclingLoader is None:
+        raise RuntimeError(
+            "DoclingLoader is not available. Install langchain-docling."
+        )
 
-    if path.exists() and DoclingLoader is not None:
-        spans, body_text, docling_config = _load_with_docling(path)
-
-    # Fallback for plain text (no structure)
-    if not body_text:
-        body_text = _read_plain_text(path) if path.exists() else str(source)
-        body_text = normalize_block(body_text)
-
-    if not spans and body_text:
-        spans = [
-            SectionSpan(
-                paragraph_id="p0-0001",
-                title="body",
-                page=None,
-                bbox=None,
-                text=body_text,
-            )
-        ]
+    resolved_source = _resolve_docling_source(source)
+    spans, body_text, docling_config = _load_with_docling(resolved_source)
 
     section_map = _aggregate_sections_by_title(spans)
     payload = {
@@ -70,22 +57,30 @@ def parse_docling_pdf(source: str | Path) -> DocStructure:
     return DocStructure.model_validate(payload)
 
 
-def _load_with_docling(path: Path) -> tuple[List[SectionSpan], str, dict[str, object]]:
+def _load_with_docling(
+    source: str,
+) -> tuple[List[SectionSpan], str, dict[str, object]]:
     """Load content with Docling via LangChain DoclingLoader."""
     try:
         converter, config = _build_docling_converter()
-        loader_kwargs = {"file_path": str(path)}
+        loader_kwargs = {"file_path": source}
         if converter is not None:
             loader_kwargs["converter"] = converter
         loader = DoclingLoader(**loader_kwargs)
         documents = loader.load()
+        if not documents:
+            raise ValueError("Docling returned no documents.")
         spans = _documents_to_spans(documents)
+        if not spans:
+            raise ValueError("Docling returned no spans.")
         body = normalize_block("\n\n".join(span.text for span in spans))
-        logger.debug("Docling parsed %d spans from %s", len(spans), path.name)
+        if not body:
+            raise ValueError("Docling returned empty body text.")
+        logger.debug("Docling parsed %d spans from %s", len(spans), source)
         return spans, body, config
     except Exception as exc:
-        logger.warning("Docling parsing failed for %s: %s", path, exc)
-        return [], "", {}
+        logger.warning("Docling parsing failed for %s", source, exc_info=True)
+        raise RuntimeError(f"Docling parsing failed for {source}") from exc
 
 
 def _build_docling_converter() -> tuple[Optional[object], dict[str, object]]:
@@ -95,6 +90,10 @@ def _build_docling_converter() -> tuple[Optional[object], dict[str, object]]:
         DOCLING_LAYOUT_MODEL: layout model name (e.g., docling_layout_heron).
         DOCLING_ARTIFACTS_PATH: local model artifacts directory.
     """
+    global _CONVERTER_CACHE
+    if _CONVERTER_CACHE is not None:
+        return _CONVERTER_CACHE
+
     try:
         from docling.datamodel.base_models import InputFormat
         from docling.datamodel.pipeline_options import PdfPipelineOptions
@@ -134,7 +133,8 @@ def _build_docling_converter() -> tuple[Optional[object], dict[str, object]]:
             InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
         }
     )
-    return converter, config
+    _CONVERTER_CACHE = (converter, config)
+    return _CONVERTER_CACHE
 
 
 def _resolve_layout_model(name: Optional[str]) -> Optional[object]:
@@ -159,6 +159,28 @@ def _resolve_layout_model(name: Optional[str]) -> Optional[object]:
     return None
 
 
+def _resolve_docling_source(source: str | Path) -> str:
+    """Validate and normalize PDF sources for Docling."""
+    source_str = str(source)
+    if _is_url(source_str):
+        return source_str
+
+    path = Path(source_str)
+    if not path.exists():
+        raise FileNotFoundError(f"PDF not found: {path}")
+    if not path.is_file():
+        raise ValueError(f"Expected a PDF file, got: {path}")
+    if path.suffix.lower() != ".pdf":
+        raise ValueError(f"Expected a PDF file, got: {path.name}")
+    return str(path)
+
+
+def _is_url(source: str) -> bool:
+    """Return True when the source is an HTTP(S) URL."""
+    parsed = urlparse(source)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
 def _documents_to_spans(documents: Iterable[object]) -> List[SectionSpan]:
     """Convert LangChain Documents to SectionSpan with rich metadata."""
     spans: List[SectionSpan] = []
@@ -175,17 +197,25 @@ def _documents_to_spans(documents: Iterable[object]) -> List[SectionSpan]:
         dl_meta = meta.get("dl_meta") or {}
         
         title = _coalesce_heading(dl_meta.get("headings")) or "body"
-        page, bbox, bboxes = _get_page_and_bboxes(dl_meta)
-        paragraph_id = _get_paragraph_id(dl_meta, index, page)
         doc_item_ids = _get_doc_item_ids(dl_meta)
+        pages, bboxes_by_page = _get_pages_and_bboxes(dl_meta)
+        bboxes_by_page_payload = {
+            str(page_no): boxes for page_no, boxes in bboxes_by_page.items()
+        }
+        page = pages[0] if pages else None
+        bboxes = bboxes_by_page.get(page, []) if page is not None else []
+        bbox = _union_bboxes(bboxes) if bboxes else None
+        paragraph_id = _get_paragraph_id(doc_item_ids, index, page)
 
         spans.append(
             SectionSpan(
                 paragraph_id=paragraph_id,
                 title=title,
                 page=page,
+                pages=pages or None,
                 bbox=bbox,
-                bboxes=bboxes,
+                bboxes=bboxes or None,
+                bboxes_by_page=bboxes_by_page_payload or None,
                 doc_item_ids=doc_item_ids,
                 text=normalized_text,
             )
@@ -207,16 +237,15 @@ def _coalesce_heading(headings: object) -> str:
     return ""
 
 
-def _get_page_and_bboxes(
+def _get_pages_and_bboxes(
     dl_meta: object,
-) -> tuple[Optional[int], Optional[BoundingBox], Optional[List[BoundingBox]]]:
-    """Extract page number and bounding boxes from doc_items."""
+) -> tuple[List[int], dict[int, List[BoundingBox]]]:
+    """Extract page numbers and bounding boxes from doc_items."""
     if not isinstance(dl_meta, dict):
-        return None, None, None
+        return [], {}
 
     doc_items = dl_meta.get("doc_items") or []
-    page = None
-    bboxes: List[BoundingBox] = []
+    bboxes_by_page: dict[int, List[BoundingBox]] = {}
     for item in doc_items:
         if not isinstance(item, dict):
             continue
@@ -226,15 +255,12 @@ def _get_page_and_bboxes(
                 continue
             page_no = entry.get("page_no")
             bbox = _bbox_from_raw(entry.get("bbox"))
-            if bbox is None:
+            if bbox is None or page_no is None:
                 continue
-            if page is None and page_no is not None:
-                page = page_no
-            if page_no == page:
-                bboxes.append(bbox)
+            bboxes_by_page.setdefault(page_no, []).append(bbox)
 
-    union_bbox = _union_bboxes(bboxes) if bboxes else None
-    return page, union_bbox, bboxes or None
+    pages = sorted(bboxes_by_page.keys())
+    return pages, bboxes_by_page
 
 
 def _union_bboxes(bboxes: Iterable[BoundingBox]) -> Optional[BoundingBox]:
@@ -295,18 +321,18 @@ def _get_doc_item_ids(dl_meta: object) -> Optional[List[str]]:
             seen.add(item_id)
             ids.append(item_id)
 
-    return ids or None
+    return sorted(ids) or None
 
 
-def _get_paragraph_id(dl_meta: object, index: int, page: Optional[int]) -> str:
+def _get_paragraph_id(
+    doc_item_ids: Optional[List[str]],
+    index: int,
+    page: Optional[int],
+) -> str:
     """Generate stable paragraph ID from Docling metadata or fallback."""
-    if isinstance(dl_meta, dict):
-        doc_items = dl_meta.get("doc_items") or []
-        for item in doc_items:
-            if isinstance(item, dict):
-                item_id = item.get("id") or item.get("element_id")
-                if item_id:
-                    return str(item_id)
+    if doc_item_ids:
+        digest = sha1("|".join(doc_item_ids).encode("utf-8")).hexdigest()[:12]
+        return f"dl-{digest}"
 
     # Fallback: page-based ID
     page_tag = str(page) if page is not None else "na"
@@ -324,18 +350,6 @@ def _aggregate_sections_by_title(spans: Iterable[SectionSpan]) -> dict[str, str]
         aggregated.setdefault(title, []).append(text)
 
     return {title: "\n\n".join(parts) for title, parts in aggregated.items()}
-
-
-def _read_plain_text(path: Path) -> str:
-    """Fallback plain text reader."""
-    try:
-        return path.read_text(encoding="utf-8", errors="ignore")
-    except FileNotFoundError:
-        logger.warning("File not found: %s", path)
-        return ""
-    except Exception as exc:
-        logger.warning("Failed to read plain text from %s: %s", path, exc)
-        return ""
 
 
 __all__ = ["parse_docling_pdf", "preprocess_node"]

@@ -23,8 +23,10 @@ class SectionSpan(BaseModel):
     paragraph_id: str = Field(description="Stable paragraph identifier.")
     title: str = Field(description="Section heading path.")
     page: Optional[int] = None
+    pages: Optional[List[int]] = None
     bbox: Optional[BoundingBox] = None
     bboxes: Optional[List[BoundingBox]] = None
+    bboxes_by_page: Optional[dict[str, List[BoundingBox]]] = None
     doc_item_ids: Optional[List[str]] = None
     text: str
 

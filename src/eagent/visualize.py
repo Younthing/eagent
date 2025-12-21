@@ -191,7 +191,7 @@ def _render_view(
 
         page_rect = page.rect
         page_spans = [
-            span for span in spans if span.get("page") == page_number
+            span for span in spans if _span_has_boxes_on_page(span, page_number)
         ]
         table = _build_table(page_spans)
 
@@ -200,6 +200,7 @@ def _render_view(
         for span in page_spans:
             span_boxes = _collect_span_boxes_for_page(
                 span,
+                page_number,
                 page_rect,
                 pix.width,
                 pix.height,
@@ -223,9 +224,10 @@ def _render_view(
             if fallback_boxes:
                 _draw_boxes(image, fallback_boxes, color="#FF9800", width=2)
 
-        if selected_span and selected_span.get("page") == page_number:
+        if selected_span and _span_has_boxes_on_page(selected_span, page_number):
             selected_boxes = _collect_span_boxes_for_page(
                 selected_span,
+                page_number,
                 page_rect,
                 pix.width,
                 pix.height,
@@ -248,11 +250,21 @@ def _render_view(
 
 def _collect_span_boxes_for_page(
     span: Dict[str, Any],
+    page_number: int,
     page_rect: fitz.Rect,
     pix_width: int,
     pix_height: int,
 ) -> List[Tuple[int, int, int, int]]:
     boxes: List[Tuple[int, int, int, int]] = []
+    bboxes_by_page = span.get("bboxes_by_page") or {}
+    page_key = str(page_number)
+    if page_key in bboxes_by_page:
+        for raw_box in bboxes_by_page[page_key]:
+            scaled = _scale_bbox(raw_box, page_rect, pix_width, pix_height)
+            if scaled is not None:
+                boxes.append(scaled)
+        return boxes
+
     span_boxes = span.get("bboxes") or []
     if span_boxes:
         for raw_box in span_boxes:
@@ -266,6 +278,13 @@ def _collect_span_boxes_for_page(
         if scaled is not None:
             boxes.append(scaled)
     return boxes
+
+
+def _span_has_boxes_on_page(span: Dict[str, Any], page_number: int) -> bool:
+    bboxes_by_page = span.get("bboxes_by_page") or {}
+    if str(page_number) in bboxes_by_page:
+        return True
+    return span.get("page") == page_number
 
 
 def _search_text_boxes(
@@ -333,6 +352,10 @@ def _on_paragraph_change(
     selected = _find_span_by_label(spans, paragraph_label)
     if selected and isinstance(selected.get("page"), int):
         page_number = selected["page"]
+    elif selected:
+        pages = selected.get("pages") or []
+        if pages:
+            page_number = pages[0]
     image, table, text = _render_view(state, page_number, paragraph_label, show_all)
     return image, table, text, gr.update(value=page_number)
 
