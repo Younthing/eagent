@@ -1,0 +1,160 @@
+version: "rob2-locator-rules-1.0"
+variant: "standard"
+defaults:
+  top_k: 5
+
+domains:
+  D1:
+    section_priors:
+      - "random"
+      - "allocation"
+      - "conceal"
+      - "baseline"
+      - "methods"
+      - "trial design"
+    keywords:
+      - "random"
+      - "randomized"
+      - "randomised"
+      - "randomization"
+      - "allocation"
+      - "conceal"
+      - "baseline"
+      - "table 1"
+
+  D2:
+    section_priors:
+      - "blinding"
+      - "mask"
+      - "intervention"
+      - "protocol"
+      - "methods"
+      - "analysis"
+      - "adherence"
+      - "compliance"
+    keywords:
+      - "blind"
+      - "blinded"
+      - "mask"
+      - "open label"
+      - "open-label"
+      - "protocol deviation"
+      - "co-intervention"
+      - "contamination"
+      - "non-adherence"
+      - "nonadherence"
+      - "adherence"
+      - "compliance"
+      - "intention to treat"
+      - "intention-to-treat"
+      - "itt"
+      - "per protocol"
+      - "per-protocol"
+      - "as treated"
+      - "as-treated"
+
+  D3:
+    section_priors:
+      - "participant flow"
+      - "follow up"
+      - "follow-up"
+      - "attrition"
+      - "results"
+      - "methods"
+    keywords:
+      - "lost to follow-up"
+      - "follow up"
+      - "follow-up"
+      - "attrition"
+      - "dropout"
+      - "withdraw"
+      - "missing"
+      - "imputation"
+      - "multiple imputation"
+      - "locf"
+
+  D4:
+    section_priors:
+      - "outcome"
+      - "assessment"
+      - "measurement"
+      - "blinding"
+      - "methods"
+    keywords:
+      - "outcome"
+      - "assessor"
+      - "blinded"
+      - "mask"
+      - "self-reported"
+      - "questionnaire"
+      - "scale"
+      - "instrument"
+      - "measurement"
+
+  D5:
+    section_priors:
+      - "protocol"
+      - "registration"
+      - "trial registration"
+      - "analysis plan"
+      - "statistical analysis"
+      - "methods"
+      - "supplement"
+    keywords:
+      - "protocol"
+      - "registered"
+      - "registration"
+      - "clinicaltrials.gov"
+      - "isrctn"
+      - "pre-specified"
+      - "prespecified"
+      - "analysis plan"
+      - "statistical analysis plan"
+      - "sap"
+      - "post hoc"
+      - "post-hoc"
+      - "multiple outcomes"
+
+question_overrides:
+  q1_1:
+    keywords:
+      - "computer generated"
+      - "computer-generated"
+      - "random number"
+      - "random-number"
+      - "block random"
+      - "block-random"
+      - "stratified"
+      - "permuted"
+  q1_2:
+    keywords:
+      - "allocation conceal"
+      - "sealed envelope"
+      - "opaque envelope"
+      - "sequentially numbered"
+      - "central random"
+      - "telephone random"
+      - "web-based"
+      - "pharmacy"
+  q1_3:
+    keywords:
+      - "baseline"
+      - "imbalance"
+      - "similar at baseline"
+      - "comparable at baseline"
+      - "table 1"
+  q2a_6:
+    keywords:
+      - "intention to treat"
+      - "intention-to-treat"
+      - "itt"
+      - "as randomized"
+      - "analysed as randomised"
+  q2b_6:
+    keywords:
+      - "per protocol"
+      - "per-protocol"
+      - "as treated"
+      - "as-treated"
+      - "adherence"
+      - "compliance"
