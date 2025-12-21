@@ -24,6 +24,8 @@ class SectionSpan(BaseModel):
     title: str = Field(description="Section heading path.")
     page: Optional[int] = None
     bbox: Optional[BoundingBox] = None
+    bboxes: Optional[List[BoundingBox]] = None
+    doc_item_ids: Optional[List[str]] = None
     text: str
 
 

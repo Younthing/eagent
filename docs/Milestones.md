@@ -43,17 +43,17 @@
   * paragraph_id
   * section hierarchy
   * page number
-* 验证 Methods / Results / Supplement 是否完整
+* 记录结构化 section（如 Methods / Results / Supplement，若存在）
 
 ### 交付物
 
 * Docling 解析模块
-* 原文段落浏览 / 对照工具（哪怕是 CLI）
+* 原文段落浏览 / 对照工具（CLI 或可视化）
 
 ### DoD
 
 * 任意 paragraph_id 都能回溯到 PDF
-* Methods 中的随机化描述不会被拆断或丢失
+* Docling 模型配置可显式指定并记录
 
 > ✅ 这是系统“反 hallucination”的第一道物理防线。
 
@@ -151,7 +151,7 @@
 
 ### DoD
 
-* Discussion 段落不会压过 Methods
+* Discussion 段落不会压过方法/结果类 section（若存在）
 * 与 ROB2 domain 明显无关段落显著减少
 
 ---

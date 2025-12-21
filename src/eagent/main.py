@@ -35,10 +35,13 @@ def main() -> int:
 
     titles = [span.title for span in doc.sections if span.title]
     unique_titles = sorted({title for title in titles if title})
+    docling_config = doc.model_dump().get("docling_config")
 
     print(f"Parsed: {pdf_path}")
     print(f"Body length: {len(doc.body)}")
     print(f"Section spans: {len(doc.sections)}")
+    if docling_config:
+        print(f"Docling config: {docling_config}")
     if unique_titles:
         print("Section titles:")
         for title in unique_titles:

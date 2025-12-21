@@ -20,6 +20,8 @@ dependencies = [
     "python-dotenv",
     "langchain-anthropic>=1.2.0",
     "langchain-openai>=1.1.0",
+    "langchain-community>=0.4.1",
+    "docling>=2.63.0",
 ]
 
 [project.optional-dependencies]
@@ -28,9 +30,15 @@ test = [
     "pytest-asyncio",
     "pytest-mock",
 ]
+visual = [
+    "gradio>=4.0.0",
+    "pymupdf>=1.24.0",
+    "pillow>=10.0.0",
+]
 
 [project.scripts]
 eagent = "eagent:main"
+eagent-visualize = "eagent.visualize:main"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
