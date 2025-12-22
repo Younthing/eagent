@@ -51,6 +51,23 @@ class Settings(BaseSettings):
     reranker_batch_size: int = Field(default=8, validation_alias="RERANKER_BATCH_SIZE")
     reranker_top_n: int = Field(default=50, validation_alias="RERANKER_TOP_N")
 
+    relevance_model: str | None = Field(default=None, validation_alias="RELEVANCE_MODEL")
+    relevance_model_provider: str | None = Field(
+        default=None, validation_alias="RELEVANCE_MODEL_PROVIDER"
+    )
+    relevance_temperature: float = Field(
+        default=0.0, validation_alias="RELEVANCE_TEMPERATURE"
+    )
+    relevance_timeout: float | None = Field(
+        default=None, validation_alias="RELEVANCE_TIMEOUT"
+    )
+    relevance_max_tokens: int | None = Field(
+        default=None, validation_alias="RELEVANCE_MAX_TOKENS"
+    )
+    relevance_max_retries: int = Field(
+        default=2, validation_alias="RELEVANCE_MAX_RETRIES"
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

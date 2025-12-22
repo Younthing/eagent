@@ -67,6 +67,7 @@ class EvidenceBundle(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+
 class FusedEvidenceCandidate(BaseModel):
     """A merged evidence candidate with multi-engine supports (Milestone 6)."""
 
@@ -93,10 +94,38 @@ class FusedEvidenceBundle(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class RelevanceVerdict(BaseModel):
+    """Relevance judgement for a candidate paragraph (Milestone 7)."""
+
+    label: Literal["relevant", "irrelevant", "unknown"]
+    confidence: Optional[float] = Field(default=None, ge=0, le=1)
+    supporting_quote: Optional[str] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class RelevanceAnnotatedFusedEvidenceCandidate(FusedEvidenceCandidate):
+    """Fused candidate annotated with relevance judgement (Milestone 7)."""
+
+    relevance: RelevanceVerdict
+
+
+class RelevanceEvidenceBundle(BaseModel):
+    """Top-k relevance-validated evidence bundle for a question."""
+
+    question_id: str
+    items: List[RelevanceAnnotatedFusedEvidenceCandidate]
+
+    model_config = ConfigDict(extra="forbid")
+
+
 __all__ = [
     "EvidenceBundle",
     "EvidenceCandidate",
     "EvidenceSupport",
     "FusedEvidenceBundle",
     "FusedEvidenceCandidate",
+    "RelevanceAnnotatedFusedEvidenceCandidate",
+    "RelevanceEvidenceBundle",
+    "RelevanceVerdict",
 ]

@@ -6,6 +6,9 @@ from .evidence import (  # noqa: F401
     EvidenceSupport,
     FusedEvidenceBundle,
     FusedEvidenceCandidate,
+    RelevanceAnnotatedFusedEvidenceCandidate,
+    RelevanceEvidenceBundle,
+    RelevanceVerdict,
 )
 from .locator import LocatorRules  # noqa: F401
 from .rob2 import (  # noqa: F401
@@ -27,5 +30,8 @@ __all__ = [
     "QuestionCondition",
     "QuestionDependency",
     "QuestionSet",
+    "RelevanceAnnotatedFusedEvidenceCandidate",
+    "RelevanceEvidenceBundle",
+    "RelevanceVerdict",
     "Rob2Question",
 ]

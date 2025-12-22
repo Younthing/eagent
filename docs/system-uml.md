@@ -52,6 +52,12 @@ flowchart TD
     FUS --> FE[fusion_evidence<br/>FusedEvidenceBundle top-k]
     FUS --> FC[fusion_candidates<br/>all fused candidates]
   end
+
+  subgraph Validation
+    FC --> RV[relevance_validator_node<br/>optional LLM<br/>M7]
+    RV --> RE[relevance_evidence<br/>RelevanceEvidenceBundle top-k]
+    RV --> RC[relevance_candidates<br/>annotated candidates]
+  end
 ```
 
 Notes:
@@ -60,4 +66,5 @@ Notes:
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support LLM query planning via LangChain `init_chat_model` (`query_planner=llm`), with deterministic fallback on errors.
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support optional cross-encoder reranking (`reranker=cross_encoder`) after RRF.
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support optional structure-aware filtering/ranking (Milestone 5).
-- Dense/fulltext locators, validation, reasoning, and aggregation are not implemented yet.
+- `relevance_validator_node` annotates fused candidates with an LLM relevance verdict (Milestone 7).
+- Dense/fulltext locators, remaining validation layers, reasoning, and aggregation are not implemented yet.
