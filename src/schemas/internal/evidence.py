@@ -27,6 +27,9 @@ class EvidenceCandidate(BaseModel):
     rrf_score: Optional[float] = Field(default=None, ge=0)
     retrieval_rank: Optional[int] = Field(default=None, ge=1)
     query_ranks: Optional[Dict[str, int]] = None
+    reranker: Optional[str] = None
+    rerank_score: Optional[float] = Field(default=None, ge=0)
+    rerank_rank: Optional[int] = Field(default=None, ge=1)
 
     section_score: Optional[float] = Field(default=None, ge=0)
     keyword_score: Optional[float] = Field(default=None, ge=0)

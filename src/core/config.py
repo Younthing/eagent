@@ -43,6 +43,14 @@ class Settings(BaseSettings):
         default=2, validation_alias="QUERY_PLANNER_MAX_RETRIES"
     )
 
+    reranker_model_id: str | None = Field(
+        default=None, validation_alias="RERANKER_MODEL_ID"
+    )
+    reranker_device: str | None = Field(default=None, validation_alias="RERANKER_DEVICE")
+    reranker_max_length: int = Field(default=512, validation_alias="RERANKER_MAX_LENGTH")
+    reranker_batch_size: int = Field(default=8, validation_alias="RERANKER_BATCH_SIZE")
+    reranker_top_n: int = Field(default=50, validation_alias="RERANKER_TOP_N")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

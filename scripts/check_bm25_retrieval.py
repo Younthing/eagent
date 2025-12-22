@@ -19,6 +19,10 @@ from retrieval.query_planning.llm import (  # noqa: E402
     generate_query_plan_llm,
 )
 from retrieval.query_planning.planner import generate_queries_for_question  # noqa: E402
+from retrieval.rerankers.cross_encoder import (  # noqa: E402
+    DEFAULT_CROSS_ENCODER_MODEL_ID,
+    get_cross_encoder_reranker,
+)
 from retrieval.structure.filters import filter_spans_by_section_priors  # noqa: E402
 from rob2.locator_rules import DEFAULT_LOCATOR_RULES, load_locator_rules  # noqa: E402
 from rob2.question_bank import load_question_bank  # noqa: E402
@@ -83,6 +87,40 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Max keyword hints passed per question to the LLM planner.",
     )
     parser.add_argument(
+        "--rerank",
+        choices=("none", "cross_encoder"),
+        default="none",
+        help="Optional post-RRF reranker.",
+    )
+    parser.add_argument(
+        "--rerank-model-id",
+        default=None,
+        help="Cross-encoder model id or local path (defaults to RERANKER_MODEL_ID).",
+    )
+    parser.add_argument(
+        "--rerank-device",
+        default=None,
+        help="Cross-encoder device override (cpu|cuda|mps). Defaults to RERANKER_DEVICE.",
+    )
+    parser.add_argument(
+        "--rerank-max-length",
+        type=int,
+        default=None,
+        help="Tokenizer max length for reranker (defaults to RERANKER_MAX_LENGTH, 512).",
+    )
+    parser.add_argument(
+        "--rerank-batch-size",
+        type=int,
+        default=None,
+        help="Batch size for reranker (defaults to RERANKER_BATCH_SIZE, 8).",
+    )
+    parser.add_argument(
+        "--rerank-top-n",
+        type=int,
+        default=None,
+        help="Rerank only the top-N fused candidates (defaults to RERANKER_TOP_N, 50).",
+    )
+    parser.add_argument(
         "--structure",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -130,9 +168,9 @@ def main() -> int:
     full_index = build_bm25_index(spans)
     full_mapping = list(range(len(spans)))
 
+    settings = get_settings()
     query_plan = None
     if args.planner == "llm":
-        settings = get_settings()
         model_id = (args.planner_model or settings.query_planner_model or "").strip()
         if not model_id:
             print(
@@ -164,6 +202,37 @@ def main() -> int:
             )
         except Exception as exc:
             print(f"LLM planner failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 2
+
+    reranker = None
+    reranker_top_n = None
+    reranker_max_length = None
+    reranker_batch_size = None
+    if args.rerank == "cross_encoder":
+        rerank_model_id = (
+            args.rerank_model_id
+            or settings.reranker_model_id
+            or DEFAULT_CROSS_ENCODER_MODEL_ID
+        )
+        reranker_top_n = (
+            args.rerank_top_n if args.rerank_top_n is not None else settings.reranker_top_n
+        )
+        reranker_max_length = (
+            args.rerank_max_length
+            if args.rerank_max_length is not None
+            else settings.reranker_max_length
+        )
+        reranker_batch_size = (
+            args.rerank_batch_size
+            if args.rerank_batch_size is not None
+            else settings.reranker_batch_size
+        )
+        device = args.rerank_device or settings.reranker_device
+        try:
+            reranker = get_cross_encoder_reranker(model_id=rerank_model_id, device=device)
+            print(f"Reranker: {rerank_model_id} on {reranker.device} (top_n={reranker_top_n})")
+        except Exception as exc:
+            print(f"Failed to load reranker: {type(exc).__name__}: {exc}", file=sys.stderr)
             return 2
 
     questions: list[Rob2Question]
@@ -239,16 +308,41 @@ def main() -> int:
             print("No candidates found.")
             continue
 
-        items = fused if args.full else fused[: args.top_k]
-        print(f"Candidates: {len(fused)} (printing {len(items)})")
+        rerank_scores = {}
+        fused_for_print = fused
+        if reranker is not None:
+            top_n = min(int(reranker_top_n or 50), len(fused))
+            head = fused[:top_n]
+            passages = []
+            for hit in head:
+                span = spans[hit.doc_index]
+                title = span.title.strip() if span.title else ""
+                body = span.text.strip() if span.text else ""
+                passages.append(f"{title}\n\n{body}".strip() if title else body)
+
+            result = reranker.rerank(
+                question.text,
+                passages,
+                max_length=int(reranker_max_length or 512),
+                batch_size=int(reranker_batch_size or 8),
+            )
+            rerank_scores = {
+                head[i].doc_index: float(result.scores[i]) for i in range(len(head))
+            }
+            fused_for_print = [head[i] for i in result.order] + fused[top_n:]
+
+        items = fused_for_print if args.full else fused_for_print[: args.top_k]
+        print(f"Candidates: {len(fused_for_print)} (printing {len(items)})")
         for idx, hit in enumerate(items, start=1):
             span = spans[hit.doc_index]
             section_score = section_scores.get(hit.doc_index, 0)
             matched = matched_priors.get(hit.doc_index) or []
+            rerank_score = rerank_scores.get(hit.doc_index)
+            rerank_label = f" rerank={rerank_score:.4f}" if rerank_score is not None else ""
             print(
                 f"{idx:>2}. rrf={hit.rrf_score:.4f} best_rank={hit.best_rank} "
                 f"bm25={hit.best_engine_score:.2f} section={section_score} "
-                f"pid={span.paragraph_id} page={span.page} title={span.title}"
+                f"pid={span.paragraph_id} page={span.page} title={span.title}{rerank_label}"
             )
             print(f"    best_query: {hit.best_query}")
             print(f"    query_ranks: {hit.query_ranks}")

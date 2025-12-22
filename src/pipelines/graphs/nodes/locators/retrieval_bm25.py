@@ -15,6 +15,11 @@ from retrieval.engines.bm25 import BM25Hit, BM25Index, build_bm25_index
 from retrieval.engines.fusion import rrf_fuse
 from retrieval.query_planning.llm import LLMQueryPlannerConfig, generate_query_plan_llm
 from retrieval.query_planning.planner import generate_query_plan
+from retrieval.rerankers.apply import apply_reranker
+from retrieval.rerankers.cross_encoder import (
+    DEFAULT_CROSS_ENCODER_MODEL_ID,
+    get_cross_encoder_reranker,
+)
 from retrieval.structure.filters import filter_spans_by_section_priors
 from rob2.locator_rules import get_locator_rules
 from schemas.internal.documents import DocStructure
@@ -44,6 +49,7 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
     doc_structure = DocStructure.model_validate(raw_doc)
     question_set = QuestionSet.model_validate(raw_questions)
 
+    settings = get_settings()
     rules = get_locator_rules()
     planner_requested = str(state.get("query_planner") or "deterministic").strip().lower()
     if planner_requested not in {"deterministic", "llm"}:
@@ -56,7 +62,6 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
     planner_model_provider: str | None = None
 
     if planner_requested == "llm":
-        settings = get_settings()
         planner_model = str(
             state.get("query_planner_model") or settings.query_planner_model or ""
         ).strip()
@@ -122,6 +127,55 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
             except Exception as exc:
                 planner_used = "deterministic"
                 planner_error = f"{type(exc).__name__}: {exc}"
+
+    reranker_requested = str(state.get("reranker") or "none").strip().lower()
+    reranker_requested = reranker_requested.replace("-", "_")
+    if reranker_requested not in {"none", "cross_encoder"}:
+        raise ValueError("reranker must be 'none' or 'cross_encoder'")
+
+    reranker_used = reranker_requested
+    reranker_error: str | None = None
+    reranker_model_id: str | None = None
+    reranker_device: str | None = None
+    reranker_max_length: int | None = None
+    reranker_batch_size: int | None = None
+    reranker_top_n: int | None = None
+    cross_encoder = None
+
+    if reranker_requested == "cross_encoder":
+        reranker_model_id = str(
+            state.get("reranker_model_id")
+            or settings.reranker_model_id
+            or DEFAULT_CROSS_ENCODER_MODEL_ID
+        ).strip()
+        reranker_device = (
+            str(state.get("reranker_device")).strip()
+            if state.get("reranker_device") is not None
+            else settings.reranker_device
+        )
+        reranker_max_length = int(
+            state.get("reranker_max_length") or settings.reranker_max_length
+        )
+        reranker_batch_size = int(
+            state.get("reranker_batch_size") or settings.reranker_batch_size
+        )
+        reranker_top_n = int(state.get("rerank_top_n") or settings.reranker_top_n)
+
+        if reranker_max_length < 1:
+            raise ValueError("reranker_max_length must be >= 1")
+        if reranker_batch_size < 1:
+            raise ValueError("reranker_batch_size must be >= 1")
+        if reranker_top_n < 1:
+            raise ValueError("rerank_top_n must be >= 1")
+
+        try:
+            cross_encoder = get_cross_encoder_reranker(
+                model_id=reranker_model_id,
+                device=reranker_device,
+            )
+        except Exception as exc:
+            reranker_used = "none"
+            reranker_error = f"{type(exc).__name__}: {exc}"
 
     top_k = int(state.get("top_k") or rules.defaults.top_k)
     per_query_top_n = int(state.get("per_query_top_n") or 50)
@@ -240,6 +294,16 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
                 )
             )
 
+        if cross_encoder is not None and candidates:
+            candidates = apply_reranker(
+                reranker=cross_encoder,
+                query=question.text,
+                candidates=candidates,
+                top_n=min(reranker_top_n or len(candidates), len(candidates)),
+                max_length=reranker_max_length or 512,
+                batch_size=reranker_batch_size or 8,
+            )
+
         candidates_by_q[question_id] = candidates
         bundles.append(
             EvidenceBundle(question_id=question_id, items=candidates[:top_k])
@@ -263,6 +327,16 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
             "model": planner_model,
             "model_provider": planner_model_provider,
             "error": planner_error,
+        },
+        "bm25_reranker": {
+            "requested": reranker_requested,
+            "used": reranker_used,
+            "model_id": reranker_model_id,
+            "device": cross_encoder.device if cross_encoder is not None else None,
+            "top_n": reranker_top_n,
+            "max_length": reranker_max_length,
+            "batch_size": reranker_batch_size,
+            "error": reranker_error,
         },
         "bm25_rankings": {
             question_id: {

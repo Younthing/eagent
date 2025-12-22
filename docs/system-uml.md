@@ -29,16 +29,18 @@ flowchart TD
     C --> R[section_prior_filter<br/>optional<br/>M5]
     I --> R
     R --> M
-    M --> N[bm25_evidence<br/>EvidenceBundle top-k]
-    M --> O[bm25_candidates<br/>all fused candidates]
+    M --> CE1[cross_encoder_reranker<br/>optional<br/>post-RRF]
+    CE1 --> N[bm25_evidence<br/>EvidenceBundle top-k]
+    CE1 --> O[bm25_candidates<br/>all fused candidates]
     M --> P[bm25_rankings<br/>per-query top-n]
     M --> Q[bm25_queries]
 
     C --> S[splade_retrieval_locator_node]
     QP --> S
     R --> S
-    S --> T[splade_evidence<br/>EvidenceBundle top-k]
-    S --> U[splade_candidates<br/>all fused candidates]
+    S --> CE2[cross_encoder_reranker<br/>optional<br/>post-RRF]
+    CE2 --> T[splade_evidence<br/>EvidenceBundle top-k]
+    CE2 --> U[splade_candidates<br/>all fused candidates]
     S --> V[splade_rankings<br/>per-query top-n]
     S --> W[splade_queries]
   end
@@ -48,5 +50,6 @@ Notes:
 - This diagram reflects the currently implemented nodes and data flow in code.
 - Evidence location currently includes rule-based, BM25, and SPLADE retrieval locators.
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support LLM query planning via LangChain `init_chat_model` (`query_planner=llm`), with deterministic fallback on errors.
+- `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support optional cross-encoder reranking (`reranker=cross_encoder`) after RRF.
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support optional structure-aware filtering/ranking (Milestone 5).
 - Dense/fulltext locators, fusion, validation, reasoning, and aggregation are not implemented yet.
