@@ -21,10 +21,12 @@ flowchart TD
     J --> K[rule_based_evidence<br/>EvidenceBundle top-k]
     J --> L[rule_based_candidates<br/>all scored candidates]
 
+    G --> QP[query_planner<br/>deterministic / LLM<br/>M4]
+    I --> QP
+
     C --> M[bm25_retrieval_locator_node]
-    G --> M
-    I --> M
-    C --> R[section_prior_filter<br/>(optional, M5)]
+    QP --> M
+    C --> R[section_prior_filter<br/>optional<br/>M5]
     I --> R
     R --> M
     M --> N[bm25_evidence<br/>EvidenceBundle top-k]
@@ -33,8 +35,7 @@ flowchart TD
     M --> Q[bm25_queries]
 
     C --> S[splade_retrieval_locator_node]
-    G --> S
-    I --> S
+    QP --> S
     R --> S
     S --> T[splade_evidence<br/>EvidenceBundle top-k]
     S --> U[splade_candidates<br/>all fused candidates]
@@ -46,5 +47,6 @@ flowchart TD
 Notes:
 - This diagram reflects the currently implemented nodes and data flow in code.
 - Evidence location currently includes rule-based, BM25, and SPLADE retrieval locators.
+- `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support LLM query planning via LangChain `init_chat_model` (`query_planner=llm`), with deterministic fallback on errors.
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support optional structure-aware filtering/ranking (Milestone 5).
 - Dense/fulltext locators, fusion, validation, reasoning, and aggregation are not implemented yet.

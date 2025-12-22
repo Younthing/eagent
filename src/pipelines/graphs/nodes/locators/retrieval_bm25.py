@@ -10,8 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
+from core.config import get_settings
 from retrieval.engines.bm25 import BM25Hit, BM25Index, build_bm25_index
 from retrieval.engines.fusion import rrf_fuse
+from retrieval.query_planning.llm import LLMQueryPlannerConfig, generate_query_plan_llm
 from retrieval.query_planning.planner import generate_query_plan
 from retrieval.structure.filters import filter_spans_by_section_priors
 from rob2.locator_rules import get_locator_rules
@@ -43,7 +45,83 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
     question_set = QuestionSet.model_validate(raw_questions)
 
     rules = get_locator_rules()
+    planner_requested = str(state.get("query_planner") or "deterministic").strip().lower()
+    if planner_requested not in {"deterministic", "llm"}:
+        raise ValueError("query_planner must be 'deterministic' or 'llm'")
+
     query_plan = generate_query_plan(question_set, rules, max_queries_per_question=5)
+    planner_used = planner_requested
+    planner_error: str | None = None
+    planner_model: str | None = None
+    planner_model_provider: str | None = None
+
+    if planner_requested == "llm":
+        settings = get_settings()
+        planner_model = str(
+            state.get("query_planner_model") or settings.query_planner_model or ""
+        ).strip()
+        planner_model_provider = (
+            state.get("query_planner_model_provider")
+            or settings.query_planner_model_provider
+        )
+        temperature_raw = state.get("query_planner_temperature")
+        planner_temperature = (
+            settings.query_planner_temperature
+            if temperature_raw is None
+            else float(str(temperature_raw))
+        )
+
+        timeout_raw = state.get("query_planner_timeout")
+        planner_timeout = (
+            settings.query_planner_timeout
+            if timeout_raw is None
+            else float(str(timeout_raw))
+        )
+
+        max_tokens_raw = state.get("query_planner_max_tokens")
+        planner_max_tokens = (
+            settings.query_planner_max_tokens
+            if max_tokens_raw is None
+            else int(str(max_tokens_raw))
+        )
+
+        max_retries_raw = state.get("query_planner_max_retries")
+        planner_max_retries = (
+            settings.query_planner_max_retries
+            if max_retries_raw is None
+            else int(str(max_retries_raw))
+        )
+
+        max_keywords_raw = state.get("query_planner_max_keywords")
+        max_keywords = 10 if max_keywords_raw is None else int(str(max_keywords_raw))
+
+        if not planner_model:
+            planner_used = "deterministic"
+            planner_error = (
+                "Missing query planner model (set QUERY_PLANNER_MODEL or state['query_planner_model'])."
+            )
+        else:
+            config = LLMQueryPlannerConfig(
+                model=planner_model,
+                model_provider=str(planner_model_provider)
+                if planner_model_provider
+                else None,
+                temperature=planner_temperature,
+                timeout=planner_timeout,
+                max_tokens=planner_max_tokens,
+                max_retries=planner_max_retries,
+            )
+            try:
+                query_plan = generate_query_plan_llm(
+                    question_set,
+                    rules,
+                    config=config,
+                    max_queries_per_question=5,
+                    max_keywords_per_question=max_keywords,
+                )
+            except Exception as exc:
+                planner_used = "deterministic"
+                planner_error = f"{type(exc).__name__}: {exc}"
 
     top_k = int(state.get("top_k") or rules.defaults.top_k)
     per_query_top_n = int(state.get("per_query_top_n") or 50)
@@ -179,6 +257,13 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
 
     return {
         "bm25_queries": query_plan,
+        "bm25_query_planner": {
+            "requested": planner_requested,
+            "used": planner_used,
+            "model": planner_model,
+            "model_provider": planner_model_provider,
+            "error": planner_error,
+        },
         "bm25_rankings": {
             question_id: {
                 query: [

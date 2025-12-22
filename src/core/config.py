@@ -24,6 +24,25 @@ class Settings(BaseSettings):
         default=None, validation_alias="DOCLING_CHUNKER_MAX_TOKENS"
     )
 
+    query_planner_model: str | None = Field(
+        default=None, validation_alias="QUERY_PLANNER_MODEL"
+    )
+    query_planner_model_provider: str | None = Field(
+        default=None, validation_alias="QUERY_PLANNER_MODEL_PROVIDER"
+    )
+    query_planner_temperature: float = Field(
+        default=0.0, validation_alias="QUERY_PLANNER_TEMPERATURE"
+    )
+    query_planner_timeout: float | None = Field(
+        default=None, validation_alias="QUERY_PLANNER_TIMEOUT"
+    )
+    query_planner_max_tokens: int | None = Field(
+        default=None, validation_alias="QUERY_PLANNER_MAX_TOKENS"
+    )
+    query_planner_max_retries: int = Field(
+        default=2, validation_alias="QUERY_PLANNER_MAX_RETRIES"
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

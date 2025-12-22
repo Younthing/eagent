@@ -18,11 +18,16 @@ from retrieval.engines.splade import (  # noqa: E402
     DEFAULT_SPLADE_MODEL_ID,
     get_splade_encoder,
 )
+from retrieval.query_planning.llm import (  # noqa: E402
+    LLMQueryPlannerConfig,
+    generate_query_plan_llm,
+)
 from retrieval.query_planning.planner import generate_queries_for_question  # noqa: E402
 from retrieval.structure.filters import filter_spans_by_section_priors  # noqa: E402
 from rob2.locator_rules import DEFAULT_LOCATOR_RULES, load_locator_rules  # noqa: E402
 from rob2.question_bank import load_question_bank  # noqa: E402
 from schemas.internal.rob2 import Rob2Question  # noqa: E402
+from core.config import get_settings  # noqa: E402
 
 DEFAULT_LOCAL_SPLADE = PROJECT_ROOT / "models" / "splade_distil_CoCodenser_large"
 
@@ -91,6 +96,34 @@ def _build_parser() -> argparse.ArgumentParser:
         help="RRF k constant.",
     )
     parser.add_argument(
+        "--planner",
+        choices=("deterministic", "llm"),
+        default="deterministic",
+        help="Query planner mode (Milestone 4).",
+    )
+    parser.add_argument(
+        "--planner-model",
+        default=None,
+        help="Model id for init_chat_model (e.g. openai:gpt-4o-mini). Defaults to QUERY_PLANNER_MODEL.",
+    )
+    parser.add_argument(
+        "--planner-provider",
+        default=None,
+        help="Optional model_provider override for init_chat_model (defaults to QUERY_PLANNER_MODEL_PROVIDER).",
+    )
+    parser.add_argument(
+        "--planner-temperature",
+        type=float,
+        default=None,
+        help="Planner temperature (defaults to QUERY_PLANNER_TEMPERATURE, or 0).",
+    )
+    parser.add_argument(
+        "--planner-max-keywords",
+        type=int,
+        default=10,
+        help="Max keyword hints passed per question to the LLM planner.",
+    )
+    parser.add_argument(
         "--structure",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -144,6 +177,42 @@ def main() -> int:
     question_set = load_question_bank()
     rules = load_locator_rules(args.rules_path)
 
+    query_plan = None
+    if args.planner == "llm":
+        settings = get_settings()
+        model_id = (args.planner_model or settings.query_planner_model or "").strip()
+        if not model_id:
+            print(
+                "Missing planner model. Set --planner-model or QUERY_PLANNER_MODEL.",
+                file=sys.stderr,
+            )
+            return 2
+        model_provider = args.planner_provider or settings.query_planner_model_provider
+        temperature = (
+            args.planner_temperature
+            if args.planner_temperature is not None
+            else settings.query_planner_temperature
+        )
+        config = LLMQueryPlannerConfig(
+            model=model_id,
+            model_provider=str(model_provider) if model_provider else None,
+            temperature=float(temperature),
+            timeout=settings.query_planner_timeout,
+            max_tokens=settings.query_planner_max_tokens,
+            max_retries=settings.query_planner_max_retries,
+        )
+        try:
+            query_plan = generate_query_plan_llm(
+                question_set,
+                rules,
+                config=config,
+                max_queries_per_question=5,
+                max_keywords_per_question=args.planner_max_keywords,
+            )
+        except Exception as exc:
+            print(f"LLM planner failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 2
+
     questions: list[Rob2Question]
     if args.question_id:
         selected = [
@@ -171,7 +240,10 @@ def main() -> int:
 
     for question in questions:
         print(f"\n== {question.question_id} ({question.domain}) ==")
-        queries = generate_queries_for_question(question, rules)
+        if query_plan is not None:
+            queries = query_plan.get(question.question_id) or []
+        else:
+            queries = generate_queries_for_question(question, rules)
         print(f"Queries ({len(queries)}):")
         for q in queries:
             print(f"  - {q}")
