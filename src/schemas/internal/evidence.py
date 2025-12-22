@@ -19,6 +19,9 @@ class EvidenceCandidate(BaseModel):
     source: Literal["rule_based", "retrieval", "fulltext"]
     score: float = Field(ge=0)
 
+    engine: Optional[str] = None
+    engine_score: Optional[float] = Field(default=None, ge=0)
+
     query: Optional[str] = None
     bm25_score: Optional[float] = Field(default=None, ge=0)
     rrf_score: Optional[float] = Field(default=None, ge=0)

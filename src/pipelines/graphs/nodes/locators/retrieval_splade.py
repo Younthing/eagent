@@ -1,17 +1,15 @@
-"""BM25-based retrieval locator with multi-query planning + RRF (Milestone 4/5).
-
-Supports optional structure-aware retrieval (Milestone 5) via section priors:
-- Filter the retrieval corpus by section title matches (fallback to full text).
-- Apply section-weighted ranking as a deterministic tie-breaker/boost.
-"""
+"""SPLADE-based retrieval locator with multi-query planning + RRF (Milestone 4/5)."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
-from retrieval.engines.bm25 import BM25Hit, BM25Index, build_bm25_index
+import numpy as np
+
+from retrieval.engines.faiss_ip import build_ip_index, search_ip
 from retrieval.engines.fusion import rrf_fuse
+from retrieval.engines.splade import DEFAULT_SPLADE_MODEL_ID, get_splade_encoder
 from retrieval.query_planning.planner import generate_query_plan
 from retrieval.structure.filters import filter_spans_by_section_priors
 from rob2.locator_rules import get_locator_rules
@@ -21,8 +19,8 @@ from schemas.internal.rob2 import QuestionSet
 
 
 @dataclass(frozen=True)
-class _StructuredIndex:
-    index: BM25Index
+class _StructuredFaissIndex:
+    index: object
     mapping: List[int]  # local doc_index -> original span index
     section_scores: Dict[int, int]
     matched_priors: Dict[int, List[str]]
@@ -30,14 +28,14 @@ class _StructuredIndex:
     priors_used: List[str]
 
 
-def bm25_retrieval_locator_node(state: dict) -> dict:
-    """LangGraph node: run BM25 retrieval with multi-query planning and RRF."""
+def splade_retrieval_locator_node(state: dict) -> dict:
+    """LangGraph node: run SPLADE retrieval with multi-query planning and RRF."""
     raw_doc = state.get("doc_structure")
     raw_questions = state.get("question_set")
     if raw_doc is None:
-        raise ValueError("bm25_retrieval_locator_node requires 'doc_structure'.")
+        raise ValueError("splade_retrieval_locator_node requires 'doc_structure'.")
     if raw_questions is None:
-        raise ValueError("bm25_retrieval_locator_node requires 'question_set'.")
+        raise ValueError("splade_retrieval_locator_node requires 'question_set'.")
 
     doc_structure = DocStructure.model_validate(raw_doc)
     question_set = QuestionSet.model_validate(raw_questions)
@@ -53,18 +51,58 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
     if section_bonus_weight < 0:
         raise ValueError("section_bonus_weight must be >= 0")
 
+    model_id = str(state.get("splade_model_id") or DEFAULT_SPLADE_MODEL_ID)
+    device = state.get("splade_device")
+    hf_token = state.get("splade_hf_token")
+    query_max_length = int(state.get("splade_query_max_length") or 64)
+    doc_max_length = int(state.get("splade_doc_max_length") or 256)
+    batch_size = int(state.get("splade_batch_size") or 8)
+
     spans = doc_structure.sections
-    full_index = build_bm25_index(spans)
+    if not spans:
+        return {
+            "splade_queries": query_plan,
+            "splade_rankings": {},
+            "splade_candidates": {},
+            "splade_evidence": [],
+            "splade_rules_version": rules.version,
+            "splade_config": {
+                "model_id": model_id,
+                "device": str(device) if device else None,
+                "top_k": top_k,
+                "per_query_top_n": per_query_top_n,
+                "rrf_k": rrf_k,
+                "use_structure": use_structure,
+                "section_bonus_weight": section_bonus_weight,
+                "doc_max_length": doc_max_length,
+                "query_max_length": query_max_length,
+                "batch_size": batch_size,
+                "index_size": 0,
+            },
+            "splade_structure": {} if use_structure else None,
+        }
+
+    encoder = get_splade_encoder(model_id=model_id, device=device, hf_token=hf_token)
+
+    doc_vectors = encoder.encode(
+        [span.text for span in spans],
+        max_length=doc_max_length,
+        batch_size=batch_size,
+    )
+    if doc_vectors.shape[0] != len(spans):
+        raise RuntimeError("SPLADE doc embedding count mismatch.")
+
+    full_index = build_ip_index(doc_vectors)
     full_mapping = list(range(len(spans)))
 
-    domain_indices: Dict[str, _StructuredIndex] = {}
+    domain_indices: Dict[str, _StructuredFaissIndex] = {}
     if use_structure:
         for domain, domain_rules in rules.domains.items():
             priors = domain_rules.section_priors
             filtered = filter_spans_by_section_priors(spans, priors)
             if filtered.indices:
-                domain_indices[domain] = _StructuredIndex(
-                    index=build_bm25_index([spans[i] for i in filtered.indices]),
+                domain_indices[domain] = _StructuredFaissIndex(
+                    index=build_ip_index(doc_vectors[filtered.indices]),
                     mapping=filtered.indices,
                     section_scores=filtered.section_scores,
                     matched_priors=filtered.matched_priors,
@@ -72,7 +110,7 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
                     priors_used=list(priors),
                 )
             else:
-                domain_indices[domain] = _StructuredIndex(
+                domain_indices[domain] = _StructuredFaissIndex(
                     index=full_index,
                     mapping=full_mapping,
                     section_scores={},
@@ -90,7 +128,7 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
         question_id = question.question_id
         queries = query_plan.get(question_id) or []
 
-        selected = _StructuredIndex(
+        selected = _StructuredFaissIndex(
             index=full_index,
             mapping=full_mapping,
             section_scores={},
@@ -105,8 +143,8 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
                 priors_used = _merge_unique(priors_used, override.section_priors)
                 filtered = filter_spans_by_section_priors(spans, priors_used)
                 if filtered.indices:
-                    selected = _StructuredIndex(
-                        index=build_bm25_index([spans[i] for i in filtered.indices]),
+                    selected = _StructuredFaissIndex(
+                        index=build_ip_index(doc_vectors[filtered.indices]),
                         mapping=filtered.indices,
                         section_scores=filtered.section_scores,
                         matched_priors=filtered.matched_priors,
@@ -114,7 +152,7 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
                         priors_used=priors_used,
                     )
                 else:
-                    selected = _StructuredIndex(
+                    selected = _StructuredFaissIndex(
                         index=full_index,
                         mapping=full_mapping,
                         section_scores={},
@@ -127,9 +165,13 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
 
         per_query: Dict[str, List[Tuple[int, float]]] = {}
         for query in queries:
-            hits = selected.index.search(query, top_n=per_query_top_n)
-            per_query[query] = _rank_hits(
-                hits,
+            query_vec = encoder.encode([query], max_length=query_max_length)
+            scores, local_indices = search_ip(
+                selected.index, query_vec, top_n=per_query_top_n
+            )
+            per_query[query] = _rank_faiss_hits(
+                scores=scores,
+                indices=local_indices,
                 mapping=selected.mapping,
                 section_scores=selected.section_scores,
                 section_bonus_weight=section_bonus_weight,
@@ -151,9 +193,8 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
                     source="retrieval",
                     score=hit.rrf_score,
                     query=hit.best_query or None,
-                    engine="bm25",
+                    engine="splade",
                     engine_score=hit.best_engine_score,
-                    bm25_score=hit.best_engine_score,
                     rrf_score=hit.rrf_score,
                     retrieval_rank=rank,
                     query_ranks=hit.query_ranks or None,
@@ -163,9 +204,8 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
             )
 
         candidates_by_q[question_id] = candidates
-        bundles.append(
-            EvidenceBundle(question_id=question_id, items=candidates[:top_k])
-        )
+        bundles.append(EvidenceBundle(question_id=question_id, items=candidates[:top_k]))
+
         if use_structure:
             structure_debug[question_id] = {
                 "domain": question.domain,
@@ -178,8 +218,8 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
             }
 
     return {
-        "bm25_queries": query_plan,
-        "bm25_rankings": {
+        "splade_queries": query_plan,
+        "splade_rankings": {
             question_id: {
                 query: [
                     {
@@ -192,25 +232,28 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
             }
             for question_id, per_query in rankings.items()
         },
-        "bm25_candidates": {
+        "splade_candidates": {
             question_id: [candidate.model_dump() for candidate in candidates]
             for question_id, candidates in candidates_by_q.items()
         },
-        "bm25_evidence": [bundle.model_dump() for bundle in bundles],
-        "bm25_rules_version": rules.version,
-        "bm25_config": {
+        "splade_evidence": [bundle.model_dump() for bundle in bundles],
+        "splade_rules_version": rules.version,
+        "splade_config": {
+            "model_id": model_id,
+            "device": encoder.device,
             "top_k": top_k,
             "per_query_top_n": per_query_top_n,
             "rrf_k": rrf_k,
-            "index_size": full_index.size,
             "use_structure": use_structure,
             "section_bonus_weight": section_bonus_weight,
+            "doc_max_length": doc_max_length,
+            "query_max_length": query_max_length,
+            "batch_size": batch_size,
+            "index_size": len(spans),
+            "vector_dim": int(doc_vectors.shape[1]),
         },
-        "bm25_structure": structure_debug if use_structure else None,
+        "splade_structure": structure_debug if use_structure else None,
     }
-
-
-__all__ = ["bm25_retrieval_locator_node"]
 
 
 def _merge_unique(base: List[str], extra: List[str]) -> List[str]:
@@ -228,19 +271,30 @@ def _merge_unique(base: List[str], extra: List[str]) -> List[str]:
     return merged
 
 
-def _rank_hits(
-    hits: List[BM25Hit],
+def _rank_faiss_hits(
     *,
+    scores: np.ndarray,
+    indices: np.ndarray,
     mapping: List[int],
     section_scores: Dict[int, int],
     section_bonus_weight: float,
 ) -> List[Tuple[int, float]]:
-    scored: List[Tuple[int, float, float]] = []
-    for hit in hits:
-        original_index = mapping[hit.doc_index]
-        section_score = section_scores.get(original_index, 0)
-        composite = hit.score + section_score * section_bonus_weight
-        scored.append((original_index, hit.score, composite))
+    if scores.size == 0 or indices.size == 0:
+        return []
 
-    scored.sort(key=lambda item: (-item[2], -item[1], item[0]))
-    return [(original_index, bm25_score) for original_index, bm25_score, _ in scored]
+    score_row = scores[0]
+    index_row = indices[0]
+    ranked: List[Tuple[int, float, float]] = []
+    for local_idx, raw_score in zip(index_row.tolist(), score_row.tolist(), strict=False):
+        if local_idx < 0:
+            continue
+        original_index = mapping[int(local_idx)]
+        section_score = section_scores.get(original_index, 0)
+        composite = float(raw_score) + section_score * section_bonus_weight
+        ranked.append((original_index, float(raw_score), composite))
+
+    ranked.sort(key=lambda item: (-item[2], -item[1], item[0]))
+    return [(doc_index, raw_score) for doc_index, raw_score, _ in ranked]
+
+
+__all__ = ["splade_retrieval_locator_node"]

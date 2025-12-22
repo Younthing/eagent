@@ -1,4 +1,4 @@
-"""Check BM25 retrieval output with multi-query + RRF (Milestone 4/5)."""
+"""Check SPLADE retrieval output with multi-query + RRF (Milestone 4/5)."""
 
 from __future__ import annotations
 
@@ -12,18 +12,24 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from pipelines.graphs.nodes.preprocess import parse_docling_pdf  # noqa: E402
-from retrieval.engines.bm25 import build_bm25_index  # noqa: E402
+from retrieval.engines.faiss_ip import build_ip_index, search_ip  # noqa: E402
 from retrieval.engines.fusion import rrf_fuse  # noqa: E402
+from retrieval.engines.splade import (  # noqa: E402
+    DEFAULT_SPLADE_MODEL_ID,
+    get_splade_encoder,
+)
 from retrieval.query_planning.planner import generate_queries_for_question  # noqa: E402
 from retrieval.structure.filters import filter_spans_by_section_priors  # noqa: E402
 from rob2.locator_rules import DEFAULT_LOCATOR_RULES, load_locator_rules  # noqa: E402
 from rob2.question_bank import load_question_bank  # noqa: E402
 from schemas.internal.rob2 import Rob2Question  # noqa: E402
 
+DEFAULT_LOCAL_SPLADE = PROJECT_ROOT / "models" / "splade_distil_CoCodenser_large"
+
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run BM25 retrieval + RRF and print top-k candidates.",
+        description="Run SPLADE (naver/splade-v3) retrieval + RRF and print top-k candidates.",
     )
     parser.add_argument("pdf_path", type=Path, help="Path to a paper PDF.")
     parser.add_argument(
@@ -32,10 +38,45 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Only print results for a single question_id (e.g. q1_1).",
     )
     parser.add_argument(
+        "--model-id",
+        default=str(DEFAULT_LOCAL_SPLADE)
+        if DEFAULT_LOCAL_SPLADE.exists()
+        else DEFAULT_SPLADE_MODEL_ID,
+        help="HuggingFace model id or local path for SPLADE.",
+    )
+    parser.add_argument(
+        "--device",
+        default=None,
+        help="Torch device override (e.g. cpu, cuda, mps).",
+    )
+    parser.add_argument(
+        "--hf-token",
+        default=None,
+        help="HuggingFace token for gated models (or set HF_TOKEN / HUGGINGFACE_HUB_TOKEN).",
+    )
+    parser.add_argument(
+        "--doc-max-length",
+        type=int,
+        default=256,
+        help="Tokenizer max length for document spans.",
+    )
+    parser.add_argument(
+        "--query-max-length",
+        type=int,
+        default=64,
+        help="Tokenizer max length for queries.",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=8,
+        help="Batch size for SPLADE encoding.",
+    )
+    parser.add_argument(
         "--top-k",
         type=int,
         default=5,
-        help="Top-k candidates to print per question.",
+        help="Top-k fused candidates to print per question.",
     )
     parser.add_argument(
         "--per-query-top-n",
@@ -90,12 +131,18 @@ def main() -> int:
         print(f"PDF not found: {args.pdf_path}", file=sys.stderr)
         return 2
 
+    if args.section_bonus_weight < 0:
+        print("section_bonus_weight must be >= 0", file=sys.stderr)
+        return 2
+
     doc = parse_docling_pdf(args.pdf_path)
+    spans = doc.sections
+    if not spans:
+        print("No spans found in document.", file=sys.stderr)
+        return 2
+
     question_set = load_question_bank()
     rules = load_locator_rules(args.rules_path)
-    spans = doc.sections
-    full_index = build_bm25_index(spans)
-    full_mapping = list(range(len(spans)))
 
     questions: list[Rob2Question]
     if args.question_id:
@@ -108,6 +155,19 @@ def main() -> int:
         questions = selected
     else:
         questions = question_set.questions
+
+    encoder = get_splade_encoder(
+        model_id=args.model_id, device=args.device, hf_token=args.hf_token
+    )
+    print(f"Encoder: {args.model_id} on {encoder.device}")
+
+    doc_vectors = encoder.encode(
+        [span.text for span in spans],
+        max_length=args.doc_max_length,
+        batch_size=args.batch_size,
+    )
+    full_index = build_ip_index(doc_vectors)
+    full_mapping = list(range(len(spans)))
 
     for question in questions:
         print(f"\n== {question.question_id} ({question.domain}) ==")
@@ -122,10 +182,6 @@ def main() -> int:
         matched_priors = {}
         fallback_used = False
 
-        if args.section_bonus_weight < 0:
-            print("section_bonus_weight must be >= 0", file=sys.stderr)
-            return 2
-
         if args.structure:
             priors = list(rules.domains[question.domain].section_priors)
             override = rules.question_overrides.get(question.question_id)
@@ -135,7 +191,7 @@ def main() -> int:
             filtered = filter_spans_by_section_priors(spans, priors)
             if filtered.indices:
                 mapping = filtered.indices
-                index = build_bm25_index([spans[i] for i in mapping])
+                index = build_ip_index(doc_vectors[mapping])
                 section_scores = filtered.section_scores
                 matched_priors = filtered.matched_priors
             else:
@@ -148,18 +204,24 @@ def main() -> int:
 
         per_query = {}
         for query in queries:
-            hits = index.search(query, top_n=args.per_query_top_n)
-            scored = []
-            for hit in hits:
-                original_index = mapping[hit.doc_index]
-                section_score = section_scores.get(original_index, 0)
-                composite = hit.score + section_score * args.section_bonus_weight
-                scored.append((original_index, hit.score, composite))
-
-            scored.sort(key=lambda item: (-item[2], -item[1], item[0]))
+            query_vec = encoder.encode([query], max_length=args.query_max_length)
+            scores, local_indices = search_ip(index, query_vec, top_n=args.per_query_top_n)
+            ranked = []
+            if scores.size and local_indices.size:
+                for local_idx, raw_score in zip(
+                    local_indices[0].tolist(),
+                    scores[0].tolist(),
+                    strict=False,
+                ):
+                    if local_idx < 0:
+                        continue
+                    original_index = mapping[int(local_idx)]
+                    section_score = section_scores.get(original_index, 0)
+                    composite = float(raw_score) + section_score * args.section_bonus_weight
+                    ranked.append((original_index, float(raw_score), composite))
+            ranked.sort(key=lambda item: (-item[2], -item[1], item[0]))
             per_query[query] = [
-                (original_index, bm25_score)
-                for original_index, bm25_score, _ in scored
+                (original_index, raw_score) for original_index, raw_score, _ in ranked
             ]
 
         fused = rrf_fuse(per_query, k=args.rrf_k)
@@ -175,7 +237,7 @@ def main() -> int:
             matched = matched_priors.get(hit.doc_index) or []
             print(
                 f"{idx:>2}. rrf={hit.rrf_score:.4f} best_rank={hit.best_rank} "
-                f"bm25={hit.best_engine_score:.2f} section={section_score} "
+                f"splade={hit.best_engine_score:.4f} section={section_score} "
                 f"pid={span.paragraph_id} page={span.page} title={span.title}"
             )
             print(f"    best_query: {hit.best_query}")

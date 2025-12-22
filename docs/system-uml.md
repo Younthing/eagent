@@ -24,14 +24,27 @@ flowchart TD
     C --> M[bm25_retrieval_locator_node]
     G --> M
     I --> M
+    C --> R[section_prior_filter<br/>(optional, M5)]
+    I --> R
+    R --> M
     M --> N[bm25_evidence<br/>EvidenceBundle top-k]
     M --> O[bm25_candidates<br/>all fused candidates]
     M --> P[bm25_rankings<br/>per-query top-n]
     M --> Q[bm25_queries]
+
+    C --> S[splade_retrieval_locator_node]
+    G --> S
+    I --> S
+    R --> S
+    S --> T[splade_evidence<br/>EvidenceBundle top-k]
+    S --> U[splade_candidates<br/>all fused candidates]
+    S --> V[splade_rankings<br/>per-query top-n]
+    S --> W[splade_queries]
   end
 ```
 
 Notes:
 - This diagram reflects the currently implemented nodes and data flow in code.
-- Evidence location currently includes rule-based and BM25 retrieval locators.
-- Dense/SPLADE/fulltext locators, fusion, validation, reasoning, and aggregation are not implemented yet.
+- Evidence location currently includes rule-based, BM25, and SPLADE retrieval locators.
+- `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support optional structure-aware filtering/ranking (Milestone 5).
+- Dense/fulltext locators, fusion, validation, reasoning, and aggregation are not implemented yet.

@@ -10,3 +10,6 @@ wheels/
 .venv
 .env
 example
+
+# Local model artifacts
+models/
