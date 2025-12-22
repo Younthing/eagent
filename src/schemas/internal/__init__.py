@@ -1,6 +1,12 @@
 """Internal schema definitions."""
 
-from .evidence import EvidenceBundle, EvidenceCandidate  # noqa: F401
+from .evidence import (  # noqa: F401
+    EvidenceBundle,
+    EvidenceCandidate,
+    EvidenceSupport,
+    FusedEvidenceBundle,
+    FusedEvidenceCandidate,
+)
 from .locator import LocatorRules  # noqa: F401
 from .rob2 import (  # noqa: F401
     ALLOWED_ANSWERS,
@@ -14,6 +20,9 @@ __all__ = [
     "ALLOWED_ANSWERS",
     "EvidenceBundle",
     "EvidenceCandidate",
+    "EvidenceSupport",
+    "FusedEvidenceBundle",
+    "FusedEvidenceCandidate",
     "LocatorRules",
     "QuestionCondition",
     "QuestionDependency",

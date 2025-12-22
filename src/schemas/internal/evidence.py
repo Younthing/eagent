@@ -7,6 +7,17 @@ from typing import Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+class EvidenceSupport(BaseModel):
+    """A single engine's support for a fused evidence candidate."""
+
+    engine: str
+    rank: int = Field(ge=1)
+    score: float = Field(ge=0)
+    query: Optional[str] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class EvidenceCandidate(BaseModel):
     """A paragraph-level evidence candidate for a specific question."""
 
@@ -56,5 +67,36 @@ class EvidenceBundle(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+class FusedEvidenceCandidate(BaseModel):
+    """A merged evidence candidate with multi-engine supports (Milestone 6)."""
 
-__all__ = ["EvidenceCandidate", "EvidenceBundle"]
+    question_id: str
+    paragraph_id: str
+    title: str
+    page: Optional[int] = None
+    text: str
+
+    fusion_score: float = Field(ge=0)
+    fusion_rank: int = Field(ge=1)
+    support_count: int = Field(ge=1)
+    supports: List[EvidenceSupport]
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class FusedEvidenceBundle(BaseModel):
+    """Top-k fused evidence bundle for a question."""
+
+    question_id: str
+    items: List[FusedEvidenceCandidate]
+
+    model_config = ConfigDict(extra="forbid")
+
+
+__all__ = [
+    "EvidenceBundle",
+    "EvidenceCandidate",
+    "EvidenceSupport",
+    "FusedEvidenceBundle",
+    "FusedEvidenceCandidate",
+]

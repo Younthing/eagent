@@ -44,6 +44,14 @@ flowchart TD
     S --> V[splade_rankings<br/>per-query top-n]
     S --> W[splade_queries]
   end
+
+  subgraph EvidenceFusion
+    L --> FUS[fusion_node<br/>three-engine merge<br/>M6]
+    O --> FUS
+    U --> FUS
+    FUS --> FE[fusion_evidence<br/>FusedEvidenceBundle top-k]
+    FUS --> FC[fusion_candidates<br/>all fused candidates]
+  end
 ```
 
 Notes:
@@ -52,4 +60,4 @@ Notes:
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support LLM query planning via LangChain `init_chat_model` (`query_planner=llm`), with deterministic fallback on errors.
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support optional cross-encoder reranking (`reranker=cross_encoder`) after RRF.
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support optional structure-aware filtering/ranking (Milestone 5).
-- Dense/fulltext locators, fusion, validation, reasoning, and aggregation are not implemented yet.
+- Dense/fulltext locators, validation, reasoning, and aggregation are not implemented yet.
