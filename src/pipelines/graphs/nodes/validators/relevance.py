@@ -16,8 +16,7 @@ from evidence.validators.relevance import (
 )
 from schemas.internal.evidence import (
     FusedEvidenceCandidate,
-    RelevanceAnnotatedFusedEvidenceCandidate,
-    RelevanceEvidenceBundle,
+    FusedEvidenceBundle,
     RelevanceVerdict,
 )
 from schemas.internal.rob2 import QuestionSet
@@ -147,13 +146,14 @@ def relevance_validator_node(state: dict) -> dict:
             config=validation_config,
         )
         annotated_skipped = [
-            RelevanceAnnotatedFusedEvidenceCandidate(
-                **candidate.model_dump(),
-                relevance=RelevanceVerdict(
-                    label="unknown",
-                    confidence=None,
-                    supporting_quote=None,
-                ),
+            candidate.model_copy(
+                update={
+                    "relevance": RelevanceVerdict(
+                        label="unknown",
+                        confidence=None,
+                        supporting_quote=None,
+                    )
+                }
             )
             for candidate in skipped
         ]
@@ -163,11 +163,12 @@ def relevance_validator_node(state: dict) -> dict:
         passed = [
             candidate
             for candidate in annotated
-            if candidate.relevance.label == "relevant"
+            if candidate.relevance is not None
+            and candidate.relevance.label == "relevant"
             and (candidate.relevance.confidence or 0.0) >= min_confidence
         ]
 
-        selected: List[RelevanceAnnotatedFusedEvidenceCandidate] = passed[:top_k]
+        selected: List[FusedEvidenceCandidate] = passed[:top_k]
         fallback_used = False
         if fill and len(selected) < top_k:
             seen = {candidate.paragraph_id for candidate in selected}
@@ -181,7 +182,7 @@ def relevance_validator_node(state: dict) -> dict:
                     break
 
         bundles.append(
-            RelevanceEvidenceBundle(question_id=question_id, items=selected).model_dump()
+            FusedEvidenceBundle(question_id=question_id, items=selected).model_dump()
         )
         debug[question_id] = {
             "validated": len(to_validate),

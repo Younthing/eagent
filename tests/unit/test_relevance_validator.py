@@ -53,6 +53,7 @@ def test_annotate_relevance_parses_json_and_keeps_relevant_label() -> None:
     )
 
     assert llm.invocations == 1
+    assert candidates[0].relevance is not None
     assert candidates[0].relevance.label == "relevant"
     assert candidates[0].relevance.supporting_quote == "random number table"
 
@@ -67,6 +68,7 @@ def test_annotate_relevance_require_quote_downgrades_missing_quote_to_unknown() 
         llm=cast(ChatModelLike, llm),
     )
 
+    assert candidates[0].relevance is not None
     assert candidates[0].relevance.label == "unknown"
 
 
@@ -107,4 +109,3 @@ def test_relevance_validator_node_selects_passed_candidates_and_falls_back() -> 
     assert len(bundles) == 1
     assert bundles[0]["question_id"] == "q1_1"
     assert len(bundles[0]["items"]) == 1
-

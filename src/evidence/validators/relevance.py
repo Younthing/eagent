@@ -16,7 +16,6 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from schemas.internal.evidence import (
     FusedEvidenceCandidate,
-    RelevanceAnnotatedFusedEvidenceCandidate,
     RelevanceVerdict,
 )
 
@@ -63,7 +62,7 @@ def annotate_relevance(
     llm: ChatModelLike | None = None,
     llm_config: LLMRelevanceValidatorConfig | None = None,
     config: RelevanceValidationConfig | None = None,
-) -> List[RelevanceAnnotatedFusedEvidenceCandidate]:
+) -> List[FusedEvidenceCandidate]:
     """Annotate candidates with relevance verdicts (LLM-based when available)."""
     validation_config = config or RelevanceValidationConfig()
     if validation_config.min_confidence < 0 or validation_config.min_confidence > 1:
@@ -73,7 +72,7 @@ def annotate_relevance(
     if model is None and llm_config is not None:
         model = _init_chat_model(llm_config)
 
-    annotated: List[RelevanceAnnotatedFusedEvidenceCandidate] = []
+    annotated: List[FusedEvidenceCandidate] = []
     for candidate in candidates:
         verdict = RelevanceVerdict(label="unknown", confidence=None, supporting_quote=None)
         if model is not None:
@@ -88,10 +87,7 @@ def annotate_relevance(
                 verdict = RelevanceVerdict(label="unknown", confidence=None, supporting_quote=None)
 
         annotated.append(
-            RelevanceAnnotatedFusedEvidenceCandidate(
-                **candidate.model_dump(),
-                relevance=verdict,
-            )
+            candidate.model_copy(update={"relevance": verdict})
         )
 
     return annotated

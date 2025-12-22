@@ -55,8 +55,19 @@ flowchart TD
 
   subgraph Validation
     FC --> RV[relevance_validator_node<br/>optional LLM<br/>M7]
-    RV --> RE[relevance_evidence<br/>RelevanceEvidenceBundle top-k]
+    RV --> RE[relevance_evidence<br/>FusedEvidenceBundle top-k<br/>annotated]
     RV --> RC[relevance_candidates<br/>annotated candidates]
+
+    RC --> EV[existence_validator_node<br/>deterministic<br/>M7]
+    EV --> EC[existence_candidates<br/>annotated candidates]
+    EV --> EE[existence_evidence<br/>FusedEvidenceBundle top-k<br/>filtered]
+
+    EE --> CV[consistency_validator_node<br/>optional LLM<br/>M7]
+    CV --> CR[consistency_reports]
+
+    EE --> CM[completeness_validator_node<br/>select validated evidence<br/>M7]
+    CM --> VE[validated_evidence<br/>FusedEvidenceBundle top-k]
+    CM --> CP[completeness_report]
   end
 ```
 
@@ -67,4 +78,7 @@ Notes:
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support optional cross-encoder reranking (`reranker=cross_encoder`) after RRF.
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support optional structure-aware filtering/ranking (Milestone 5).
 - `relevance_validator_node` annotates fused candidates with an LLM relevance verdict (Milestone 7).
+- `existence_validator_node` verifies paragraph_id/text/quote grounding against `doc_structure` (Milestone 7).
+- `consistency_validator_node` optionally checks multi-evidence contradictions per question (Milestone 7).
+- `completeness_validator_node` selects `validated_evidence` from candidates that passed validations (Milestone 7).
 - Dense/fulltext locators, remaining validation layers, reasoning, and aggregation are not implemented yet.

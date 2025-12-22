@@ -68,6 +68,25 @@ class Settings(BaseSettings):
         default=2, validation_alias="RELEVANCE_MAX_RETRIES"
     )
 
+    consistency_model: str | None = Field(
+        default=None, validation_alias="CONSISTENCY_MODEL"
+    )
+    consistency_model_provider: str | None = Field(
+        default=None, validation_alias="CONSISTENCY_MODEL_PROVIDER"
+    )
+    consistency_temperature: float = Field(
+        default=0.0, validation_alias="CONSISTENCY_TEMPERATURE"
+    )
+    consistency_timeout: float | None = Field(
+        default=None, validation_alias="CONSISTENCY_TIMEOUT"
+    )
+    consistency_max_tokens: int | None = Field(
+        default=None, validation_alias="CONSISTENCY_MAX_TOKENS"
+    )
+    consistency_max_retries: int = Field(
+        default=2, validation_alias="CONSISTENCY_MAX_RETRIES"
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
