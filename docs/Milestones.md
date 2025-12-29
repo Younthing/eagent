@@ -198,6 +198,7 @@
 
 * 验证代理集合
 * 回滚 / 重试逻辑
+* 工作流装配与验证入口（`src/pipelines/graphs/rob2_graph.py`，`scripts/check_rob2_graph.py`）
 
 ### DoD
 

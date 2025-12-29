@@ -54,7 +54,8 @@ flowchart TD
   end
 
   subgraph Validation
-    FC --> RV[relevance_validator_node<br/>optional LLM<br/>M7]
+    FC --> NM[normalize_validator_modes<br/>keep 'llm/none' across retries]
+    NM --> RV[relevance_validator_node<br/>optional LLM<br/>M7]
     RV --> RE[relevance_evidence<br/>FusedEvidenceBundle top-k<br/>annotated]
     RV --> RC[relevance_candidates<br/>annotated candidates]
 
@@ -69,6 +70,9 @@ flowchart TD
     CM --> VE[validated_evidence<br/>FusedEvidenceBundle top-k]
     CM --> CP[completeness_report]
   end
+
+  %% Milestone 7 rollback/retry: failed validation routes back to EvidenceLocation
+  CM -. validation_failed / retry .-> J
 ```
 
 Notes:
@@ -81,4 +85,5 @@ Notes:
 - `existence_validator_node` verifies paragraph_id/text/quote grounding against `doc_structure` (Milestone 7).
 - `consistency_validator_node` optionally checks multi-evidence contradictions per question (Milestone 7).
 - `completeness_validator_node` selects `validated_evidence` from candidates that passed validations (Milestone 7).
+- Validation failures can trigger a retry that rolls back to the evidence location layer (Milestone 7).
 - Dense/fulltext locators, remaining validation layers, reasoning, and aggregation are not implemented yet.
