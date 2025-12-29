@@ -1,0 +1,425 @@
+"""Shared LLM reasoning helpers for ROB2 domain agents."""
+
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import dataclass
+from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, TYPE_CHECKING, cast, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from core.config import get_settings
+from schemas.internal.decisions import DomainAnswer, DomainDecision, DomainRisk, EvidenceRef
+from schemas.internal.evidence import FusedEvidenceCandidate
+from schemas.internal.locator import DomainId
+from schemas.internal.rob2 import QuestionCondition, QuestionSet, Rob2Question
+
+if TYPE_CHECKING:
+    from langchain_core.messages import BaseMessage
+
+
+EffectType = Literal["assignment", "adherence"]
+
+
+class ChatModelLike(Protocol):
+    def with_structured_output(self, schema: type[BaseModel]) -> Any: ...
+    def invoke(self, input: object) -> Any: ...
+
+
+class _AnswerEvidence(BaseModel):
+    paragraph_id: str
+    quote: Optional[str] = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class _AnswerOutput(BaseModel):
+    question_id: str
+    answer: str
+    rationale: str
+    evidence: List[_AnswerEvidence] = Field(default_factory=list)
+    confidence: Optional[float] = Field(default=None, ge=0, le=1)
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class _DecisionOutput(BaseModel):
+    domain_risk: str
+    domain_rationale: str
+    answers: List[_AnswerOutput]
+
+    model_config = ConfigDict(extra="ignore")
+
+
+@dataclass(frozen=True)
+class LLMReasoningConfig:
+    model: str
+    model_provider: str | None = None
+    temperature: float = 0.0
+    timeout: float | None = None
+    max_tokens: int | None = None
+    max_retries: int | None = 2
+
+
+_CODE_BLOCK_JSON = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
+_RISK_MAP = {
+    "low": "low",
+    "some concerns": "some_concerns",
+    "some_concerns": "some_concerns",
+    "some-concerns": "some_concerns",
+    "high": "high",
+}
+
+
+def run_domain_reasoning(
+    *,
+    domain: DomainId,
+    question_set: QuestionSet,
+    validated_candidates: Mapping[str, Sequence[dict]],
+    llm: ChatModelLike | None = None,
+    llm_config: LLMReasoningConfig | None = None,
+    effect_type: Optional[EffectType] = None,
+    evidence_top_k: int = 5,
+) -> DomainDecision:
+    questions = _select_questions(question_set, domain, effect_type=effect_type)
+    if not questions:
+        raise ValueError(f"No questions found for domain {domain}.")
+
+    evidence_by_q = _build_evidence_by_question(validated_candidates, questions, top_k=evidence_top_k)
+    system_prompt = _build_system_prompt(domain, effect_type=effect_type)
+    user_prompt = _build_user_prompt(questions, evidence_by_q, effect_type=effect_type)
+
+    model = llm
+    if model is None:
+        if llm_config is None:
+            raise ValueError("LLM config is required when llm is not provided.")
+        model = _init_chat_model(llm_config)
+
+    messages = _build_messages(system_prompt, user_prompt)
+    response = _invoke_model(model, messages)
+    decision = _normalize_decision(domain, questions, evidence_by_q, response, effect_type=effect_type)
+    return decision
+
+
+def _select_questions(
+    question_set: QuestionSet,
+    domain: DomainId,
+    *,
+    effect_type: Optional[EffectType] = None,
+) -> List[Rob2Question]:
+    selected = [
+        question
+        for question in question_set.questions
+        if question.domain == domain
+        and (effect_type is None or question.effect_type == effect_type)
+    ]
+    return sorted(selected, key=lambda item: item.order)
+
+
+def _build_evidence_by_question(
+    validated_candidates: Mapping[str, Sequence[dict]],
+    questions: Sequence[Rob2Question],
+    *,
+    top_k: int,
+) -> Dict[str, List[FusedEvidenceCandidate]]:
+    evidence_by_q: Dict[str, List[FusedEvidenceCandidate]] = {}
+    for question in questions:
+        raw_list = validated_candidates.get(question.question_id) or []
+        parsed = [FusedEvidenceCandidate.model_validate(item) for item in raw_list]
+        evidence_by_q[question.question_id] = parsed[:top_k]
+    return evidence_by_q
+
+
+def _build_system_prompt(domain: DomainId, *, effect_type: Optional[EffectType]) -> str:
+    effect_note = f"Effect type: {effect_type}." if effect_type else ""
+    return (
+        "You are a ROB2 domain reasoning assistant.\n"
+        "Use ONLY the provided evidence to answer each signaling question.\n"
+        "If evidence is insufficient, answer NI.\n"
+        "Follow conditional logic: if a question's conditions are not met, answer NA.\n"
+        "Return ONLY valid JSON with keys: domain_risk, domain_rationale, answers.\n"
+        "domain_risk must be one of: low, some_concerns, high.\n"
+        "Each answer must include: question_id, answer, rationale, evidence.\n"
+        "Evidence items must use paragraph_id from the provided evidence and an exact quote if possible.\n"
+        f"{effect_note}\n"
+        "No markdown, no explanations."
+    )
+
+
+def _build_user_prompt(
+    questions: Sequence[Rob2Question],
+    evidence_by_q: Mapping[str, Sequence[FusedEvidenceCandidate]],
+    *,
+    effect_type: Optional[EffectType],
+) -> str:
+    payload = {
+        "domain_questions": [
+            {
+                "question_id": question.question_id,
+                "text": question.text,
+                "options": question.options,
+                "conditions": _format_conditions(question.conditions),
+            }
+            for question in questions
+        ],
+        "evidence": {
+            question.question_id: [
+                {
+                    "paragraph_id": candidate.paragraph_id,
+                    "title": candidate.title,
+                    "page": candidate.page,
+                    "text": candidate.text,
+                }
+                for candidate in evidence_by_q.get(question.question_id) or []
+            ]
+            for question in questions
+        },
+        "effect_type": effect_type,
+    }
+    return json.dumps(payload, ensure_ascii=True)
+
+
+def _format_conditions(conditions: Sequence[QuestionCondition]) -> List[dict]:
+    formatted: List[dict] = []
+    for condition in conditions:
+        formatted.append(
+            {
+                "operator": condition.operator,
+                "dependencies": [
+                    {
+                        "question_id": dependency.question_id,
+                        "allowed_answers": dependency.allowed_answers,
+                    }
+                    for dependency in condition.dependencies
+                ],
+                "note": condition.note,
+            }
+        )
+    return formatted
+
+
+def _init_chat_model(config: LLMReasoningConfig) -> ChatModelLike:
+    from langchain.chat_models import init_chat_model
+
+    kwargs: dict[str, Any] = {}
+    if config.model_provider:
+        kwargs["model_provider"] = config.model_provider
+    if config.temperature is not None:
+        kwargs["temperature"] = config.temperature
+    if config.timeout is not None:
+        kwargs["timeout"] = config.timeout
+    if config.max_tokens is not None:
+        kwargs["max_tokens"] = config.max_tokens
+    if config.max_retries is not None:
+        kwargs["max_retries"] = config.max_retries
+
+    return init_chat_model(config.model, **kwargs)
+
+
+def _build_messages(system_prompt: str, user_prompt: str) -> "list[BaseMessage]":
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    return [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+
+
+def _invoke_model(model: ChatModelLike, messages: list[BaseMessage]) -> _DecisionOutput:
+    try:
+        structured = model.with_structured_output(_DecisionOutput)
+        result = structured.invoke(messages)
+        if isinstance(result, _DecisionOutput):
+            return result
+    except Exception:
+        pass
+
+    raw = model.invoke(messages)
+    content = getattr(raw, "content", raw)
+    if not isinstance(content, str):
+        content = str(content)
+    return _parse_response(content)
+
+
+def _parse_response(text: str) -> _DecisionOutput:
+    extracted = _extract_json_object(text)
+    try:
+        payload = json.loads(extracted)
+    except json.JSONDecodeError as exc:
+        raise ValueError("LLM domain reasoning did not return valid JSON") from exc
+    try:
+        return _DecisionOutput.model_validate(payload)
+    except ValidationError as exc:
+        raise ValueError("LLM domain reasoning JSON did not match schema") from exc
+
+
+def _extract_json_object(text: str) -> str:
+    match = _CODE_BLOCK_JSON.search(text)
+    if match:
+        return match.group(1)
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("No JSON object found in LLM response")
+    return text[start : end + 1]
+
+
+def _normalize_decision(
+    domain: DomainId,
+    questions: Sequence[Rob2Question],
+    evidence_by_q: Mapping[str, Sequence[FusedEvidenceCandidate]],
+    response: _DecisionOutput,
+    *,
+    effect_type: Optional[EffectType],
+) -> DomainDecision:
+    answer_map = {answer.question_id: answer for answer in response.answers or []}
+    answers: List[DomainAnswer] = []
+    missing_questions: List[str] = []
+
+    normalized_answers: Dict[str, str] = {}
+    for question in questions:
+        raw = answer_map.get(question.question_id)
+        raw_answer = str(raw.answer).strip().upper() if raw else "NI"
+        normalized = _normalize_answer(raw_answer, question.options)
+        normalized_answers[question.question_id] = normalized
+
+    for question in questions:
+        raw = answer_map.get(question.question_id)
+        answer = normalized_answers.get(question.question_id, "NI")
+        if not _conditions_met(question.conditions, normalized_answers):
+            if "NA" in question.options:
+                answer = "NA"
+            else:
+                answer = "NI"
+
+        rationale = str(raw.rationale).strip() if raw and raw.rationale else ""
+        confidence = raw.confidence if raw and raw.confidence is not None else None
+
+        evidence_refs = _collect_evidence_refs(
+            raw.evidence if raw else [], evidence_by_q.get(question.question_id) or []
+        )
+        if answer == "NI":
+            missing_questions.append(question.question_id)
+
+        answers.append(
+            DomainAnswer(
+                question_id=question.question_id,
+                answer=cast(Any, answer),
+                rationale=rationale or "Insufficient evidence to answer confidently.",
+                evidence_refs=evidence_refs,
+                confidence=confidence,
+            )
+        )
+
+    risk = _normalize_risk(response.domain_risk)
+    return DomainDecision(
+        domain=domain,
+        effect_type=effect_type,
+        risk=cast(DomainRisk, risk),
+        risk_rationale=str(response.domain_rationale or "").strip()
+        or "No domain-level rationale provided.",
+        answers=answers,
+        missing_questions=missing_questions,
+    )
+
+
+def _normalize_risk(value: str) -> str:
+    key = str(value or "").strip().lower()
+    return _RISK_MAP.get(key, "some_concerns")
+
+
+def _normalize_answer(value: str, options: Sequence[str]) -> str:
+    candidate = value.strip().upper()
+    if candidate in options:
+        return candidate
+    if candidate == "NA" and "NA" in options:
+        return "NA"
+    return "NI"
+
+
+def _conditions_met(
+    conditions: Sequence[QuestionCondition],
+    answers: Mapping[str, str],
+) -> bool:
+    if not conditions:
+        return True
+    for condition in conditions:
+        hits = [
+            answers.get(dependency.question_id) in dependency.allowed_answers
+            for dependency in condition.dependencies
+        ]
+        if condition.operator == "any":
+            if any(hits):
+                return True
+        else:
+            if all(hits):
+                return True
+    return False
+
+
+def _collect_evidence_refs(
+    evidence: Sequence[_AnswerEvidence],
+    candidates: Sequence[FusedEvidenceCandidate],
+) -> List[EvidenceRef]:
+    candidates_by_pid = {candidate.paragraph_id: candidate for candidate in candidates}
+    refs: List[EvidenceRef] = []
+    for item in evidence:
+        candidate = candidates_by_pid.get(item.paragraph_id)
+        if candidate is None:
+            continue
+        refs.append(
+            EvidenceRef(
+                paragraph_id=candidate.paragraph_id,
+                page=candidate.page,
+                title=candidate.title,
+                quote=item.quote,
+            )
+        )
+    return refs
+
+
+def build_reasoning_config(
+    *,
+    model_id: str,
+    model_provider: Optional[str],
+    temperature: float,
+    timeout: Optional[float],
+    max_tokens: Optional[int],
+    max_retries: int,
+) -> LLMReasoningConfig:
+    return LLMReasoningConfig(
+        model=model_id,
+        model_provider=model_provider,
+        temperature=temperature,
+        timeout=timeout,
+        max_tokens=max_tokens,
+        max_retries=max_retries,
+    )
+
+
+def get_domain_defaults(domain: DomainId) -> dict[str, Any]:
+    settings = get_settings()
+    if domain == "D1":
+        return {
+            "model": settings.d1_model or "",
+            "model_provider": settings.d1_model_provider,
+            "temperature": settings.d1_temperature,
+            "timeout": settings.d1_timeout,
+            "max_tokens": settings.d1_max_tokens,
+            "max_retries": settings.d1_max_retries,
+        }
+    return {
+        "model": settings.d2_model or "",
+        "model_provider": settings.d2_model_provider,
+        "temperature": settings.d2_temperature,
+        "timeout": settings.d2_timeout,
+        "max_tokens": settings.d2_max_tokens,
+        "max_retries": settings.d2_max_retries,
+    }
+
+
+__all__ = [
+    "ChatModelLike",
+    "LLMReasoningConfig",
+    "build_reasoning_config",
+    "get_domain_defaults",
+    "run_domain_reasoning",
+]

@@ -1,8 +1,8 @@
 """ROB2 LangGraph workflow assembly.
 
 This graph currently covers preprocessing, question planning, evidence location
-(rule-based + retrieval), fusion, and Milestone 7 validation with retry/rollback
-to evidence location on validation failure.
+(rule-based + retrieval), fusion, Milestone 7 validation with retry/rollback,
+and Milestone 8 D1/D2 reasoning.
 """
 
 from __future__ import annotations
@@ -22,6 +22,8 @@ from pipelines.graphs.nodes.locators.retrieval_splade import (
 from pipelines.graphs.nodes.locators.rule_based import rule_based_locator_node
 from pipelines.graphs.nodes.planner import planner_node
 from pipelines.graphs.nodes.preprocess import preprocess_node
+from pipelines.graphs.nodes.domains.d1_randomization import d1_randomization_node
+from pipelines.graphs.nodes.domains.d2_deviations import d2_deviations_node
 from pipelines.graphs.nodes.validators.completeness import completeness_validator_node
 from pipelines.graphs.nodes.validators.consistency import consistency_validator_node
 from pipelines.graphs.nodes.validators.existence import existence_validator_node
@@ -51,6 +53,13 @@ class Rob2GraphState(TypedDict, total=False):
     relevance_require_quote: bool
     relevance_fill_to_top_k: bool
     relevance_llm: object
+    d1_model: str
+    d1_model_provider: str
+    d1_temperature: float
+    d1_timeout: float
+    d1_max_tokens: int
+    d1_max_retries: int
+    d1_llm: object
 
     existence_require_text_match: bool
     existence_require_quote_in_source: bool
@@ -59,10 +68,19 @@ class Rob2GraphState(TypedDict, total=False):
     consistency_validator: dict
     consistency_min_confidence: float
     consistency_llm: object
+    d2_model: str
+    d2_model_provider: str
+    d2_temperature: float
+    d2_timeout: float
+    d2_max_tokens: int
+    d2_max_retries: int
+    d2_llm: object
+    d2_effect_type: Literal["assignment", "adherence"]
 
     completeness_enforce: bool
     completeness_min_passed_per_question: int
     completeness_require_relevance: bool
+    domain_evidence_top_k: int
 
     rule_based_candidates: dict
     bm25_candidates: dict
@@ -72,9 +90,12 @@ class Rob2GraphState(TypedDict, total=False):
     existence_candidates: dict
 
     validated_evidence: list[dict]
+    validated_candidates: dict
     completeness_passed: bool
     completeness_failed_questions: list[str]
     consistency_failed_questions: list[str]
+    d1_decision: dict
+    d2_decision: dict
 
     validation_attempt: int
     validation_max_retries: int
@@ -197,6 +218,14 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
             Any, overrides.get("completeness_validator") or completeness_validator_node
         ),
     )
+    builder.add_node(
+        "d1_randomization",
+        cast(Any, overrides.get("d1_randomization") or d1_randomization_node),
+    )
+    builder.add_node(
+        "d2_deviations",
+        cast(Any, overrides.get("d2_deviations") or d2_deviations_node),
+    )
 
     builder.add_node("prepare_retry", cast(Any, _prepare_validation_retry_node))
 
@@ -216,9 +245,11 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
     builder.add_conditional_edges(
         "completeness_validator",
         validation_should_retry,
-        {"retry": "prepare_retry", "end": END},
+        {"retry": "prepare_retry", "proceed": "d1_randomization"},
     )
     builder.add_edge("prepare_retry", "rule_based_locator")
+    builder.add_edge("d1_randomization", "d2_deviations")
+    builder.add_edge("d2_deviations", END)
 
     return builder.compile()
 

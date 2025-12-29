@@ -71,6 +71,13 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-retries", type=int, default=1)
     parser.add_argument("--fail-on-consistency", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--relax-on-retry", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument(
+        "--d2-effect-type",
+        choices=("assignment", "adherence"),
+        default="assignment",
+        help="Effect type for D2 reasoning (Milestone 8).",
+    )
+    parser.add_argument("--domain-evidence-top-k", type=int, default=5)
     parser.add_argument("--json", action="store_true", help="Print final state JSON.")
     return parser
 
@@ -102,6 +109,8 @@ def main() -> int:
             "validation_max_retries": args.max_retries,
             "validation_fail_on_consistency": bool(args.fail_on_consistency),
             "validation_relax_on_retry": bool(args.relax_on_retry),
+            "d2_effect_type": args.d2_effect_type,
+            "domain_evidence_top_k": args.domain_evidence_top_k,
         }
     )
 

@@ -12,11 +12,17 @@ from .validators import (  # noqa: F401
     existence_validator_node,
     relevance_validator_node,
 )
+from .domains import (  # noqa: F401
+    d1_randomization_node,
+    d2_deviations_node,
+)
 
 __all__ = [
     "bm25_retrieval_locator_node",
     "completeness_validator_node",
     "consistency_validator_node",
+    "d1_randomization_node",
+    "d2_deviations_node",
     "existence_validator_node",
     "fusion_node",
     "planner_node",

@@ -14,7 +14,7 @@ def test_validation_should_retry_routes_to_end_when_passed() -> None:
                 "validation_fail_on_consistency": True,
             }
         )
-        == "end"
+        == "proceed"
     )
 
 
@@ -44,7 +44,7 @@ def test_validation_should_retry_routes_to_end_when_failed_and_budget_exhausted(
                 "validation_fail_on_consistency": True,
             }
         )
-        == "end"
+        == "proceed"
     )
 
 
@@ -74,6 +74,5 @@ def test_validation_should_retry_ignores_consistency_fail_when_disabled() -> Non
                 "validation_fail_on_consistency": False,
             }
         )
-        == "end"
+        == "proceed"
     )
-

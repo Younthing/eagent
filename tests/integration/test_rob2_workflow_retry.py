@@ -161,6 +161,30 @@ def test_rob2_workflow_retries_on_consistency_fail_and_recovers() -> None:
     def empty_splade_stub(_state: dict) -> dict:
         return {"splade_candidates": {}, "splade_evidence": [], "splade_debug": {}}
 
+    def d1_stub(_state: dict) -> dict:
+        return {
+            "d1_decision": {
+                "domain": "D1",
+                "effect_type": None,
+                "risk": "some_concerns",
+                "risk_rationale": "stub",
+                "answers": [],
+                "missing_questions": [],
+            }
+        }
+
+    def d2_stub(_state: dict) -> dict:
+        return {
+            "d2_decision": {
+                "domain": "D2",
+                "effect_type": "assignment",
+                "risk": "some_concerns",
+                "risk_rationale": "stub",
+                "answers": [],
+                "missing_questions": [],
+            }
+        }
+
     app = build_rob2_graph(
         node_overrides={
             "preprocess": preprocess_stub,
@@ -168,6 +192,8 @@ def test_rob2_workflow_retries_on_consistency_fail_and_recovers() -> None:
             "rule_based_locator": rule_based_locator_stub,
             "bm25_locator": empty_locator_stub,
             "splade_locator": empty_splade_stub,
+            "d1_randomization": d1_stub,
+            "d2_deviations": d2_stub,
         }
     )
 

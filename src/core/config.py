@@ -87,6 +87,24 @@ class Settings(BaseSettings):
         default=2, validation_alias="CONSISTENCY_MAX_RETRIES"
     )
 
+    d1_model: str | None = Field(default=None, validation_alias="D1_MODEL")
+    d1_model_provider: str | None = Field(
+        default=None, validation_alias="D1_MODEL_PROVIDER"
+    )
+    d1_temperature: float = Field(default=0.0, validation_alias="D1_TEMPERATURE")
+    d1_timeout: float | None = Field(default=None, validation_alias="D1_TIMEOUT")
+    d1_max_tokens: int | None = Field(default=None, validation_alias="D1_MAX_TOKENS")
+    d1_max_retries: int = Field(default=2, validation_alias="D1_MAX_RETRIES")
+
+    d2_model: str | None = Field(default=None, validation_alias="D2_MODEL")
+    d2_model_provider: str | None = Field(
+        default=None, validation_alias="D2_MODEL_PROVIDER"
+    )
+    d2_temperature: float = Field(default=0.0, validation_alias="D2_TEMPERATURE")
+    d2_timeout: float | None = Field(default=None, validation_alias="D2_TIMEOUT")
+    d2_max_tokens: int | None = Field(default=None, validation_alias="D2_MAX_TOKENS")
+    d2_max_retries: int = Field(default=2, validation_alias="D2_MAX_RETRIES")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

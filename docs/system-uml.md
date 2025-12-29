@@ -70,6 +70,11 @@ flowchart TD
     CM --> CP[completeness_report]
   end
 
+  subgraph Reasoning
+    CM --> D1[d1_randomization_node<br/>LLM decision<br/>M8]
+    D1 --> D2[d2_deviations_node<br/>LLM decision<br/>M8]
+  end
+
   %% Milestone 7 rollback/retry: failed validation routes back to EvidenceLocation
   CM -. validation_failed / retry .-> J
 ```
@@ -85,4 +90,4 @@ Notes:
 - `consistency_validator_node` optionally checks multi-evidence contradictions per question (Milestone 7).
 - `completeness_validator_node` selects `validated_evidence` from candidates that passed validations (Milestone 7).
 - Validation failures can trigger a retry that rolls back to the evidence location layer (Milestone 7).
-- Dense/fulltext locators, remaining validation layers, reasoning, and aggregation are not implemented yet.
+- Dense/fulltext locators, remaining validation layers, D3-D5 reasoning, and aggregation are not implemented yet.
