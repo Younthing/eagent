@@ -16,7 +16,9 @@ from langgraph.graph import END, START, StateGraph
 
 from pipelines.graphs.nodes.fusion import fusion_node
 from pipelines.graphs.nodes.locators.retrieval_bm25 import bm25_retrieval_locator_node
-from pipelines.graphs.nodes.locators.retrieval_splade import splade_retrieval_locator_node
+from pipelines.graphs.nodes.locators.retrieval_splade import (
+    splade_retrieval_locator_node,
+)
 from pipelines.graphs.nodes.locators.rule_based import rule_based_locator_node
 from pipelines.graphs.nodes.planner import planner_node
 from pipelines.graphs.nodes.preprocess import preprocess_node
@@ -60,6 +62,7 @@ class Rob2GraphState(TypedDict, total=False):
 
     completeness_enforce: bool
     completeness_min_passed_per_question: int
+    completeness_require_relevance: bool
 
     rule_based_candidates: dict
     bm25_candidates: dict
@@ -76,6 +79,7 @@ class Rob2GraphState(TypedDict, total=False):
     validation_attempt: int
     validation_max_retries: int
     validation_fail_on_consistency: bool
+    validation_relax_on_retry: bool
     validation_retry_log: Annotated[list[dict], operator.add]
 
 
@@ -86,16 +90,27 @@ def _init_validation_state_node(state: Rob2GraphState) -> dict:
     attempt = state.get("validation_attempt")
     max_retries = state.get("validation_max_retries")
     fail_on_consistency = state.get("validation_fail_on_consistency")
+    relax_on_retry = state.get("validation_relax_on_retry")
+    require_relevance = state.get("completeness_require_relevance")
+    relevance_mode = state.get("relevance_mode")
     return {
         "validation_attempt": 0 if attempt is None else int(attempt),
         "validation_max_retries": 1 if max_retries is None else int(max_retries),
         "validation_fail_on_consistency": True
         if fail_on_consistency is None
         else bool(fail_on_consistency),
+        "validation_relax_on_retry": True
+        if relax_on_retry is None
+        else bool(relax_on_retry),
         "validation_retry_log": [],
-        "completeness_enforce": True
+        "completeness_enforce": False
         if state.get("completeness_enforce") is None
         else bool(state.get("completeness_enforce")),
+        "completeness_require_relevance": False
+        if require_relevance is None and relevance_mode == "none"
+        else bool(require_relevance)
+        if require_relevance is not None
+        else True,
     }
 
 
@@ -104,6 +119,7 @@ def _prepare_validation_retry_node(state: Rob2GraphState) -> dict:
     max_retries = int(state.get("validation_max_retries") or 0)
     failed_questions = state.get("completeness_failed_questions") or []
     consistency_failed = state.get("consistency_failed_questions") or []
+    relax_on_retry = bool(state.get("validation_relax_on_retry", True))
 
     per_query_top_n = int(state.get("per_query_top_n") or 50)
     top_k = int(state.get("top_k") or 5)
@@ -112,10 +128,16 @@ def _prepare_validation_retry_node(state: Rob2GraphState) -> dict:
     updates: Dict[str, Any] = {}
     if attempt == 1 and use_structure:
         updates["use_structure"] = False
-    elif attempt >= 2:
+    if attempt >= 1:
         updates["per_query_top_n"] = min(per_query_top_n * 2, 200)
         updates["top_k"] = min(top_k + 3, 10)
         updates["fusion_top_k"] = updates["top_k"]
+        if relax_on_retry:
+            updates["completeness_require_relevance"] = False
+            updates.setdefault("relevance_min_confidence", 0.3)
+            updates.setdefault("relevance_require_quote", False)
+            updates.setdefault("existence_require_text_match", False)
+            updates.setdefault("existence_require_quote_in_source", False)
 
     return {
         "validation_attempt": attempt,
@@ -137,7 +159,9 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
     overrides = node_overrides or {}
     builder: StateGraph = StateGraph(cast(Any, Rob2GraphState))
 
-    builder.add_node("preprocess", cast(Any, overrides.get("preprocess") or preprocess_node))
+    builder.add_node(
+        "preprocess", cast(Any, overrides.get("preprocess") or preprocess_node)
+    )
     builder.add_node("planner", cast(Any, overrides.get("planner") or planner_node))
     builder.add_node("init_validation", cast(Any, _init_validation_state_node))
 
@@ -146,7 +170,8 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
         cast(Any, overrides.get("rule_based_locator") or rule_based_locator_node),
     )
     builder.add_node(
-        "bm25_locator", cast(Any, overrides.get("bm25_locator") or bm25_retrieval_locator_node)
+        "bm25_locator",
+        cast(Any, overrides.get("bm25_locator") or bm25_retrieval_locator_node),
     )
     builder.add_node(
         "splade_locator",
@@ -168,7 +193,9 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
     )
     builder.add_node(
         "completeness_validator",
-        cast(Any, overrides.get("completeness_validator") or completeness_validator_node),
+        cast(
+            Any, overrides.get("completeness_validator") or completeness_validator_node
+        ),
     )
 
     builder.add_node("prepare_retry", cast(Any, _prepare_validation_retry_node))

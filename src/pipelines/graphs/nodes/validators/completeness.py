@@ -47,6 +47,12 @@ def completeness_validator_node(state: dict) -> dict:
     min_conf_raw = state.get("relevance_min_confidence")
     min_confidence = 0.6 if min_conf_raw is None else float(str(min_conf_raw))
 
+    require_relevance_raw = state.get("completeness_require_relevance")
+    if require_relevance_raw is None:
+        require_relevance = state.get("relevance_mode") != "none"
+    else:
+        require_relevance = bool(require_relevance_raw)
+
     validated_by_q: Dict[str, List[FusedEvidenceCandidate]] = {}
     bundles: List[dict] = []
 
@@ -60,9 +66,16 @@ def completeness_validator_node(state: dict) -> dict:
             )
             continue
         parsed = [FusedEvidenceCandidate.model_validate(item) for item in raw_list]
-        passed = select_passed_candidates(
-            parsed, min_relevance_confidence=min_confidence
-        )
+        if require_relevance:
+            passed = select_passed_candidates(
+                parsed, min_relevance_confidence=min_confidence
+            )
+        else:
+            passed = [
+                candidate
+                for candidate in parsed
+                if candidate.existence is None or candidate.existence.label == "pass"
+            ]
         validated_by_q[question_id] = passed
         bundles.append(
             FusedEvidenceBundle(question_id=question_id, items=passed[:top_k]).model_dump()
@@ -104,6 +117,7 @@ def completeness_validator_node(state: dict) -> dict:
             "source": source_key,
             "validated_top_k": top_k,
             "relevance_min_confidence": min_confidence,
+            "require_relevance": require_relevance,
             "enforce": enforce,
             "required_questions": sorted(required_ids) if required_ids else None,
             "min_passed_per_question": min_passed,
@@ -123,4 +137,3 @@ def _ordered_question_ids(question_set: QuestionSet, payload: Mapping[str, Any])
 
 
 __all__ = ["completeness_validator_node"]
-

@@ -68,6 +68,7 @@ def _candidate(
 def test_completeness_node_emits_validated_evidence_when_passed() -> None:
     state = {
         "question_set": _question_set().model_dump(),
+        "relevance_mode": "llm",
         "existence_candidates": {
             "q1_1": [
                 _candidate(relevance_label="relevant", existence_label="pass").model_dump(),
@@ -90,6 +91,7 @@ def test_completeness_node_emits_validated_evidence_when_passed() -> None:
 def test_completeness_node_fails_when_enforced_and_missing() -> None:
     state = {
         "question_set": _question_set().model_dump(),
+        "relevance_mode": "llm",
         "existence_candidates": {
             "q1_1": [
                 _candidate(relevance_label="irrelevant", existence_label="pass").model_dump(),
@@ -103,3 +105,22 @@ def test_completeness_node_fails_when_enforced_and_missing() -> None:
 
     assert out["completeness_passed"] is False
     assert out["completeness_failed_questions"] == ["q1_1"]
+
+
+def test_completeness_node_allows_pass_when_relevance_not_required() -> None:
+    state = {
+        "question_set": _question_set().model_dump(),
+        "relevance_mode": "none",
+        "existence_candidates": {
+            "q1_1": [
+                _candidate(relevance_label="unknown", existence_label="pass").model_dump(),
+            ]
+        },
+        "validated_top_k": 1,
+        "relevance_min_confidence": 0.6,
+        "completeness_enforce": True,
+    }
+    out = completeness_validator_node(state)
+
+    assert out["completeness_passed"] is True
+    assert out["validated_candidates"]["q1_1"]
