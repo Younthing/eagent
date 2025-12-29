@@ -182,7 +182,7 @@ def main() -> int:
     validation_state = {
         **fused_state,
         **fusion,
-        "relevance_validator": args.validator,
+        "relevance_mode": args.validator,
         "relevance_model": args.relevance_model,
         "relevance_model_provider": args.relevance_provider,
         "relevance_min_confidence": args.min_confidence,

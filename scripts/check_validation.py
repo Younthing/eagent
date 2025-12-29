@@ -181,7 +181,7 @@ def main() -> int:
     relevance_state = {
         **fused_state,
         **fusion,
-        "relevance_validator": args.relevance,
+        "relevance_mode": args.relevance,
         "relevance_min_confidence": args.min_confidence,
         "relevance_require_quote": bool(args.require_quote),
         "relevance_top_k": args.top_k,
@@ -200,7 +200,7 @@ def main() -> int:
     consistency_state = {
         **existence_state,
         **existence,
-        "consistency_validator": args.consistency,
+        "consistency_mode": args.consistency,
         "consistency_min_confidence": args.min_confidence,
     }
     consistency = consistency_validator_node(consistency_state)
@@ -269,4 +269,3 @@ def _print_question(question_id: str, items: list[dict], args: argparse.Namespac
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

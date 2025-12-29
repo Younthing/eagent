@@ -53,7 +53,7 @@ def consistency_validator_node(state: dict) -> dict:
     )
 
     settings = get_settings()
-    requested = str(state.get("consistency_validator") or "none").strip().lower()
+    requested = str(state.get("consistency_mode") or "none").strip().lower()
     if requested not in {"none", "llm"}:
         raise ValueError("consistency_validator must be 'none' or 'llm'")
 

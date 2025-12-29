@@ -43,7 +43,8 @@ class Rob2GraphState(TypedDict, total=False):
     fusion_top_k: int
     fusion_rrf_k: int
 
-    relevance_validator: Literal["none", "llm"]
+    relevance_mode: Literal["none", "llm"]
+    relevance_validator: dict
     relevance_min_confidence: float
     relevance_require_quote: bool
     relevance_fill_to_top_k: bool
@@ -52,7 +53,8 @@ class Rob2GraphState(TypedDict, total=False):
     existence_require_text_match: bool
     existence_require_quote_in_source: bool
 
-    consistency_validator: Literal["none", "llm"]
+    consistency_mode: Literal["none", "llm"]
+    consistency_validator: dict
     consistency_min_confidence: float
     consistency_llm: object
 
@@ -130,35 +132,6 @@ def _prepare_validation_retry_node(state: Rob2GraphState) -> dict:
     }
 
 
-def _normalize_validator_modes_node(state: Rob2GraphState) -> dict:
-    """Ensure validator mode keys stay as strings across retries.
-
-    Validator nodes emit debug payloads under keys like `relevance_validator`,
-    which can overwrite the input config key used to select mode ("none"/"llm").
-    When the workflow retries, normalize those keys back to the requested string.
-    """
-
-    updates: Dict[str, Any] = {}
-
-    relevance = state.get("relevance_validator")
-    if isinstance(relevance, dict):
-        requested = str(relevance.get("requested") or "none").strip().lower()
-        if requested in {"none", "llm"}:
-            updates["relevance_validator"] = requested
-        else:
-            updates["relevance_validator"] = "none"
-
-    consistency = state.get("consistency_validator")
-    if isinstance(consistency, dict):
-        requested = str(consistency.get("requested") or "none").strip().lower()
-        if requested in {"none", "llm"}:
-            updates["consistency_validator"] = requested
-        else:
-            updates["consistency_validator"] = "none"
-
-    return updates
-
-
 def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
     """Build and compile the ROB2 workflow graph."""
     overrides = node_overrides or {}
@@ -180,9 +153,6 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
         cast(Any, overrides.get("splade_locator") or splade_retrieval_locator_node),
     )
     builder.add_node("fusion", cast(Any, overrides.get("fusion") or fusion_node))
-    builder.add_node(
-        "normalize_validator_modes", cast(Any, _normalize_validator_modes_node)
-    )
 
     builder.add_node(
         "relevance_validator",
@@ -211,9 +181,7 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
     builder.add_edge("rule_based_locator", "bm25_locator")
     builder.add_edge("bm25_locator", "splade_locator")
     builder.add_edge("splade_locator", "fusion")
-
-    builder.add_edge("fusion", "normalize_validator_modes")
-    builder.add_edge("normalize_validator_modes", "relevance_validator")
+    builder.add_edge("fusion", "relevance_validator")
     builder.add_edge("relevance_validator", "existence_validator")
     builder.add_edge("existence_validator", "consistency_validator")
     builder.add_edge("consistency_validator", "completeness_validator")

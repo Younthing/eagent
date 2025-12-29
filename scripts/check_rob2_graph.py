@@ -93,8 +93,8 @@ def main() -> int:
             "splade_model_id": args.splade_model_id,
             "fusion_top_k": args.top_k,
             "fusion_rrf_k": args.rrf_k,
-            "relevance_validator": args.relevance,
-            "consistency_validator": args.consistency,
+            "relevance_mode": args.relevance,
+            "consistency_mode": args.consistency,
             "relevance_min_confidence": args.min_confidence,
             "consistency_min_confidence": args.min_confidence,
             "completeness_enforce": bool(args.enforce_completeness),
@@ -138,4 +138,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

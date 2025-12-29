@@ -54,8 +54,7 @@ flowchart TD
   end
 
   subgraph Validation
-    FC --> NM[normalize_validator_modes<br/>keep 'llm/none' across retries]
-    NM --> RV[relevance_validator_node<br/>optional LLM<br/>M7]
+    FC --> RV[relevance_validator_node<br/>optional LLM<br/>M7]
     RV --> RE[relevance_evidence<br/>FusedEvidenceBundle top-k<br/>annotated]
     RV --> RC[relevance_candidates<br/>annotated candidates]
 

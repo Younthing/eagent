@@ -66,7 +66,7 @@ def relevance_validator_node(state: dict) -> dict:
     )
 
     settings = get_settings()
-    requested = str(state.get("relevance_validator") or "none").strip().lower()
+    requested = str(state.get("relevance_mode") or "none").strip().lower()
     if requested not in {"none", "llm"}:
         raise ValueError("relevance_validator must be 'none' or 'llm'")
 

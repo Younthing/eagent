@@ -94,7 +94,7 @@ def test_relevance_validator_node_selects_passed_candidates_and_falls_back() -> 
     state = {
         "question_set": question_set.model_dump(),
         "fusion_candidates": {"q1_1": [_candidate(text="Baseline characteristics.").model_dump()]},
-        "relevance_validator": "llm",
+        "relevance_mode": "llm",
         "relevance_llm": cast(ChatModelLike, llm),
         "relevance_top_k": 1,
         "relevance_top_n": 1,
