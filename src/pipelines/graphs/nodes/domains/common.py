@@ -81,14 +81,16 @@ def run_domain_reasoning(
     llm_config: LLMReasoningConfig | None = None,
     effect_type: Optional[EffectType] = None,
     evidence_top_k: int = 5,
+    system_prompt: Optional[str] = None,
+    user_prompt: Optional[str] = None,
 ) -> DomainDecision:
     questions = _select_questions(question_set, domain, effect_type=effect_type)
     if not questions:
         raise ValueError(f"No questions found for domain {domain}.")
 
     evidence_by_q = _build_evidence_by_question(validated_candidates, questions, top_k=evidence_top_k)
-    system_prompt = _build_system_prompt(domain, effect_type=effect_type)
-    user_prompt = _build_user_prompt(questions, evidence_by_q, effect_type=effect_type)
+    system_prompt = system_prompt or _build_system_prompt(domain, effect_type=effect_type)
+    user_prompt = user_prompt or _build_user_prompt(questions, evidence_by_q, effect_type=effect_type)
 
     model = llm
     if model is None:
@@ -100,6 +102,23 @@ def run_domain_reasoning(
     response = _invoke_model(model, messages)
     decision = _normalize_decision(domain, questions, evidence_by_q, response, effect_type=effect_type)
     return decision
+
+
+def build_domain_prompts(
+    *,
+    domain: DomainId,
+    question_set: QuestionSet,
+    validated_candidates: Mapping[str, Sequence[dict]],
+    effect_type: Optional[EffectType] = None,
+    evidence_top_k: int = 5,
+) -> tuple[str, str]:
+    questions = _select_questions(question_set, domain, effect_type=effect_type)
+    if not questions:
+        raise ValueError(f"No questions found for domain {domain}.")
+    evidence_by_q = _build_evidence_by_question(validated_candidates, questions, top_k=evidence_top_k)
+    system_prompt = _build_system_prompt(domain, effect_type=effect_type)
+    user_prompt = _build_user_prompt(questions, evidence_by_q, effect_type=effect_type)
+    return system_prompt, user_prompt
 
 
 def _select_questions(
@@ -418,7 +437,9 @@ def get_domain_defaults(domain: DomainId) -> dict[str, Any]:
 
 __all__ = [
     "ChatModelLike",
+    "EffectType",
     "LLMReasoningConfig",
+    "build_domain_prompts",
     "build_reasoning_config",
     "get_domain_defaults",
     "run_domain_reasoning",

@@ -51,6 +51,25 @@ class Settings(BaseSettings):
     reranker_batch_size: int = Field(default=8, validation_alias="RERANKER_BATCH_SIZE")
     reranker_top_n: int = Field(default=50, validation_alias="RERANKER_TOP_N")
 
+    splade_model_id: str | None = Field(
+        default=None, validation_alias="SPLADE_MODEL_ID"
+    )
+    splade_device: str | None = Field(
+        default=None, validation_alias="SPLADE_DEVICE"
+    )
+    splade_hf_token: str | None = Field(
+        default=None, validation_alias="SPLADE_HF_TOKEN"
+    )
+    splade_query_max_length: int = Field(
+        default=64, validation_alias="SPLADE_QUERY_MAX_LENGTH"
+    )
+    splade_doc_max_length: int = Field(
+        default=256, validation_alias="SPLADE_DOC_MAX_LENGTH"
+    )
+    splade_batch_size: int = Field(
+        default=8, validation_alias="SPLADE_BATCH_SIZE"
+    )
+
     relevance_model: str | None = Field(default=None, validation_alias="RELEVANCE_MODEL")
     relevance_model_provider: str | None = Field(
         default=None, validation_alias="RELEVANCE_MODEL_PROVIDER"

@@ -183,12 +183,24 @@ def splade_retrieval_locator_node(state: dict) -> dict:
     if section_bonus_weight < 0:
         raise ValueError("section_bonus_weight must be >= 0")
 
-    model_id = str(state.get("splade_model_id") or DEFAULT_SPLADE_MODEL_ID)
-    device = state.get("splade_device")
-    hf_token = state.get("splade_hf_token")
-    query_max_length = int(state.get("splade_query_max_length") or 64)
-    doc_max_length = int(state.get("splade_doc_max_length") or 256)
-    batch_size = int(state.get("splade_batch_size") or 8)
+    model_id = str(
+        state.get("splade_model_id")
+        or settings.splade_model_id
+        or DEFAULT_SPLADE_MODEL_ID
+    ).strip()
+    device = (
+        str(state.get("splade_device")).strip()
+        if state.get("splade_device") is not None
+        else settings.splade_device
+    )
+    hf_token = state.get("splade_hf_token") or settings.splade_hf_token
+    query_max_length = int(
+        state.get("splade_query_max_length") or settings.splade_query_max_length
+    )
+    doc_max_length = int(
+        state.get("splade_doc_max_length") or settings.splade_doc_max_length
+    )
+    batch_size = int(state.get("splade_batch_size") or settings.splade_batch_size)
 
     spans = doc_structure.sections
     if not spans:
