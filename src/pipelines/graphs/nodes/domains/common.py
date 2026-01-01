@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, TYPE_CHECKING, cast, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -70,6 +72,23 @@ _RISK_MAP = {
     "some-concerns": "some_concerns",
     "high": "high",
 }
+_PROMPTS_DIR = Path(__file__).resolve().parents[4] / "llm" / "prompts" / "domains"
+_SYSTEM_PROMPT_FALLBACK = "rob2_domain_system.md"
+_SYSTEM_PROMPT_EFFECT_PLACEHOLDER = "{{effect_note}}"
+
+
+@lru_cache(maxsize=8)
+def _load_system_prompt_template(domain: DomainId) -> str:
+    domain_key = str(domain).lower()
+    prompt_path = _PROMPTS_DIR / f"{domain_key}_system.md"
+    if not prompt_path.exists():
+        prompt_path = _PROMPTS_DIR / _SYSTEM_PROMPT_FALLBACK
+    try:
+        return prompt_path.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            f"System prompt template not found: {prompt_path}"
+        ) from exc
 
 
 def run_domain_reasoning(
@@ -152,18 +171,9 @@ def _build_evidence_by_question(
 
 def _build_system_prompt(domain: DomainId, *, effect_type: Optional[EffectType]) -> str:
     effect_note = f"Effect type: {effect_type}." if effect_type else ""
-    return (
-        "You are a ROB2 domain reasoning assistant.\n"
-        "Use ONLY the provided evidence to answer each signaling question.\n"
-        "If evidence is insufficient, answer NI.\n"
-        "Follow conditional logic: if a question's conditions are not met, answer NA.\n"
-        "Return ONLY valid JSON with keys: domain_risk, domain_rationale, answers.\n"
-        "domain_risk must be one of: low, some_concerns, high.\n"
-        "Each answer must include: question_id, answer, rationale, evidence.\n"
-        "Evidence items must use paragraph_id from the provided evidence and an exact quote if possible.\n"
-        f"{effect_note}\n"
-        "No markdown, no explanations."
-    )
+    template = _load_system_prompt_template(domain)
+    prompt = template.replace(_SYSTEM_PROMPT_EFFECT_PLACEHOLDER, effect_note)
+    return prompt.strip()
 
 
 def _build_user_prompt(
