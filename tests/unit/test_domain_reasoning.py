@@ -52,18 +52,34 @@ def test_d1_reasoning_parses_answers_and_evidence() -> None:
                 text="Was the allocation sequence random?",
                 options=["Y", "PY", "PN", "N", "NI"],
                 order=1,
-            )
+            ),
+            Rob2Question(
+                question_id="q1_2",
+                rob2_id="q1_2",
+                domain="D1",
+                text="Was the allocation sequence concealed?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=2,
+            ),
+            Rob2Question(
+                question_id="q1_3",
+                rob2_id="q1_3",
+                domain="D1",
+                text="Did baseline differences suggest a problem?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=3,
+            ),
         ],
     )
     validated_candidates = {
-        "q1_1": [
-            _candidate("q1_1", "p1", "Allocation used a random number table."),
-        ]
+        "q1_1": [_candidate("q1_1", "p1", "Allocation used a random number table.")],
+        "q1_2": [_candidate("q1_2", "p2", "Allocation sequence was concealed.")],
+        "q1_3": [_candidate("q1_3", "p3", "No baseline imbalance reported.")],
     }
     llm = _DummyLLM(
         json.dumps(
             {
-                "domain_risk": "low",
+                "domain_risk": "high",
                 "domain_rationale": "Randomization described.",
                 "answers": [
                     {
@@ -72,7 +88,19 @@ def test_d1_reasoning_parses_answers_and_evidence() -> None:
                         "rationale": "Random number table reported.",
                         "evidence": [{"paragraph_id": "p1", "quote": "random number table"}],
                         "confidence": 0.8,
-                    }
+                    },
+                    {
+                        "question_id": "q1_2",
+                        "answer": "Y",
+                        "rationale": "Concealed allocation.",
+                        "evidence": [{"paragraph_id": "p2", "quote": "concealed"}],
+                    },
+                    {
+                        "question_id": "q1_3",
+                        "answer": "N",
+                        "rationale": "No imbalance.",
+                        "evidence": [{"paragraph_id": "p3", "quote": "no imbalance"}],
+                    },
                 ],
             }
         )
@@ -126,6 +154,36 @@ def test_d2_reasoning_enforces_conditions() -> None:
                 ],
                 order=2,
             ),
+            Rob2Question(
+                question_id="q2a_6",
+                rob2_id="q2_6",
+                domain="D2",
+                effect_type="assignment",
+                text="Was an appropriate analysis used to estimate the effect of assignment?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=3,
+            ),
+            Rob2Question(
+                question_id="q2a_7",
+                rob2_id="q2_7",
+                domain="D2",
+                effect_type="assignment",
+                text="If N/PN/NI to 2.6: Was there potential impact of failure to analyze?",
+                options=["NA", "Y", "PY", "PN", "N", "NI"],
+                conditions=[
+                    QuestionCondition(
+                        operator="any",
+                        dependencies=[
+                            QuestionDependency(
+                                question_id="q2a_6",
+                                allowed_answers=["N", "PN", "NI"],
+                            )
+                        ],
+                        note="If N/PN/NI to 2.6",
+                    )
+                ],
+                order=4,
+            ),
         ],
     )
     validated_candidates = {
@@ -135,11 +193,17 @@ def test_d2_reasoning_enforces_conditions() -> None:
         "q2a_3": [
             _candidate("q2a_3", "p2", "No deviations were reported."),
         ],
+        "q2a_6": [
+            _candidate("q2a_6", "p3", "Analysis followed ITT."),
+        ],
+        "q2a_7": [
+            _candidate("q2a_7", "p4", "No substantial impact expected."),
+        ],
     }
     llm = _DummyLLM(
         json.dumps(
             {
-                "domain_risk": "some concerns",
+                "domain_risk": "high",
                 "domain_rationale": "Placeholder.",
                 "answers": [
                     {
@@ -153,6 +217,18 @@ def test_d2_reasoning_enforces_conditions() -> None:
                         "answer": "Y",
                         "rationale": "Deviations occurred.",
                         "evidence": [{"paragraph_id": "p2", "quote": "deviations"}],
+                    },
+                    {
+                        "question_id": "q2a_6",
+                        "answer": "Y",
+                        "rationale": "Appropriate analysis.",
+                        "evidence": [{"paragraph_id": "p3", "quote": "ITT"}],
+                    },
+                    {
+                        "question_id": "q2a_7",
+                        "answer": "NA",
+                        "rationale": "Not applicable.",
+                        "evidence": [],
                     },
                 ],
             }
@@ -168,5 +244,367 @@ def test_d2_reasoning_enforces_conditions() -> None:
     )
 
     answers = {answer.question_id: answer.answer for answer in decision.answers}
+    assert decision.risk == "low"
     assert answers["q2a_1"] == "N"
     assert answers["q2a_3"] == "NA"
+
+
+def test_d3_reasoning_condition_chain_sets_na() -> None:
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q3_1",
+                rob2_id="q3_1",
+                domain="D3",
+                text="Were data for this outcome available for all, or nearly all, participants randomized?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            ),
+            Rob2Question(
+                question_id="q3_2",
+                rob2_id="q3_2",
+                domain="D3",
+                text="If N/PN/NI to 3.1: Is there evidence that the result was not biased by missing outcome data?",
+                options=["NA", "Y", "PY", "PN", "N"],
+                conditions=[
+                    QuestionCondition(
+                        operator="any",
+                        dependencies=[
+                            QuestionDependency(
+                                question_id="q3_1",
+                                allowed_answers=["N", "PN", "NI"],
+                            )
+                        ],
+                        note="If N/PN/NI to 3.1",
+                    )
+                ],
+                order=2,
+            ),
+            Rob2Question(
+                question_id="q3_3",
+                rob2_id="q3_3",
+                domain="D3",
+                text="If N/PN to 3.2: Could missingness in the outcome depend on its true value?",
+                options=["NA", "Y", "PY", "PN", "N", "NI"],
+                conditions=[
+                    QuestionCondition(
+                        operator="any",
+                        dependencies=[
+                            QuestionDependency(
+                                question_id="q3_2",
+                                allowed_answers=["N", "PN"],
+                            )
+                        ],
+                        note="If N/PN to 3.2",
+                    )
+                ],
+                order=3,
+            ),
+            Rob2Question(
+                question_id="q3_4",
+                rob2_id="q3_4",
+                domain="D3",
+                text="If Y/PY/NI to 3.3: Is it likely that missingness in the outcome depended on its true value?",
+                options=["NA", "Y", "PY", "PN", "N", "NI"],
+                conditions=[
+                    QuestionCondition(
+                        operator="any",
+                        dependencies=[
+                            QuestionDependency(
+                                question_id="q3_3",
+                                allowed_answers=["Y", "PY", "NI"],
+                            )
+                        ],
+                        note="If Y/PY/NI to 3.3",
+                    )
+                ],
+                order=4,
+            ),
+        ],
+    )
+    validated_candidates = {
+        "q3_1": [_candidate("q3_1", "p1", "Follow-up was complete.")],
+        "q3_2": [_candidate("q3_2", "p2", "Missing data were minimal.")],
+        "q3_3": [_candidate("q3_3", "p3", "Missingness related to outcome.")],
+        "q3_4": [_candidate("q3_4", "p4", "Missingness likely related.")],
+    }
+    llm = _DummyLLM(
+        json.dumps(
+            {
+                "domain_risk": "some concerns",
+                "domain_rationale": "Placeholder.",
+                "answers": [
+                    {
+                        "question_id": "q3_1",
+                        "answer": "Y",
+                        "rationale": "Nearly complete data.",
+                        "evidence": [{"paragraph_id": "p1", "quote": "complete"}],
+                    },
+                    {
+                        "question_id": "q3_2",
+                        "answer": "Y",
+                        "rationale": "Bias unlikely.",
+                        "evidence": [{"paragraph_id": "p2", "quote": "minimal"}],
+                    },
+                    {
+                        "question_id": "q3_3",
+                        "answer": "Y",
+                        "rationale": "Depends on outcome.",
+                        "evidence": [{"paragraph_id": "p3", "quote": "related"}],
+                    },
+                    {
+                        "question_id": "q3_4",
+                        "answer": "Y",
+                        "rationale": "Likely depends.",
+                        "evidence": [{"paragraph_id": "p4", "quote": "likely"}],
+                    },
+                ],
+            }
+        )
+    )
+    decision = run_domain_reasoning(
+        domain="D3",
+        question_set=question_set,
+        validated_candidates=validated_candidates,
+        llm=cast(ChatModelLike, llm),
+        llm_config=None,
+    )
+
+    assert decision.risk == "low"
+    answers = {answer.question_id: answer.answer for answer in decision.answers}
+    assert answers["q3_1"] == "Y"
+    assert answers["q3_2"] == "NA"
+    assert answers["q3_3"] == "NA"
+    assert answers["q3_4"] == "NA"
+
+
+def test_d4_reasoning_condition_chain_sets_na() -> None:
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q4_1",
+                rob2_id="q4_1",
+                domain="D4",
+                text="Was the method of measuring the outcome inappropriate?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            ),
+            Rob2Question(
+                question_id="q4_2",
+                rob2_id="q4_2",
+                domain="D4",
+                text="Could measurement or ascertainment of the outcome have differed between intervention groups?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=2,
+            ),
+            Rob2Question(
+                question_id="q4_3",
+                rob2_id="q4_3",
+                domain="D4",
+                text="If N/PN/NI to 4.1 and 4.2: Were outcome assessors aware of the intervention received?",
+                options=["NA", "Y", "PY", "PN", "N", "NI"],
+                conditions=[
+                    QuestionCondition(
+                        operator="all",
+                        dependencies=[
+                            QuestionDependency(
+                                question_id="q4_1",
+                                allowed_answers=["N", "PN", "NI"],
+                            ),
+                            QuestionDependency(
+                                question_id="q4_2",
+                                allowed_answers=["N", "PN", "NI"],
+                            ),
+                        ],
+                        note="If N/PN/NI to 4.1 and 4.2",
+                    )
+                ],
+                order=3,
+            ),
+            Rob2Question(
+                question_id="q4_4",
+                rob2_id="q4_4",
+                domain="D4",
+                text="If Y/PY/NI to 4.3: Could assessment have been influenced by knowledge of intervention?",
+                options=["NA", "Y", "PY", "PN", "N", "NI"],
+                conditions=[
+                    QuestionCondition(
+                        operator="any",
+                        dependencies=[
+                            QuestionDependency(
+                                question_id="q4_3",
+                                allowed_answers=["Y", "PY", "NI"],
+                            )
+                        ],
+                        note="If Y/PY/NI to 4.3",
+                    )
+                ],
+                order=4,
+            ),
+            Rob2Question(
+                question_id="q4_5",
+                rob2_id="q4_5",
+                domain="D4",
+                text="If Y/PY/NI to 4.4: Is it likely that assessment was influenced?",
+                options=["NA", "Y", "PY", "PN", "N", "NI"],
+                conditions=[
+                    QuestionCondition(
+                        operator="any",
+                        dependencies=[
+                            QuestionDependency(
+                                question_id="q4_4",
+                                allowed_answers=["Y", "PY", "NI"],
+                            )
+                        ],
+                        note="If Y/PY/NI to 4.4",
+                    )
+                ],
+                order=5,
+            ),
+        ],
+    )
+    validated_candidates = {
+        "q4_1": [_candidate("q4_1", "p1", "Outcome method differed.")],
+        "q4_2": [_candidate("q4_2", "p2", "Measurement was consistent.")],
+        "q4_3": [_candidate("q4_3", "p3", "Assessors were blinded.")],
+        "q4_4": [_candidate("q4_4", "p4", "Assessment may be biased.")],
+        "q4_5": [_candidate("q4_5", "p5", "Influence likely.")],
+    }
+    llm = _DummyLLM(
+        json.dumps(
+            {
+                "domain_risk": "high",
+                "domain_rationale": "Placeholder.",
+                "answers": [
+                    {
+                        "question_id": "q4_1",
+                        "answer": "Y",
+                        "rationale": "Method inappropriate.",
+                        "evidence": [{"paragraph_id": "p1", "quote": "method"}],
+                    },
+                    {
+                        "question_id": "q4_2",
+                        "answer": "N",
+                        "rationale": "No differences.",
+                        "evidence": [{"paragraph_id": "p2", "quote": "consistent"}],
+                    },
+                    {
+                        "question_id": "q4_3",
+                        "answer": "Y",
+                        "rationale": "Assessors knew.",
+                        "evidence": [{"paragraph_id": "p3", "quote": "assessors"}],
+                    },
+                    {
+                        "question_id": "q4_4",
+                        "answer": "Y",
+                        "rationale": "Influenced.",
+                        "evidence": [{"paragraph_id": "p4", "quote": "biased"}],
+                    },
+                    {
+                        "question_id": "q4_5",
+                        "answer": "Y",
+                        "rationale": "Likely influenced.",
+                        "evidence": [{"paragraph_id": "p5", "quote": "likely"}],
+                    },
+                ],
+            }
+        )
+    )
+    decision = run_domain_reasoning(
+        domain="D4",
+        question_set=question_set,
+        validated_candidates=validated_candidates,
+        llm=cast(ChatModelLike, llm),
+        llm_config=None,
+    )
+
+    assert decision.risk == "high"
+    answers = {answer.question_id: answer.answer for answer in decision.answers}
+    assert answers["q4_1"] == "Y"
+    assert answers["q4_2"] == "N"
+    assert answers["q4_3"] == "NA"
+    assert answers["q4_4"] == "NA"
+    assert answers["q4_5"] == "NA"
+
+
+def test_d5_reasoning_parses_answers() -> None:
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q5_1",
+                rob2_id="q5_1",
+                domain="D5",
+                text="Were the data analyzed per pre-specified plan?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            ),
+            Rob2Question(
+                question_id="q5_2",
+                rob2_id="q5_2",
+                domain="D5",
+                text="Was the result selected from multiple eligible outcome measurements?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=2,
+            ),
+            Rob2Question(
+                question_id="q5_3",
+                rob2_id="q5_3",
+                domain="D5",
+                text="Was the result selected from multiple eligible analyses?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=3,
+            ),
+        ],
+    )
+    validated_candidates = {
+        "q5_1": [_candidate("q5_1", "p1", "Pre-specified analysis plan.")],
+        "q5_2": [_candidate("q5_2", "p2", "Multiple scales reported.")],
+        "q5_3": [_candidate("q5_3", "p3", "Multiple analyses conducted.")],
+    }
+    llm = _DummyLLM(
+        json.dumps(
+            {
+                "domain_risk": "some_concerns",
+                "domain_rationale": "Selective reporting possible.",
+                "answers": [
+                    {
+                        "question_id": "q5_1",
+                        "answer": "Y",
+                        "rationale": "Plan specified.",
+                        "evidence": [{"paragraph_id": "p1", "quote": "analysis plan"}],
+                    },
+                    {
+                        "question_id": "q5_2",
+                        "answer": "PY",
+                        "rationale": "Multiple outcomes noted.",
+                        "evidence": [{"paragraph_id": "p2", "quote": "scales"}],
+                    },
+                    {
+                        "question_id": "q5_3",
+                        "answer": "PN",
+                        "rationale": "Analyses were exploratory.",
+                        "evidence": [{"paragraph_id": "p3", "quote": "analyses"}],
+                    },
+                ],
+            }
+        )
+    )
+    decision = run_domain_reasoning(
+        domain="D5",
+        question_set=question_set,
+        validated_candidates=validated_candidates,
+        llm=cast(ChatModelLike, llm),
+        llm_config=None,
+    )
+
+    assert decision.risk == "high"
+    answers = {answer.question_id: answer.answer for answer in decision.answers}
+    assert answers["q5_1"] == "Y"
+    assert answers["q5_2"] == "PY"
+    assert answers["q5_3"] == "PN"

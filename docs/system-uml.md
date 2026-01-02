@@ -99,4 +99,5 @@ Notes:
 - `completeness_validator_node` selects `validated_evidence` from candidates that passed validations (Milestone 7).
 - Validation failures can trigger a retry that rolls back to the evidence location layer (Milestone 7).
 - Domain reasoning loads system prompts from `src/llm/prompts/domains/{domain}_system.md`, with a fallback to `rob2_domain_system.md`.
+- Domain reasoning normalizes answers and applies decision-tree rules (`src/rob2/decision_rules.py`) to set domain risk when defined.
 - Dense/fulltext locators, remaining validation layers, and aggregation are not implemented yet.

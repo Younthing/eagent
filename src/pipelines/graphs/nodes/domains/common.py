@@ -12,7 +12,14 @@ from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, TYPE_
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from core.config import get_settings
-from schemas.internal.decisions import DomainAnswer, DomainDecision, DomainRisk, EvidenceRef
+from rob2.decision_rules import evaluate_domain_risk
+from schemas.internal.decisions import (
+    AnswerOption,
+    DomainAnswer,
+    DomainDecision,
+    DomainRisk,
+    EvidenceRef,
+)
 from schemas.internal.evidence import FusedEvidenceCandidate
 from schemas.internal.locator import DomainId
 from schemas.internal.rob2 import QuestionCondition, QuestionSet, Rob2Question
@@ -307,12 +314,12 @@ def _normalize_decision(
     answers: List[DomainAnswer] = []
     missing_questions: List[str] = []
 
-    normalized_answers: Dict[str, str] = {}
+    normalized_answers: Dict[str, AnswerOption] = {}
     for question in questions:
         raw = answer_map.get(question.question_id)
         raw_answer = str(raw.answer).strip().upper() if raw else "NI"
         normalized = _normalize_answer(raw_answer, question.options)
-        normalized_answers[question.question_id] = normalized
+        normalized_answers[question.question_id] = cast(AnswerOption, normalized)
 
     for question in questions:
         raw = answer_map.get(question.question_id)
@@ -342,7 +349,13 @@ def _normalize_decision(
             )
         )
 
-    risk = _normalize_risk(response.domain_risk)
+    llm_risk = _normalize_risk(response.domain_risk)
+    rule_risk = evaluate_domain_risk(
+        domain,
+        normalized_answers,
+        effect_type=effect_type,
+    )
+    risk = rule_risk or llm_risk
     return DomainDecision(
         domain=domain,
         effect_type=effect_type,
