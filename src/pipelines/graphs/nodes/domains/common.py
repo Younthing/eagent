@@ -74,7 +74,7 @@ _RISK_MAP = {
 }
 _PROMPTS_DIR = Path(__file__).resolve().parents[4] / "llm" / "prompts" / "domains"
 _SYSTEM_PROMPT_FALLBACK = "rob2_domain_system.md"
-_SYSTEM_PROMPT_EFFECT_PLACEHOLDER = "{{effect_note}}"
+_EFFECT_NOTE_PATTERN = re.compile(r"{{\s*effect_note\s*}}")
 
 
 @lru_cache(maxsize=8)
@@ -172,8 +172,12 @@ def _build_evidence_by_question(
 def _build_system_prompt(domain: DomainId, *, effect_type: Optional[EffectType]) -> str:
     effect_note = f"Effect type: {effect_type}." if effect_type else ""
     template = _load_system_prompt_template(domain)
-    prompt = template.replace(_SYSTEM_PROMPT_EFFECT_PLACEHOLDER, effect_note)
-    return prompt.strip()
+    if _EFFECT_NOTE_PATTERN.search(template):
+        prompt = _EFFECT_NOTE_PATTERN.sub(effect_note, template)
+        return prompt.strip()
+    if not effect_note:
+        return template.strip()
+    return f"{template.rstrip()}\n{effect_note}".strip()
 
 
 def _build_user_prompt(
@@ -435,13 +439,40 @@ def get_domain_defaults(domain: DomainId) -> dict[str, Any]:
             "max_tokens": settings.d1_max_tokens,
             "max_retries": settings.d1_max_retries,
         }
+    if domain == "D2":
+        return {
+            "model": settings.d2_model or "",
+            "model_provider": settings.d2_model_provider,
+            "temperature": settings.d2_temperature,
+            "timeout": settings.d2_timeout,
+            "max_tokens": settings.d2_max_tokens,
+            "max_retries": settings.d2_max_retries,
+        }
+    if domain == "D3":
+        return {
+            "model": settings.d3_model or "",
+            "model_provider": settings.d3_model_provider,
+            "temperature": settings.d3_temperature,
+            "timeout": settings.d3_timeout,
+            "max_tokens": settings.d3_max_tokens,
+            "max_retries": settings.d3_max_retries,
+        }
+    if domain == "D4":
+        return {
+            "model": settings.d4_model or "",
+            "model_provider": settings.d4_model_provider,
+            "temperature": settings.d4_temperature,
+            "timeout": settings.d4_timeout,
+            "max_tokens": settings.d4_max_tokens,
+            "max_retries": settings.d4_max_retries,
+        }
     return {
-        "model": settings.d2_model or "",
-        "model_provider": settings.d2_model_provider,
-        "temperature": settings.d2_temperature,
-        "timeout": settings.d2_timeout,
-        "max_tokens": settings.d2_max_tokens,
-        "max_retries": settings.d2_max_retries,
+        "model": settings.d5_model or "",
+        "model_provider": settings.d5_model_provider,
+        "temperature": settings.d5_temperature,
+        "timeout": settings.d5_timeout,
+        "max_tokens": settings.d5_max_tokens,
+        "max_retries": settings.d5_max_retries,
     }
 
 

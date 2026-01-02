@@ -24,6 +24,9 @@ from pipelines.graphs.nodes.planner import planner_node
 from pipelines.graphs.nodes.preprocess import preprocess_node
 from pipelines.graphs.nodes.domains.d1_randomization import d1_randomization_node
 from pipelines.graphs.nodes.domains.d2_deviations import d2_deviations_node
+from pipelines.graphs.nodes.domains.d3_missing_data import d3_missing_data_node
+from pipelines.graphs.nodes.domains.d4_measurement import d4_measurement_node
+from pipelines.graphs.nodes.domains.d5_reporting import d5_reporting_node
 from pipelines.graphs.nodes.validators.completeness import completeness_validator_node
 from pipelines.graphs.nodes.validators.consistency import consistency_validator_node
 from pipelines.graphs.nodes.validators.existence import existence_validator_node
@@ -77,6 +80,30 @@ class Rob2GraphState(TypedDict, total=False):
     d2_llm: object
     d2_effect_type: Literal["assignment", "adherence"]
 
+    d3_model: str
+    d3_model_provider: str
+    d3_temperature: float
+    d3_timeout: float
+    d3_max_tokens: int
+    d3_max_retries: int
+    d3_llm: object
+
+    d4_model: str
+    d4_model_provider: str
+    d4_temperature: float
+    d4_timeout: float
+    d4_max_tokens: int
+    d4_max_retries: int
+    d4_llm: object
+
+    d5_model: str
+    d5_model_provider: str
+    d5_temperature: float
+    d5_timeout: float
+    d5_max_tokens: int
+    d5_max_retries: int
+    d5_llm: object
+
     completeness_enforce: bool
     completeness_min_passed_per_question: int
     completeness_require_relevance: bool
@@ -96,6 +123,9 @@ class Rob2GraphState(TypedDict, total=False):
     consistency_failed_questions: list[str]
     d1_decision: dict
     d2_decision: dict
+    d3_decision: dict
+    d4_decision: dict
+    d5_decision: dict
 
     validation_attempt: int
     validation_max_retries: int
@@ -226,6 +256,18 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
         "d2_deviations",
         cast(Any, overrides.get("d2_deviations") or d2_deviations_node),
     )
+    builder.add_node(
+        "d3_missing_data",
+        cast(Any, overrides.get("d3_missing_data") or d3_missing_data_node),
+    )
+    builder.add_node(
+        "d4_measurement",
+        cast(Any, overrides.get("d4_measurement") or d4_measurement_node),
+    )
+    builder.add_node(
+        "d5_reporting",
+        cast(Any, overrides.get("d5_reporting") or d5_reporting_node),
+    )
 
     builder.add_node("prepare_retry", cast(Any, _prepare_validation_retry_node))
 
@@ -249,7 +291,10 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
     )
     builder.add_edge("prepare_retry", "rule_based_locator")
     builder.add_edge("d1_randomization", "d2_deviations")
-    builder.add_edge("d2_deviations", END)
+    builder.add_edge("d2_deviations", "d3_missing_data")
+    builder.add_edge("d3_missing_data", "d4_measurement")
+    builder.add_edge("d4_measurement", "d5_reporting")
+    builder.add_edge("d5_reporting", END)
 
     return builder.compile()
 

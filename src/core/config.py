@@ -124,6 +124,33 @@ class Settings(BaseSettings):
     d2_max_tokens: int | None = Field(default=None, validation_alias="D2_MAX_TOKENS")
     d2_max_retries: int = Field(default=2, validation_alias="D2_MAX_RETRIES")
 
+    d3_model: str | None = Field(default=None, validation_alias="D3_MODEL")
+    d3_model_provider: str | None = Field(
+        default=None, validation_alias="D3_MODEL_PROVIDER"
+    )
+    d3_temperature: float = Field(default=0.0, validation_alias="D3_TEMPERATURE")
+    d3_timeout: float | None = Field(default=None, validation_alias="D3_TIMEOUT")
+    d3_max_tokens: int | None = Field(default=None, validation_alias="D3_MAX_TOKENS")
+    d3_max_retries: int = Field(default=2, validation_alias="D3_MAX_RETRIES")
+
+    d4_model: str | None = Field(default=None, validation_alias="D4_MODEL")
+    d4_model_provider: str | None = Field(
+        default=None, validation_alias="D4_MODEL_PROVIDER"
+    )
+    d4_temperature: float = Field(default=0.0, validation_alias="D4_TEMPERATURE")
+    d4_timeout: float | None = Field(default=None, validation_alias="D4_TIMEOUT")
+    d4_max_tokens: int | None = Field(default=None, validation_alias="D4_MAX_TOKENS")
+    d4_max_retries: int = Field(default=2, validation_alias="D4_MAX_RETRIES")
+
+    d5_model: str | None = Field(default=None, validation_alias="D5_MODEL")
+    d5_model_provider: str | None = Field(
+        default=None, validation_alias="D5_MODEL_PROVIDER"
+    )
+    d5_temperature: float = Field(default=0.0, validation_alias="D5_TEMPERATURE")
+    d5_timeout: float | None = Field(default=None, validation_alias="D5_TIMEOUT")
+    d5_max_tokens: int | None = Field(default=None, validation_alias="D5_MAX_TOKENS")
+    d5_max_retries: int = Field(default=2, validation_alias="D5_MAX_RETRIES")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

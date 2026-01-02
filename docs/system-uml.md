@@ -73,8 +73,14 @@ flowchart TD
   subgraph Reasoning
     CM --> D1[d1_randomization_node<br/>LLM decision<br/>M8]
     D1 --> D2[d2_deviations_node<br/>LLM decision<br/>M8]
+    D2 --> D3[d3_missing_data_node<br/>LLM decision<br/>M8]
+    D3 --> D4[d4_measurement_node<br/>LLM decision<br/>M8]
+    D4 --> D5[d5_reporting_node<br/>LLM decision<br/>M8]
     P1[src/llm/prompts/domains/d1_system.md] --> D1
     P2[src/llm/prompts/domains/d2_system.md] --> D2
+    P3[src/llm/prompts/domains/d3_system.md] --> D3
+    P4[src/llm/prompts/domains/d4_system.md] --> D4
+    P5[src/llm/prompts/domains/d5_system.md] --> D5
   end
 
   %% Milestone 7 rollback/retry: failed validation routes back to EvidenceLocation
@@ -93,4 +99,4 @@ Notes:
 - `completeness_validator_node` selects `validated_evidence` from candidates that passed validations (Milestone 7).
 - Validation failures can trigger a retry that rolls back to the evidence location layer (Milestone 7).
 - Domain reasoning loads system prompts from `src/llm/prompts/domains/{domain}_system.md`, with a fallback to `rob2_domain_system.md`.
-- Dense/fulltext locators, remaining validation layers, D3-D5 reasoning, and aggregation are not implemented yet.
+- Dense/fulltext locators, remaining validation layers, and aggregation are not implemented yet.
