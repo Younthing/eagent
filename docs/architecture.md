@@ -44,8 +44,8 @@ flowchart TD
     J5[D5 Selective Reporting]
   end
 
-  subgraph CrossDomain
-    K[Cross-Domain Validator]
+  subgraph Audit
+    K[Full-Text Domain Audit<br/>patch evidence + rerun]
   end
 
   subgraph Aggregation
@@ -141,18 +141,18 @@ eagent/
 │   │   │   │   │   ├── rule_based.py
 │   │   │   │   │   └── retrieval.py
 │   │   │   │   ├── fusion.py      # Evidence Fusion
-│   │   │   │   ├── validators/    # Evidence validators + cross-domain validators
+│   │   │   │   ├── validators/    # Evidence validators (M7)
 │   │   │   │   │   ├── existence.py
 │   │   │   │   │   ├── relevance.py
 │   │   │   │   │   ├── consistency.py
-│   │   │   │   │   ├── completeness.py
-│   │   │   │   │   └── cross_domain.py
+│   │   │   │   │   └── completeness.py
 │   │   │   │   ├── domains/       # D1-D5 domain reasoners
 │   │   │   │   │   ├── d1_randomization.py
 │   │   │   │   │   ├── d2_deviations.py
 │   │   │   │   │   ├── d3_missing.py
 │   │   │   │   │   ├── d4_measurement.py
 │   │   │   │   │   └── d5_reporting.py
+│   │   │   │   ├── domain_audit.py # Full-text audit + evidence patch (M9)
 │   │   │   │   └── aggregate.py   # ROB2汇总 + 输出整形
 │   │   │   └── routing.py         # conditional edges/重试策略/回滚策略
 │   │   └── runner.py              # GraphRunner：同步/异步执行、超时、日志注入

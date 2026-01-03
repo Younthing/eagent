@@ -2,7 +2,7 @@
 
 This graph currently covers preprocessing, question planning, evidence location
 (rule-based + retrieval), fusion, Milestone 7 validation with retry/rollback,
-and Milestone 8 D1/D2 reasoning.
+Milestone 8 D1–D5 reasoning, and an optional Milestone 9 full-text audit step.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from pipelines.graphs.nodes.domains.d2_deviations import d2_deviations_node
 from pipelines.graphs.nodes.domains.d3_missing_data import d3_missing_data_node
 from pipelines.graphs.nodes.domains.d4_measurement import d4_measurement_node
 from pipelines.graphs.nodes.domains.d5_reporting import d5_reporting_node
+from pipelines.graphs.nodes.domain_audit import domain_audit_node
 from pipelines.graphs.nodes.validators.completeness import completeness_validator_node
 from pipelines.graphs.nodes.validators.consistency import consistency_validator_node
 from pipelines.graphs.nodes.validators.existence import existence_validator_node
@@ -103,6 +104,19 @@ class Rob2GraphState(TypedDict, total=False):
     d5_max_tokens: int
     d5_max_retries: int
     d5_llm: object
+
+    domain_audit_mode: Literal["none", "llm"]
+    domain_audit_model: str
+    domain_audit_model_provider: str
+    domain_audit_temperature: float
+    domain_audit_timeout: float
+    domain_audit_max_tokens: int
+    domain_audit_max_retries: int
+    domain_audit_patch_window: int
+    domain_audit_max_patches_per_question: int
+    domain_audit_rerun_domains: bool
+    domain_audit_llm: object
+    domain_audit_report: dict
 
     completeness_enforce: bool
     completeness_min_passed_per_question: int
@@ -268,6 +282,10 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
         "d5_reporting",
         cast(Any, overrides.get("d5_reporting") or d5_reporting_node),
     )
+    builder.add_node(
+        "domain_audit",
+        cast(Any, overrides.get("domain_audit") or domain_audit_node),
+    )
 
     builder.add_node("prepare_retry", cast(Any, _prepare_validation_retry_node))
 
@@ -294,9 +312,14 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
     builder.add_edge("d2_deviations", "d3_missing_data")
     builder.add_edge("d3_missing_data", "d4_measurement")
     builder.add_edge("d4_measurement", "d5_reporting")
-    builder.add_edge("d5_reporting", END)
+    builder.add_edge("d5_reporting", "domain_audit")
+    builder.add_edge("domain_audit", END)
 
-    return builder.compile()
+    compiled = builder.compile()
+    # This graph includes an intentional retry loop (Milestone 7). With additional
+    # downstream nodes (M8+), a single retry can exceed LangGraph's default
+    # recursion limit (25). Set a higher default to avoid false positives.
+    return compiled.with_config({"recursion_limit": 100})
 
 
 __all__ = ["Rob2GraphState", "build_rob2_graph"]

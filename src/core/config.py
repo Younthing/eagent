@@ -151,6 +151,35 @@ class Settings(BaseSettings):
     d5_max_tokens: int | None = Field(default=None, validation_alias="D5_MAX_TOKENS")
     d5_max_retries: int = Field(default=2, validation_alias="D5_MAX_RETRIES")
 
+    domain_audit_mode: str = Field(default="none", validation_alias="DOMAIN_AUDIT_MODE")
+    domain_audit_model: str | None = Field(
+        default=None, validation_alias="DOMAIN_AUDIT_MODEL"
+    )
+    domain_audit_model_provider: str | None = Field(
+        default=None, validation_alias="DOMAIN_AUDIT_MODEL_PROVIDER"
+    )
+    domain_audit_temperature: float = Field(
+        default=0.0, validation_alias="DOMAIN_AUDIT_TEMPERATURE"
+    )
+    domain_audit_timeout: float | None = Field(
+        default=None, validation_alias="DOMAIN_AUDIT_TIMEOUT"
+    )
+    domain_audit_max_tokens: int | None = Field(
+        default=None, validation_alias="DOMAIN_AUDIT_MAX_TOKENS"
+    )
+    domain_audit_max_retries: int = Field(
+        default=2, validation_alias="DOMAIN_AUDIT_MAX_RETRIES"
+    )
+    domain_audit_patch_window: int = Field(
+        default=0, validation_alias="DOMAIN_AUDIT_PATCH_WINDOW"
+    )
+    domain_audit_max_patches_per_question: int = Field(
+        default=3, validation_alias="DOMAIN_AUDIT_MAX_PATCHES_PER_QUESTION"
+    )
+    domain_audit_rerun_domains: bool = Field(
+        default=True, validation_alias="DOMAIN_AUDIT_RERUN_DOMAINS"
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

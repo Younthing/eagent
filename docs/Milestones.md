@@ -243,21 +243,29 @@
 
 ---
 
-## 🟦 Milestone 9：Cross-Domain Validator
+## 🟦 Milestone 9：Full-Text Domain Audit（全文审核与证据补全）
 
 ### 🎯 目标
 
-消除 domain 间自相矛盾。
+在不改变“证据定位 → 过滤 → 领域推理”主干的前提下，引入一个**全文审核模型**：
+对 D1–D5 的信号问题答案做一致性审核，**用原文引用补齐证据**，减少遗漏与误判。
 
 ### 核心任务
 
-* 定义跨域一致性规则
-* 自动检测冲突
-* 触发回滚或重评
+* 全文审核模型：输入 `doc_structure.body/sections` + ROB2 领域问题，输出信号答案 + 引用（`paragraph_id` + quote）
+* 与领域代理输出对比：发现不一致/缺失时，产出“弱定位证据”线索
+* 证据补全与重跑：把审核引用转成候选段落，经过存在性约束后合并到 `validated_candidates`，重跑受影响的 domain agent（可开关）
+
+### 交付物
+
+* `domain_audit_node`（可开关）
+* 审核报告（mismatch 列表、补全证据、重跑域）
+* `.env` / CLI 参数示例
 
 ### DoD
 
-* 系统输出不再出现逻辑自相矛盾的 ROB2 表
+* 默认关闭（不影响现有流程），开启后能产出审核报告并可自动补全证据重跑
+* 无法注入“doc_structure 不存在的 paragraph_id”（补全证据必须经过确定性校验）
 
 ---
 

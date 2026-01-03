@@ -78,6 +78,24 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Effect type for D2 reasoning (Milestone 8).",
     )
     parser.add_argument("--domain-evidence-top-k", type=int, default=5)
+    parser.add_argument(
+        "--domain-audit",
+        choices=("none", "llm"),
+        default="none",
+        help="Run full-text audit + evidence patch (Milestone 9).",
+    )
+    parser.add_argument(
+        "--audit-window",
+        type=int,
+        default=1,
+        help="Include ±N neighboring paragraphs when patching evidence.",
+    )
+    parser.add_argument(
+        "--audit-rerun",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Re-run affected domain agents after applying audit patches.",
+    )
     parser.add_argument("--json", action="store_true", help="Print final state JSON.")
     return parser
 
@@ -111,6 +129,9 @@ def main() -> int:
             "validation_relax_on_retry": bool(args.relax_on_retry),
             "d2_effect_type": args.d2_effect_type,
             "domain_evidence_top_k": args.domain_evidence_top_k,
+            "domain_audit_mode": args.domain_audit,
+            "domain_audit_patch_window": args.audit_window,
+            "domain_audit_rerun_domains": bool(args.audit_rerun),
         }
     )
 

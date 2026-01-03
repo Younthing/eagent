@@ -185,6 +185,45 @@ def test_rob2_workflow_retries_on_consistency_fail_and_recovers() -> None:
             }
         }
 
+    def d3_stub(_state: dict) -> dict:
+        return {
+            "d3_decision": {
+                "domain": "D3",
+                "effect_type": None,
+                "risk": "some_concerns",
+                "risk_rationale": "stub",
+                "answers": [],
+                "missing_questions": [],
+            }
+        }
+
+    def d4_stub(_state: dict) -> dict:
+        return {
+            "d4_decision": {
+                "domain": "D4",
+                "effect_type": None,
+                "risk": "some_concerns",
+                "risk_rationale": "stub",
+                "answers": [],
+                "missing_questions": [],
+            }
+        }
+
+    def d5_stub(_state: dict) -> dict:
+        return {
+            "d5_decision": {
+                "domain": "D5",
+                "effect_type": None,
+                "risk": "some_concerns",
+                "risk_rationale": "stub",
+                "answers": [],
+                "missing_questions": [],
+            }
+        }
+
+    def domain_audit_stub(_state: dict) -> dict:
+        return {"domain_audit_report": {"mode": "none", "enabled": False}}
+
     app = build_rob2_graph(
         node_overrides={
             "preprocess": preprocess_stub,
@@ -194,6 +233,10 @@ def test_rob2_workflow_retries_on_consistency_fail_and_recovers() -> None:
             "splade_locator": empty_splade_stub,
             "d1_randomization": d1_stub,
             "d2_deviations": d2_stub,
+            "d3_missing_data": d3_stub,
+            "d4_measurement": d4_stub,
+            "d5_reporting": d5_stub,
+            "domain_audit": domain_audit_stub,
         }
     )
 
