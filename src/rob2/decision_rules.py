@@ -12,8 +12,11 @@ EffectType = Literal["assignment", "adherence"]
 YES = {"Y", "PY"}
 NO = {"N", "PN"}
 NO_INFO = {"NI"}
+NA = {"NA"}
 YES_OR_NI = YES | NO_INFO
 NO_OR_NI = NO | NO_INFO
+YES_OR_NI_OR_NA = YES_OR_NI | NA
+NO_OR_NA = NO | NA
 
 
 def evaluate_domain_risk(
@@ -26,9 +29,11 @@ def evaluate_domain_risk(
     if domain == "D1":
         return _risk_d1(answers)
     if domain == "D2":
-        if effect_type != "assignment":
-            return None
-        return _risk_d2_assignment(answers)
+        if effect_type == "assignment":
+            return _risk_d2_assignment(answers)
+        if effect_type == "adherence":
+            return _risk_d2_adherence(answers)
+        return None
     if domain == "D3":
         return _risk_d3(answers)
     if domain == "D4":
@@ -73,6 +78,47 @@ def _risk_d2_assignment(answers: Mapping[str, AnswerOption]) -> DomainRisk:
             return "some_concerns"
         if q2_7 in YES_OR_NI:
             return "high"
+    return "some_concerns"
+
+
+def _risk_d2_adherence(answers: Mapping[str, AnswerOption]) -> DomainRisk:
+    q2_1 = _answer(answers, "q2b_1")
+    q2_2 = _answer(answers, "q2b_2")
+    q2_3 = _answer(answers, "q2b_3")
+    q2_4 = _answer(answers, "q2b_4")
+    q2_5 = _answer(answers, "q2b_5")
+    q2_6 = _answer(answers, "q2b_6")
+
+    awareness_low = q2_1 in NO and q2_2 in NO
+    awareness_high = q2_1 in YES_OR_NI or q2_2 in YES_OR_NI
+
+    q2_3_ok = q2_3 in (YES | NA)
+    q2_3_bad = q2_3 in (NO | NO_INFO)
+
+    q2_4_low = q2_4 in NO_OR_NA
+    q2_5_low = q2_5 in NO_OR_NA
+    q2_4_high = q2_4 in YES_OR_NI
+    q2_5_high = q2_5 in YES_OR_NI
+
+    if awareness_low and q2_4_low and q2_5_low:
+        return "low"
+    if awareness_high and q2_3_ok and q2_4_low and q2_5_low:
+        return "low"
+
+    if awareness_low and (q2_4_high or q2_5_high) and q2_6 in YES:
+        return "some_concerns"
+    if awareness_high and q2_3_ok and (q2_4_high or q2_5_high) and q2_6 in YES:
+        return "some_concerns"
+    if awareness_high and q2_3_bad and q2_6 in YES:
+        return "some_concerns"
+
+    if awareness_low and (q2_4_high or q2_5_high) and q2_6 in NO_OR_NI:
+        return "high"
+    if awareness_high and q2_3_ok and (q2_4_high or q2_5_high) and q2_6 in NO_OR_NI:
+        return "high"
+    if awareness_high and q2_3_bad and q2_6 in NO_OR_NI:
+        return "high"
+
     return "some_concerns"
 
 

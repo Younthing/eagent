@@ -33,7 +33,50 @@ def test_d2_assignment_rules() -> None:
         evaluate_domain_risk("D2", high_answers, effect_type="assignment") == "high"
     )
     assert (
-        evaluate_domain_risk("D2", adherence_answers, effect_type="adherence") is None
+        evaluate_domain_risk("D2", adherence_answers, effect_type="adherence")
+        == "some_concerns"
+    )
+
+
+def test_d2_adherence_rules() -> None:
+    low_answers: dict[str, AnswerOption] = {
+        "q2b_1": "N",
+        "q2b_2": "N",
+        "q2b_4": "N",
+        "q2b_5": "PN",
+    }
+    low_answers_alt: dict[str, AnswerOption] = {
+        "q2b_1": "Y",
+        "q2b_2": "N",
+        "q2b_3": "PY",
+        "q2b_4": "N",
+        "q2b_5": "NA",
+    }
+    some_answers: dict[str, AnswerOption] = {
+        "q2b_1": "N",
+        "q2b_2": "N",
+        "q2b_4": "Y",
+        "q2b_5": "N",
+        "q2b_6": "Y",
+    }
+    high_answers: dict[str, AnswerOption] = {
+        "q2b_1": "Y",
+        "q2b_2": "N",
+        "q2b_3": "NI",
+        "q2b_6": "N",
+    }
+    assert (
+        evaluate_domain_risk("D2", low_answers, effect_type="adherence") == "low"
+    )
+    assert (
+        evaluate_domain_risk("D2", low_answers_alt, effect_type="adherence") == "low"
+    )
+    assert (
+        evaluate_domain_risk("D2", some_answers, effect_type="adherence")
+        == "some_concerns"
+    )
+    assert (
+        evaluate_domain_risk("D2", high_answers, effect_type="adherence") == "high"
     )
 
 

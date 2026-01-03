@@ -249,6 +249,169 @@ def test_d2_reasoning_enforces_conditions() -> None:
     assert answers["q2a_3"] == "NA"
 
 
+def test_d2_adherence_rule_override() -> None:
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q2b_1",
+                rob2_id="q2_1",
+                domain="D2",
+                effect_type="adherence",
+                text="Were participants aware of their assigned intervention?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            ),
+            Rob2Question(
+                question_id="q2b_2",
+                rob2_id="q2_2",
+                domain="D2",
+                effect_type="adherence",
+                text="Were carers aware of participants' assigned intervention?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=2,
+            ),
+            Rob2Question(
+                question_id="q2b_3",
+                rob2_id="q2_3",
+                domain="D2",
+                effect_type="adherence",
+                text="If Y/PY/NI to 2.1 or 2.2: Were important non-protocol interventions balanced?",
+                options=["NA", "Y", "PY", "PN", "N", "NI"],
+                conditions=[
+                    QuestionCondition(
+                        operator="any",
+                        dependencies=[
+                            QuestionDependency(
+                                question_id="q2b_1",
+                                allowed_answers=["Y", "PY", "NI"],
+                            ),
+                            QuestionDependency(
+                                question_id="q2b_2",
+                                allowed_answers=["Y", "PY", "NI"],
+                            ),
+                        ],
+                        note="If Y/PY/NI to 2.1 or 2.2",
+                    )
+                ],
+                order=3,
+            ),
+            Rob2Question(
+                question_id="q2b_4",
+                rob2_id="q2_4",
+                domain="D2",
+                effect_type="adherence",
+                text="Were there failures in implementing the intervention that could have affected the outcome?",
+                options=["NA", "Y", "PY", "PN", "N", "NI"],
+                order=4,
+            ),
+            Rob2Question(
+                question_id="q2b_5",
+                rob2_id="q2_5",
+                domain="D2",
+                effect_type="adherence",
+                text="Was there non-adherence that could have affected outcomes?",
+                options=["NA", "Y", "PY", "PN", "N", "NI"],
+                order=5,
+            ),
+            Rob2Question(
+                question_id="q2b_6",
+                rob2_id="q2_6",
+                domain="D2",
+                effect_type="adherence",
+                text="If N/PN/NI to 2.3, or Y/PY/NI to 2.4 or 2.5: Was appropriate analysis used?",
+                options=["NA", "Y", "PY", "PN", "N", "NI"],
+                conditions=[
+                    QuestionCondition(
+                        operator="any",
+                        dependencies=[
+                            QuestionDependency(
+                                question_id="q2b_3",
+                                allowed_answers=["N", "PN", "NI"],
+                            ),
+                            QuestionDependency(
+                                question_id="q2b_4",
+                                allowed_answers=["Y", "PY", "NI"],
+                            ),
+                            QuestionDependency(
+                                question_id="q2b_5",
+                                allowed_answers=["Y", "PY", "NI"],
+                            ),
+                        ],
+                        note="If N/PN/NI to 2.3, or Y/PY/NI to 2.4 or 2.5",
+                    )
+                ],
+                order=6,
+            ),
+        ],
+    )
+    validated_candidates = {
+        "q2b_1": [_candidate("q2b_1", "p1", "Participants were blinded.")],
+        "q2b_2": [_candidate("q2b_2", "p2", "Personnel were blinded.")],
+        "q2b_3": [_candidate("q2b_3", "p3", "No non-protocol interventions.")],
+        "q2b_4": [_candidate("q2b_4", "p4", "Implementation was stable.")],
+        "q2b_5": [_candidate("q2b_5", "p5", "Adherence was good.")],
+        "q2b_6": [_candidate("q2b_6", "p6", "Analysis was appropriate.")],
+    }
+    llm = _DummyLLM(
+        json.dumps(
+            {
+                "domain_risk": "high",
+                "domain_rationale": "Placeholder.",
+                "answers": [
+                    {
+                        "question_id": "q2b_1",
+                        "answer": "N",
+                        "rationale": "Blinded.",
+                        "evidence": [{"paragraph_id": "p1", "quote": "blinded"}],
+                    },
+                    {
+                        "question_id": "q2b_2",
+                        "answer": "N",
+                        "rationale": "Blinded.",
+                        "evidence": [{"paragraph_id": "p2", "quote": "blinded"}],
+                    },
+                    {
+                        "question_id": "q2b_3",
+                        "answer": "Y",
+                        "rationale": "Balanced.",
+                        "evidence": [{"paragraph_id": "p3", "quote": "balanced"}],
+                    },
+                    {
+                        "question_id": "q2b_4",
+                        "answer": "N",
+                        "rationale": "No failures.",
+                        "evidence": [{"paragraph_id": "p4", "quote": "stable"}],
+                    },
+                    {
+                        "question_id": "q2b_5",
+                        "answer": "N",
+                        "rationale": "Adherence good.",
+                        "evidence": [{"paragraph_id": "p5", "quote": "good"}],
+                    },
+                    {
+                        "question_id": "q2b_6",
+                        "answer": "Y",
+                        "rationale": "Appropriate analysis.",
+                        "evidence": [{"paragraph_id": "p6", "quote": "appropriate"}],
+                    },
+                ],
+            }
+        )
+    )
+    decision = run_domain_reasoning(
+        domain="D2",
+        question_set=question_set,
+        validated_candidates=validated_candidates,
+        llm=cast(ChatModelLike, llm),
+        llm_config=None,
+        effect_type="adherence",
+    )
+
+    assert decision.risk == "low"
+
+
 def test_d3_reasoning_condition_chain_sets_na() -> None:
     question_set = QuestionSet(
         version="test",

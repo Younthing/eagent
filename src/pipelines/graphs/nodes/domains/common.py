@@ -329,6 +329,7 @@ def _normalize_decision(
                 answer = "NA"
             else:
                 answer = "NI"
+        normalized_answers[question.question_id] = answer
 
         rationale = str(raw.rationale).strip() if raw and raw.rationale else ""
         confidence = raw.confidence if raw and raw.confidence is not None else None
