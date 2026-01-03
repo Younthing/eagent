@@ -226,6 +226,16 @@
 * D1–D5 Reasoning Agents
 * decision-tree 对照测试用例
 
+### 当前实现
+
+* D1–D5 领域推理节点已落地，并接入 `rob2_graph`
+* domain risk 由规则树判定（`src/rob2/decision_rules.py`），LLM 仅负责子问题答案与理由
+* D1–D5 单元测试覆盖条件 NA 与规则判定
+
+### 待补项
+
+* 标准 benchmark 论文对齐与评测报告（见 `docs/evaluation/`）
+
 ### DoD
 
 * 对标准 benchmark 论文，domain 判断与专家一致或更保守

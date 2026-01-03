@@ -240,7 +240,7 @@ Notes:
 * **Evidence Location**：并行定位候选证据（FullText / Rule-Based / Retrieval）。
 * **Evidence Fusion**：合并、去重、排序，形成每题 Top-k 证据包。
 * **Evidence Validation**：存在性/相关性/一致性/完整性校验，失败则回到定位层。
-* **Domain Reasoning (D1-D5)**：按 decision-tree 产出每域答案与风险。
+* **Domain Reasoning (D1-D5)**：LLM 产出子问题答案，风险由规则树（`rob2/decision_rules.py`）判定。
 * **Cross-Domain Validator**：检测跨域冲突并触发回滚或重评。
 * **ROB2 Aggregator**：汇总五域与 overall risk，输出结构化结果。
 * **Runtime/Orchestration**：LangGraph 装配、并行调度与中断恢复。
@@ -252,7 +252,7 @@ Notes:
 * **EvidenceCandidate**: `{ question_id, paragraph_id, text, source, score? }`
 * **EvidenceBundle**: `{ question_id, items: list[EvidenceCandidate] }`
 * **ValidatedEvidence**: `{ question_id, items, status, failure_reason? }`
-* **DomainDecision**: `{ domain, answers, risk, evidence_refs }`
+* **DomainDecision**: `{ domain, effect_type?, answers, risk, risk_rationale, missing_questions }`（risk 由规则树判定）
 * **FinalReport**: `{ domain_results, overall_risk, citations, json }`
 
 ### Subsystem vs Package Boundary
