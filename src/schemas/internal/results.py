@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from schemas.internal.decisions import AnswerOption, DomainRisk, EvidenceRef
 from schemas.internal.locator import DomainId
 
+OverallRisk = Literal["low", "some_concerns", "high", "not_applicable"]
+
 
 class CitationUse(BaseModel):
     domain: DomainId
@@ -52,7 +54,7 @@ class Rob2DomainResult(BaseModel):
 
 
 class Rob2OverallResult(BaseModel):
-    risk: DomainRisk
+    risk: OverallRisk
     rationale: str
 
     model_config = ConfigDict(extra="forbid")
@@ -71,9 +73,9 @@ class Rob2FinalOutput(BaseModel):
 __all__ = [
     "Citation",
     "CitationUse",
+    "OverallRisk",
     "Rob2AnswerResult",
     "Rob2DomainResult",
     "Rob2FinalOutput",
     "Rob2OverallResult",
 ]
-

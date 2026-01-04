@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
-from schemas.internal.decisions import DomainDecision, DomainRisk
+from schemas.internal.decisions import DomainDecision
 from schemas.internal.documents import DocStructure
 from schemas.internal.locator import DomainId
 from schemas.internal.results import (
     Citation,
     CitationUse,
+    OverallRisk,
     Rob2AnswerResult,
     Rob2DomainResult,
     Rob2FinalOutput,
@@ -136,23 +137,31 @@ def _sorted_answers(
     return sorted(decision.answers, key=key)
 
 
-def _compute_overall_risk(domains: Sequence[Rob2DomainResult]) -> tuple[DomainRisk, str]:
-    risks = {domain.domain: domain.risk for domain in domains}
-    highs = [d for d, risk in risks.items() if risk == "high"]
-    if highs:
+def _compute_overall_risk(
+    domains: Sequence[Rob2DomainResult],
+) -> tuple[OverallRisk, str]:
+    # ROB2 overall judgement rule (Standard):
+    # 1) If any domain is high -> overall high.
+    # 2) If all domains are low -> overall low.
+    # 3) Else if any domain is some concerns -> overall some concerns.
+    # 4) If no domain results -> not_applicable.
+    if not domains:
+        return "not_applicable", "No domain assessments provided."
+
+    risks = [domain.risk for domain in domains]
+    if any(risk == "high" for risk in risks):
+        highs = [domain.domain for domain in domains if domain.risk == "high"]
         return "high", f"Overall risk is high because {', '.join(highs)} is high."
-    concerns = [d for d, risk in risks.items() if risk == "some_concerns"]
-    if len(concerns) >= 2:
-        return "high", (
-            "Overall risk is high because multiple domains have some concerns: "
-            f"{', '.join(concerns)}."
-        )
+    if all(risk == "low" for risk in risks):
+        return "low", "Overall risk is low because all domains are low."
+    concerns = [domain.domain for domain in domains if domain.risk == "some_concerns"]
     if concerns:
-        return "some_concerns", (
+        return (
+            "some_concerns",
             "Overall risk has some concerns because "
-            f"{', '.join(concerns)} has some concerns."
+            f"{', '.join(concerns)} has some concerns.",
         )
-    return "low", "Overall risk is low because all domains are low."
+    return "not_applicable", "No applicable domain assessments provided."
 
 
 def _sorted_citations(items: Iterable[Citation]) -> List[Citation]:

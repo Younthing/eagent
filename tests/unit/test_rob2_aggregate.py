@@ -72,7 +72,7 @@ def test_aggregate_overall_risk_high_when_multiple_concerns() -> None:
         }
     )
     rob2 = out["rob2_result"]
-    assert rob2["overall"]["risk"] == "high"
+    assert rob2["overall"]["risk"] == "some_concerns"
 
 
 def test_aggregate_builds_citation_index() -> None:

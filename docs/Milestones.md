@@ -279,7 +279,7 @@
 ### 核心任务
 
 * 汇总五域
-* 生成 overall risk
+* 生成 overall risk（遵循 ROB2 Standard 规则）
 * 输出表格 + JSON + 引文索引
 
 ### 当前实现

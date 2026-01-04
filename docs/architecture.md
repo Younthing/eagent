@@ -242,7 +242,7 @@ Notes:
 * **Evidence Validation**：存在性/相关性/一致性/完整性校验，失败则回到定位层。
 * **Domain Reasoning (D1-D5)**：LLM 产出子问题答案，风险由规则树（`rob2/decision_rules.py`）判定。
 * **Full-Text Domain Audit（可选）**：全文审核信号答案，提供引用并补全证据后重跑受影响 domain。
-* **ROB2 Aggregator**：汇总五域与 overall risk，输出结构化结果。
+* **ROB2 Aggregator**：汇总五域与 overall risk（ROB2 Standard 规则），输出结构化结果。
 * **Runtime/Orchestration**：LangGraph 装配、并行调度与中断恢复。
 
 ### Interface Contracts (Data Schemas)
