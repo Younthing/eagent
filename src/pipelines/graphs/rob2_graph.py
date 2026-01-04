@@ -14,6 +14,7 @@ from typing_extensions import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
+from core.config import get_settings
 from pipelines.graphs.nodes.fusion import fusion_node
 from pipelines.graphs.nodes.locators.retrieval_bm25 import bm25_retrieval_locator_node
 from pipelines.graphs.nodes.locators.retrieval_splade import (
@@ -27,13 +28,20 @@ from pipelines.graphs.nodes.domains.d2_deviations import d2_deviations_node
 from pipelines.graphs.nodes.domains.d3_missing_data import d3_missing_data_node
 from pipelines.graphs.nodes.domains.d4_measurement import d4_measurement_node
 from pipelines.graphs.nodes.domains.d5_reporting import d5_reporting_node
-from pipelines.graphs.nodes.domain_audit import domain_audit_node
+from pipelines.graphs.nodes.domain_audit import (
+    d1_audit_node,
+    d2_audit_node,
+    d3_audit_node,
+    d4_audit_node,
+    d5_audit_node,
+    final_domain_audit_node,
+)
 from pipelines.graphs.nodes.aggregate import aggregate_node
 from pipelines.graphs.nodes.validators.completeness import completeness_validator_node
 from pipelines.graphs.nodes.validators.consistency import consistency_validator_node
 from pipelines.graphs.nodes.validators.existence import existence_validator_node
 from pipelines.graphs.nodes.validators.relevance import relevance_validator_node
-from pipelines.graphs.routing import validation_should_retry
+from pipelines.graphs.routing import domain_audit_should_run_final, validation_should_retry
 
 
 class Rob2GraphState(TypedDict, total=False):
@@ -116,8 +124,10 @@ class Rob2GraphState(TypedDict, total=False):
     domain_audit_patch_window: int
     domain_audit_max_patches_per_question: int
     domain_audit_rerun_domains: bool
+    domain_audit_final: bool
     domain_audit_llm: object
     domain_audit_report: dict
+    domain_audit_reports: Annotated[list[dict], operator.add]
 
     rob2_result: dict
     rob2_table_markdown: str
@@ -156,6 +166,7 @@ NodeFn = object
 
 
 def _init_validation_state_node(state: Rob2GraphState) -> dict:
+    settings = get_settings()
     attempt = state.get("validation_attempt")
     max_retries = state.get("validation_max_retries")
     fail_on_consistency = state.get("validation_fail_on_consistency")
@@ -172,6 +183,10 @@ def _init_validation_state_node(state: Rob2GraphState) -> dict:
         if relax_on_retry is None
         else bool(relax_on_retry),
         "validation_retry_log": [],
+        "domain_audit_reports": [],
+        "domain_audit_final": settings.domain_audit_final
+        if state.get("domain_audit_final") is None
+        else bool(state.get("domain_audit_final")),
         "completeness_enforce": False
         if state.get("completeness_enforce") is None
         else bool(state.get("completeness_enforce")),
@@ -287,8 +302,28 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
         cast(Any, overrides.get("d5_reporting") or d5_reporting_node),
     )
     builder.add_node(
-        "domain_audit",
-        cast(Any, overrides.get("domain_audit") or domain_audit_node),
+        "d1_audit",
+        cast(Any, overrides.get("d1_audit") or d1_audit_node),
+    )
+    builder.add_node(
+        "d2_audit",
+        cast(Any, overrides.get("d2_audit") or d2_audit_node),
+    )
+    builder.add_node(
+        "d3_audit",
+        cast(Any, overrides.get("d3_audit") or d3_audit_node),
+    )
+    builder.add_node(
+        "d4_audit",
+        cast(Any, overrides.get("d4_audit") or d4_audit_node),
+    )
+    builder.add_node(
+        "d5_audit",
+        cast(Any, overrides.get("d5_audit") or d5_audit_node),
+    )
+    builder.add_node(
+        "final_domain_audit",
+        cast(Any, overrides.get("final_domain_audit") or final_domain_audit_node),
     )
     builder.add_node(
         "aggregate",
@@ -316,12 +351,21 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
         {"retry": "prepare_retry", "proceed": "d1_randomization"},
     )
     builder.add_edge("prepare_retry", "rule_based_locator")
-    builder.add_edge("d1_randomization", "d2_deviations")
-    builder.add_edge("d2_deviations", "d3_missing_data")
-    builder.add_edge("d3_missing_data", "d4_measurement")
-    builder.add_edge("d4_measurement", "d5_reporting")
-    builder.add_edge("d5_reporting", "domain_audit")
-    builder.add_edge("domain_audit", "aggregate")
+    builder.add_edge("d1_randomization", "d1_audit")
+    builder.add_edge("d1_audit", "d2_deviations")
+    builder.add_edge("d2_deviations", "d2_audit")
+    builder.add_edge("d2_audit", "d3_missing_data")
+    builder.add_edge("d3_missing_data", "d3_audit")
+    builder.add_edge("d3_audit", "d4_measurement")
+    builder.add_edge("d4_measurement", "d4_audit")
+    builder.add_edge("d4_audit", "d5_reporting")
+    builder.add_edge("d5_reporting", "d5_audit")
+    builder.add_conditional_edges(
+        "d5_audit",
+        domain_audit_should_run_final,
+        {"final": "final_domain_audit", "skip": "aggregate"},
+    )
+    builder.add_edge("final_domain_audit", "aggregate")
     builder.add_edge("aggregate", END)
 
     compiled = builder.compile()

@@ -252,13 +252,14 @@
 
 ### 核心任务
 
-* 全文审核模型：输入 `doc_structure.body/sections` + ROB2 领域问题，输出信号答案 + 引用（`paragraph_id` + quote）
-* 与领域代理输出对比：发现不一致/缺失时，产出“弱定位证据”线索
-* 证据补全与重跑：把审核引用转成候选段落，经过存在性约束后合并到 `validated_candidates`，重跑受影响的 domain agent（可开关）
+* 分域审核：每个 domain agent 后紧跟一个 audit（一次只看该域问题）
+* 全文输入：audit 读取 `doc_structure.sections`（paragraph_id + text）并输出信号答案 + 引用（`paragraph_id` + quote）
+* 补全与重跑：发现不一致/缺失时，把审核引用转成候选段落并合并到 `validated_candidates`，**立即重跑本域**（可开关）
+* 可选：D5 后再跑一次 “all domains” final audit（仅做最终一致性报告）
 
 ### 交付物
 
-* `domain_audit_node`（可开关）
+* per-domain audit nodes（`d1_audit_node`…`d5_audit_node`，可开关）+ 可选 `final_domain_audit_node`
 * 审核报告（mismatch 列表、补全证据、重跑域）
 * `.env` / CLI 参数示例
 

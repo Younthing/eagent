@@ -1,15 +1,12 @@
-"""Full-text domain audit + evidence patch node (Milestone 9).
+"""Full-text domain audit + evidence patch nodes (Milestone 9).
 
-This node runs an "audit" LLM with the full parsed document (paragraph_id + text)
-and the ROB2 signaling questions, compares its answers with the evidence-based
-domain agent outputs, and (optionally) patches validated evidence candidates
-before re-running affected domain agents.
+Per-domain audit nodes:
+- Read the full document (`doc_structure.sections`) and ONLY one domain's questions.
+- Compare audit answers with the domain agent answers.
+- Patch `validated_candidates` using audit citations, then immediately re-run that domain.
 
-Design goals:
-- Cost is acceptable: the audit model reads the full document.
-- Safety: audit citations are verified against doc_structure (paragraph_id exists).
-- Non-invasive: does not override answers directly; it adds evidence and re-runs.
-- Switchable: can be disabled via DOMAIN_AUDIT_MODE=none.
+Optional final audit node:
+- Runs once after D5 to audit all domains in a single call (switchable).
 """
 
 from __future__ import annotations
@@ -18,7 +15,7 @@ import json
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple, cast
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -27,10 +24,10 @@ from schemas.internal.decisions import AnswerOption, DomainDecision
 from schemas.internal.documents import DocStructure, SectionSpan
 from schemas.internal.evidence import (
     EvidenceSupport,
-    FusedEvidenceBundle,
     FusedEvidenceCandidate,
     RelevanceVerdict,
 )
+from schemas.internal.locator import DomainId
 from schemas.internal.rob2 import QuestionCondition, QuestionSet, Rob2Question
 from utils.text import normalize_block
 
@@ -96,7 +93,38 @@ def _load_audit_system_prompt() -> str:
     return prompt_path.read_text(encoding="utf-8").strip()
 
 
-def domain_audit_node(state: dict) -> dict:
+def d1_audit_node(state: dict) -> dict:
+    return _run_domain_audit_node(state, domain="D1")
+
+
+def d2_audit_node(state: dict) -> dict:
+    effect_type = str(state.get("d2_effect_type") or "assignment").strip().lower()
+    return _run_domain_audit_node(state, domain="D2", effect_type=effect_type)
+
+
+def d3_audit_node(state: dict) -> dict:
+    return _run_domain_audit_node(state, domain="D3")
+
+
+def d4_audit_node(state: dict) -> dict:
+    return _run_domain_audit_node(state, domain="D4")
+
+
+def d5_audit_node(state: dict) -> dict:
+    return _run_domain_audit_node(state, domain="D5")
+
+
+def final_domain_audit_node(state: dict) -> dict:
+    effect_type = str(state.get("d2_effect_type") or "assignment").strip().lower()
+    return _run_all_domains_audit_node(state, effect_type=effect_type)
+
+
+def _run_domain_audit_node(
+    state: dict,
+    *,
+    domain: DomainId,
+    effect_type: Optional[str] = None,
+) -> dict:
     raw_doc = state.get("doc_structure")
     if raw_doc is None:
         raise ValueError("domain_audit_node requires 'doc_structure'.")
@@ -113,23 +141,207 @@ def domain_audit_node(state: dict) -> dict:
     if not isinstance(raw_candidates, Mapping):
         raise ValueError("validated_candidates must be a mapping")
 
+    mode = _read_audit_mode(state)
+    if mode == "none":
+        report = {"domain": domain, "mode": "none", "enabled": False}
+        return {
+            "domain_audit_reports": [report],
+            "domain_audit_report": report,
+        }
+
+    llm, model_kwargs = _read_audit_llm(state)
+    patch_window, max_patches = _read_patch_config(state)
+    rerun_enabled = _read_rerun_enabled(state)
+
+    audit_questions = _select_domain_questions(
+        question_set, domain=domain, effect_type=effect_type
+    )
+    messages = _build_messages(
+        system_prompt=_load_audit_system_prompt(),
+        user_prompt=_build_user_prompt(audit_questions, doc_structure),
+    )
+    audit_output = _invoke_audit_model(llm=llm, messages=messages, **model_kwargs)
+
+    audit_answer_map, audit_evidence_map, audit_confidence_map = _normalize_audit_answers(
+        audit_questions, audit_output
+    )
+    domain_answer_map = _domain_answer_map_from_state(state, domain=domain)
+
+    mismatches = _compute_mismatches(
+        audit_questions,
+        audit_answer_map,
+        domain_answer_map,
+        audit_confidence_map,
+        audit_evidence_map,
+        domain=domain,
+    )
+
+    spans = list(doc_structure.sections)
+    spans_by_pid = {span.paragraph_id: span for span in spans}
+    index_by_pid = {span.paragraph_id: idx for idx, span in enumerate(spans)}
+
+    updated_candidates: Dict[str, List[dict]] = {
+        k: list(v) if isinstance(v, list) else [] for k, v in raw_candidates.items()
+    }
+    patches_applied: Dict[str, List[dict]] = {}
+
+    for mismatch in mismatches:
+        question_id = mismatch["question_id"]
+        evidence = cast(List[dict], mismatch.get("audit_evidence") or [])
+        patch = _build_patch_candidates(
+            question_id,
+            evidence,
+            spans=spans,
+            spans_by_pid=spans_by_pid,
+            index_by_pid=index_by_pid,
+            window=patch_window,
+            limit=max_patches,
+        )
+        if not patch:
+            continue
+        merged = [*patch, *(updated_candidates.get(question_id) or [])]
+        deduped: List[dict] = []
+        seen: set[str] = set()
+        for item in merged:
+            if not isinstance(item, dict):
+                continue
+            pid = item.get("paragraph_id")
+            if not isinstance(pid, str) or not pid.strip():
+                continue
+            if pid in seen:
+                continue
+            seen.add(pid)
+            deduped.append(item)
+        updated_candidates[question_id] = deduped
+        patches_applied[question_id] = patch
+
+    report: dict[str, Any] = {
+        "domain": domain,
+        "mode": "llm",
+        "enabled": True,
+        **_report_model_fields(model_kwargs),
+        "audited_questions": len(audit_questions),
+        "mismatches": mismatches,
+        "patch_window": patch_window,
+        "patches_applied": {qid: len(items) for qid, items in patches_applied.items()},
+        "rerun_enabled": rerun_enabled,
+    }
+
+    updates: Dict[str, Any] = {
+        "validated_candidates": updated_candidates,
+        "domain_audit_reports": [report],
+        "domain_audit_report": report,
+    }
+
+    if rerun_enabled and patches_applied:
+        updates.update(_rerun_domain_agent(state, updated_candidates, domain))
+        report["domain_rerun"] = True
+    else:
+        report["domain_rerun"] = False
+    return updates
+
+
+def _run_all_domains_audit_node(state: dict, *, effect_type: str) -> dict:
+    """Optional final audit: one audit call across all domains."""
+    raw_doc = state.get("doc_structure")
+    if raw_doc is None:
+        raise ValueError("domain_audit_node requires 'doc_structure'.")
+    doc_structure = DocStructure.model_validate(raw_doc)
+
+    raw_questions = state.get("question_set")
+    if raw_questions is None:
+        raise ValueError("domain_audit_node requires 'question_set'.")
+    question_set = QuestionSet.model_validate(raw_questions)
+
+    mode = _read_audit_mode(state)
+    if mode == "none":
+        report = {"domain": "ALL", "mode": "none", "enabled": False}
+        return {"domain_audit_reports": [report], "domain_audit_report": report}
+
+    llm, model_kwargs = _read_audit_llm(state)
+
+    audit_questions = _select_all_questions(question_set, effect_type=effect_type)
+    messages = _build_messages(
+        system_prompt=_load_audit_system_prompt(),
+        user_prompt=_build_user_prompt(audit_questions, doc_structure),
+    )
+    audit_output = _invoke_audit_model(llm=llm, messages=messages, **model_kwargs)
+
+    audit_answer_map, audit_evidence_map, audit_confidence_map = _normalize_audit_answers(
+        audit_questions, audit_output
+    )
+    domain_answer_map = _domain_answer_map_from_state(state, domain=None)
+    mismatches = _compute_mismatches(
+        audit_questions,
+        audit_answer_map,
+        domain_answer_map,
+        audit_confidence_map,
+        audit_evidence_map,
+        domain=None,
+    )
+
+    report: dict[str, Any] = {
+        "domain": "ALL",
+        "mode": "llm",
+        "enabled": True,
+        **_report_model_fields(model_kwargs),
+        "audited_questions": len(audit_questions),
+        "mismatches": mismatches,
+    }
+    return {
+        "domain_audit_reports": [report],
+        "domain_audit_report": report,
+    }
+
+
+def _select_all_questions(question_set: QuestionSet, *, effect_type: str) -> List[Rob2Question]:
+    normalized_effect = effect_type.strip().lower()
+    questions: List[Rob2Question] = []
+    for question in question_set.questions:
+        if question.domain != "D2":
+            questions.append(question)
+            continue
+        if (question.effect_type or "assignment").strip().lower() == normalized_effect:
+            questions.append(question)
+    return sorted(questions, key=lambda q: (q.domain, q.order))
+
+
+def _select_domain_questions(
+    question_set: QuestionSet,
+    *,
+    domain: DomainId,
+    effect_type: Optional[str],
+) -> List[Rob2Question]:
+    questions: List[Rob2Question] = []
+    normalized_effect = (effect_type or "assignment").strip().lower()
+    for question in question_set.questions:
+        if question.domain != domain:
+            continue
+        if domain == "D2":
+            if (question.effect_type or "assignment").strip().lower() != normalized_effect:
+                continue
+        questions.append(question)
+    return sorted(questions, key=lambda q: q.order)
+
+
+def _read_audit_mode(state: Mapping[str, Any]) -> AuditMode:
     mode = str(state.get("domain_audit_mode") or get_settings().domain_audit_mode or "none").strip().lower()
     if mode in {"0", "false", "off"}:
         mode = "none"
     if mode not in {"none", "llm"}:
         raise ValueError("domain_audit_mode must be 'none' or 'llm'")
+    return mode
 
-    if mode == "none":
-        return {
-            "domain_audit_report": {
-                "mode": "none",
-                "enabled": False,
-            }
-        }
 
-    llm = state.get("domain_audit_llm")
+def _read_audit_llm(state: Mapping[str, Any]) -> tuple[Optional[ChatModelLike], dict[str, Any]]:
+    llm = cast(Optional[ChatModelLike], state.get("domain_audit_llm"))
     settings = get_settings()
-    model_id = str(state.get("domain_audit_model") or settings.domain_audit_model or settings.d1_model or "").strip()
+    model_id = str(
+        state.get("domain_audit_model")
+        or settings.domain_audit_model
+        or settings.d1_model
+        or ""
+    ).strip()
     model_provider = state.get("domain_audit_model_provider") or settings.domain_audit_model_provider
     temperature = (
         settings.domain_audit_temperature
@@ -153,122 +365,43 @@ def domain_audit_node(state: dict) -> dict:
     )
 
     if llm is None and not model_id:
-        raise ValueError(
-            "Missing audit model (set DOMAIN_AUDIT_MODEL or provide state['domain_audit_llm'])."
-        )
+        raise ValueError("Missing audit model (set DOMAIN_AUDIT_MODEL or provide state['domain_audit_llm']).")
 
+    return llm, {
+        "model_id": model_id,
+        "model_provider": str(model_provider) if model_provider else None,
+        "temperature": temperature,
+        "timeout": timeout,
+        "max_tokens": max_tokens,
+        "max_retries": max_retries,
+    }
+
+
+def _report_model_fields(model_kwargs: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "model": model_kwargs.get("model_id"),
+        "model_provider": model_kwargs.get("model_provider"),
+    }
+
+
+def _read_patch_config(state: Mapping[str, Any]) -> tuple[int, int]:
+    settings = get_settings()
     patch_window = int(state.get("domain_audit_patch_window") or settings.domain_audit_patch_window or 0)
-    max_patches_per_question = int(
+    max_patches = int(
         state.get("domain_audit_max_patches_per_question")
         or settings.domain_audit_max_patches_per_question
         or 3
     )
-    rerun_domains = bool(
+    return patch_window, max_patches
+
+
+def _read_rerun_enabled(state: Mapping[str, Any]) -> bool:
+    settings = get_settings()
+    return bool(
         settings.domain_audit_rerun_domains
         if state.get("domain_audit_rerun_domains") is None
         else bool(state.get("domain_audit_rerun_domains"))
     )
-
-    audit_questions = _select_audit_questions(question_set, effect_type=str(state.get("d2_effect_type") or "assignment"))
-    messages = _build_messages(
-        system_prompt=_load_audit_system_prompt(),
-        user_prompt=_build_user_prompt(audit_questions, doc_structure),
-    )
-    audit_output = _invoke_audit_model(
-        llm=cast(Optional[ChatModelLike], llm),
-        model_id=model_id,
-        model_provider=str(model_provider) if model_provider else None,
-        temperature=temperature,
-        timeout=timeout,
-        max_tokens=max_tokens,
-        max_retries=max_retries,
-        messages=messages,
-    )
-
-    audit_answer_map, audit_evidence_map, audit_confidence_map = _normalize_audit_answers(
-        audit_questions, audit_output
-    )
-    domain_answer_map = _domain_answer_map_from_state(state)
-
-    mismatches = _compute_mismatches(audit_questions, audit_answer_map, domain_answer_map, audit_confidence_map, audit_evidence_map)
-
-    spans = list(doc_structure.sections)
-    spans_by_pid = {span.paragraph_id: span for span in spans}
-    index_by_pid = {span.paragraph_id: idx for idx, span in enumerate(spans)}
-
-    updated_candidates: Dict[str, List[dict]] = {k: list(v) if isinstance(v, list) else [] for k, v in raw_candidates.items()}
-    patches_applied: Dict[str, List[dict]] = {}
-    domains_to_rerun: Set[str] = set()
-
-    for mismatch in mismatches:
-        question_id = mismatch["question_id"]
-        evidence = cast(List[dict], mismatch.get("audit_evidence") or [])
-        patch = _build_patch_candidates(
-            question_id,
-            evidence,
-            spans=spans,
-            spans_by_pid=spans_by_pid,
-            index_by_pid=index_by_pid,
-            window=patch_window,
-            limit=max_patches_per_question,
-        )
-        if not patch:
-            continue
-
-        merged = [*patch, *(updated_candidates.get(question_id) or [])]
-        deduped: List[dict] = []
-        seen: set[str] = set()
-        for item in merged:
-            if not isinstance(item, dict):
-                continue
-            pid = item.get("paragraph_id")
-            if not isinstance(pid, str) or not pid.strip():
-                continue
-            if pid in seen:
-                continue
-            seen.add(pid)
-            deduped.append(item)
-        updated_candidates[question_id] = deduped
-        patches_applied[question_id] = patch
-        domains_to_rerun.add(str(mismatch.get("domain") or "").strip() or "unknown")
-
-    updates: Dict[str, Any] = {
-        "validated_candidates": updated_candidates,
-        "domain_audit_report": {
-            "mode": "llm",
-            "enabled": True,
-            "model": model_id,
-            "model_provider": model_provider,
-            "audited_questions": len(audit_questions),
-            "mismatches": mismatches,
-            "patch_window": patch_window,
-            "patches_applied": {qid: len(items) for qid, items in patches_applied.items()},
-            "rerun_enabled": rerun_domains,
-        },
-    }
-
-    if patches_applied:
-        top_k = int(state.get("validated_top_k") or state.get("top_k") or 5)
-        updates["validated_evidence"] = _rebuild_validated_evidence(updated_candidates, audit_questions, top_k=top_k)
-
-    if rerun_domains and patches_applied:
-        rerun_out = _rerun_domain_agents(state, updated_candidates, domains_to_rerun)
-        updates.update(rerun_out)
-        updates["domain_audit_report"]["domains_rerun"] = sorted(domains_to_rerun)
-
-    return updates
-
-
-def _select_audit_questions(question_set: QuestionSet, *, effect_type: str) -> List[Rob2Question]:
-    normalized_effect = effect_type.strip().lower()
-    questions: List[Rob2Question] = []
-    for question in question_set.questions:
-        if question.domain != "D2":
-            questions.append(question)
-            continue
-        if (question.effect_type or "assignment").strip().lower() == normalized_effect:
-            questions.append(question)
-    return sorted(questions, key=lambda q: (q.domain, q.order))
 
 
 def _build_user_prompt(questions: Sequence[Rob2Question], doc_structure: DocStructure) -> str:
@@ -435,7 +568,11 @@ def _conditions_met(
     return False
 
 
-def _domain_answer_map_from_state(state: Mapping[str, Any]) -> dict[str, AnswerOption]:
+def _domain_answer_map_from_state(
+    state: Mapping[str, Any],
+    *,
+    domain: DomainId | None,
+) -> dict[str, AnswerOption]:
     answer_map: Dict[str, AnswerOption] = {}
     for key in ("d1_decision", "d2_decision", "d3_decision", "d4_decision", "d5_decision"):
         raw = state.get(key)
@@ -444,6 +581,8 @@ def _domain_answer_map_from_state(state: Mapping[str, Any]) -> dict[str, AnswerO
         try:
             decision = DomainDecision.model_validate(raw)
         except Exception:
+            continue
+        if domain is not None and decision.domain != domain:
             continue
         for answer in decision.answers:
             answer_map[answer.question_id] = answer.answer
@@ -456,6 +595,8 @@ def _compute_mismatches(
     domain_answers: Mapping[str, AnswerOption],
     confidence_map: Mapping[str, Optional[float]],
     evidence_map: Mapping[str, List[dict]],
+    *,
+    domain: DomainId | None,
 ) -> List[dict]:
     mismatches: List[dict] = []
     for q in questions:
@@ -469,7 +610,7 @@ def _compute_mismatches(
         mismatches.append(
             {
                 "question_id": qid,
-                "domain": q.domain,
+                "domain": domain or q.domain,
                 "effect_type": q.effect_type,
                 "domain_answer": domain_answer,
                 "audit_answer": audit_answer,
@@ -624,44 +765,29 @@ def _quote_in_text(quote: str, text: str) -> bool:
     return folded_quote.lower() in folded_text.lower()
 
 
-def _rebuild_validated_evidence(
-    validated_candidates: Mapping[str, Sequence[dict]],
-    questions: Sequence[Rob2Question],
-    *,
-    top_k: int,
-) -> List[dict]:
-    ordered_qids = [q.question_id for q in questions]
-    ordered_qids.extend(sorted(set(validated_candidates.keys()) - set(ordered_qids)))
-
-    bundles: List[dict] = []
-    for question_id in ordered_qids:
-        raw_list = validated_candidates.get(question_id) or []
-        parsed = [FusedEvidenceCandidate.model_validate(item) for item in raw_list[:top_k]]
-        bundles.append(FusedEvidenceBundle(question_id=question_id, items=parsed).model_dump())
-    return bundles
-
-
-def _rerun_domain_agents(
+def _rerun_domain_agent(
     state: Mapping[str, Any],
     validated_candidates: Mapping[str, Sequence[dict]],
-    domains_to_rerun: Set[str],
+    domain: DomainId,
 ) -> dict:
-    # Re-run only the affected domain agent nodes, using the patched validated_candidates.
     base_state: dict = dict(state)
     base_state["validated_candidates"] = dict(validated_candidates)
-
-    updates: Dict[str, Any] = {}
-    if "D1" in domains_to_rerun:
-        updates.update(d1_randomization_node(base_state))
-    if "D2" in domains_to_rerun:
-        updates.update(d2_deviations_node(base_state))
-    if "D3" in domains_to_rerun:
-        updates.update(d3_missing_data_node(base_state))
-    if "D4" in domains_to_rerun:
-        updates.update(d4_measurement_node(base_state))
-    if "D5" in domains_to_rerun:
-        updates.update(d5_reporting_node(base_state))
-    return updates
+    if domain == "D1":
+        return d1_randomization_node(base_state)
+    if domain == "D2":
+        return d2_deviations_node(base_state)
+    if domain == "D3":
+        return d3_missing_data_node(base_state)
+    if domain == "D4":
+        return d4_measurement_node(base_state)
+    return d5_reporting_node(base_state)
 
 
-__all__ = ["domain_audit_node"]
+__all__ = [
+    "d1_audit_node",
+    "d2_audit_node",
+    "d3_audit_node",
+    "d4_audit_node",
+    "d5_audit_node",
+    "final_domain_audit_node",
+]

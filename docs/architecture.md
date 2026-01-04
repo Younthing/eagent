@@ -45,7 +45,7 @@ flowchart TD
   end
 
   subgraph Audit
-    K[Full-Text Domain Audit<br/>patch evidence + rerun]
+    K[Per-domain Full-Text Audit<br/>patch evidence + rerun]
   end
 
   subgraph Aggregation

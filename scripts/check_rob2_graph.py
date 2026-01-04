@@ -96,6 +96,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=True,
         help="Re-run affected domain agents after applying audit patches.",
     )
+    parser.add_argument(
+        "--audit-final",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Run one optional final audit over all domains after D5.",
+    )
     parser.add_argument("--json", action="store_true", help="Print final state JSON.")
     return parser
 
@@ -132,6 +138,7 @@ def main() -> int:
             "domain_audit_mode": args.domain_audit,
             "domain_audit_patch_window": args.audit_window,
             "domain_audit_rerun_domains": bool(args.audit_rerun),
+            "domain_audit_final": bool(args.audit_final),
         }
     )
 

@@ -10,12 +10,13 @@
 - 进一步增加强制性硬规则（除已实现的决策树风险判定外）会导致系统复杂度上升、可维护性下降。
 
 决策
-- 将 Milestone 9 定义为**可开关的全文审核层**：
-  1. 审核模型输入 `doc_structure.sections`（全文段落 + `paragraph_id`）与 ROB2 子问题清单。
+- 将 Milestone 9 定义为**可开关的全文审核层（按域执行）**：
+  1. 每个 domain agent 后紧跟一个 audit（一次只审该域问题），审核模型输入 `doc_structure.sections`（全文段落 + `paragraph_id`）与该域子问题清单。
   2. 输出每个子问题的信号答案（Y/PY/PN/N/NI/NA）与引用（`paragraph_id` + 原文 quote）。
-  3. 与 domain agent 的信号答案对比；如发现不一致/缺失，使用审核引用生成“弱定位证据”候选段落。
+  3. 与该域 domain agent 的信号答案对比；如发现不一致/缺失，使用审核引用生成“弱定位证据”候选段落。
   4. 候选段落必须通过确定性校验（`paragraph_id` 存在；quote 可选但若提供必须匹配原文）后，合并到 `validated_candidates`。
-  5. 在不直接覆盖答案的前提下，**重跑受影响的 domain agent**，让最终答案仍由“证据驱动的 domain agent + 决策树规则”产出。
+  5. 在不直接覆盖答案的前提下，**立即重跑本域 domain agent**，让最终答案仍由“证据驱动的 domain agent + 决策树规则”产出。
+- 可选：D5 后增加一次 final all-domain audit（只输出报告，不重跑），用于最终一致性复核。
 - 默认关闭（不影响现有流程），通过 `.env` / CLI 开关启用。
 
 影响
@@ -33,4 +34,3 @@
 - `src/pipelines/graphs/rob2_graph.py`
 - `src/core/config.py`、`.env.example`
 - `tests/unit/test_domain_audit.py`
-

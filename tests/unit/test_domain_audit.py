@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from pipelines.graphs.nodes.domain_audit import domain_audit_node
+from pipelines.graphs.nodes.domain_audit import d1_audit_node
 from schemas.internal.decisions import DomainAnswer, DomainDecision
 from schemas.internal.documents import DocStructure, SectionSpan
 from schemas.internal.rob2 import QuestionSet, Rob2Question
@@ -45,7 +45,7 @@ def test_domain_audit_disabled_is_noop() -> None:
             )
         ],
     )
-    out = domain_audit_node(
+    out = d1_audit_node(
         {
             "doc_structure": doc.model_dump(),
             "question_set": question_set.model_dump(),
@@ -54,6 +54,9 @@ def test_domain_audit_disabled_is_noop() -> None:
         }
     )
     assert out["domain_audit_report"]["enabled"] is False
+    assert out["domain_audit_report"]["domain"] == "D1"
+    assert isinstance(out["domain_audit_reports"], list)
+    assert out["domain_audit_reports"][0]["domain"] == "D1"
 
 
 def test_domain_audit_patches_evidence_and_reruns_domain() -> None:
@@ -130,7 +133,7 @@ def test_domain_audit_patches_evidence_and_reruns_domain() -> None:
         )
     )
 
-    out = domain_audit_node(
+    out = d1_audit_node(
         {
             "doc_structure": doc.model_dump(),
             "question_set": question_set.model_dump(),
@@ -148,11 +151,11 @@ def test_domain_audit_patches_evidence_and_reruns_domain() -> None:
     report = out["domain_audit_report"]
     assert report["enabled"] is True
     assert report["patches_applied"]["q1"] == 1
-    assert report["domains_rerun"] == ["D1"]
+    assert report["domain_rerun"] is True
+    assert out["domain_audit_reports"][0]["domain"] == "D1"
 
     validated = out["validated_candidates"]["q1"]
     assert validated[0]["paragraph_id"] == "p1"
 
     updated_decision = DomainDecision.model_validate(out["d1_decision"])
     assert updated_decision.answers[0].answer == "Y"
-

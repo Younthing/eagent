@@ -43,4 +43,15 @@ def validation_should_retry(state: Mapping[str, Any]) -> Literal["retry", "proce
     return "retry"
 
 
-__all__ = ["validation_should_retry"]
+def domain_audit_should_run_final(state: Mapping[str, Any]) -> Literal["final", "skip"]:
+    """Route after per-domain audits to optionally run a final all-domain audit."""
+    mode = str(state.get("domain_audit_mode") or "none").strip().lower()
+    if mode in {"0", "false", "off"}:
+        mode = "none"
+    if mode == "none":
+        return "skip"
+    enabled = _truthy(state.get("domain_audit_final"), False)
+    return "final" if enabled else "skip"
+
+
+__all__ = ["domain_audit_should_run_final", "validation_should_retry"]

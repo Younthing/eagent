@@ -1,6 +1,15 @@
 """Graph node implementations."""
 
+from .aggregate import aggregate_node  # noqa: F401
 from .fusion import fusion_node  # noqa: F401
+from .domain_audit import (  # noqa: F401
+    d1_audit_node,
+    d2_audit_node,
+    d3_audit_node,
+    d4_audit_node,
+    d5_audit_node,
+    final_domain_audit_node,
+)
 from .locators import bm25_retrieval_locator_node  # noqa: F401
 from .locators import rule_based_locator_node  # noqa: F401
 from .locators import splade_retrieval_locator_node  # noqa: F401
@@ -18,12 +27,19 @@ from .domains import (  # noqa: F401
 )
 
 __all__ = [
+    "aggregate_node",
     "bm25_retrieval_locator_node",
     "completeness_validator_node",
     "consistency_validator_node",
+    "d1_audit_node",
     "d1_randomization_node",
+    "d2_audit_node",
     "d2_deviations_node",
+    "d3_audit_node",
+    "d4_audit_node",
+    "d5_audit_node",
     "existence_validator_node",
+    "final_domain_audit_node",
     "fusion_node",
     "planner_node",
     "preprocess_node",

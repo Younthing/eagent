@@ -221,9 +221,6 @@ def test_rob2_workflow_retries_on_consistency_fail_and_recovers() -> None:
             }
         }
 
-    def domain_audit_stub(_state: dict) -> dict:
-        return {"domain_audit_report": {"mode": "none", "enabled": False}}
-
     app = build_rob2_graph(
         node_overrides={
             "preprocess": preprocess_stub,
@@ -236,7 +233,6 @@ def test_rob2_workflow_retries_on_consistency_fail_and_recovers() -> None:
             "d3_missing_data": d3_stub,
             "d4_measurement": d4_stub,
             "d5_reporting": d5_stub,
-            "domain_audit": domain_audit_stub,
         }
     )
 
