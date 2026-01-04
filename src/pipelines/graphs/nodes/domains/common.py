@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, TYPE_
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from core.config import get_settings
 from rob2.decision_rules import evaluate_domain_risk
 from schemas.internal.decisions import (
     AnswerOption,
@@ -442,52 +441,67 @@ def build_reasoning_config(
     )
 
 
-def get_domain_defaults(domain: DomainId) -> dict[str, Any]:
-    settings = get_settings()
-    if domain == "D1":
-        return {
-            "model": settings.d1_model or "",
-            "model_provider": settings.d1_model_provider,
-            "temperature": settings.d1_temperature,
-            "timeout": settings.d1_timeout,
-            "max_tokens": settings.d1_max_tokens,
-            "max_retries": settings.d1_max_retries,
-        }
-    if domain == "D2":
-        return {
-            "model": settings.d2_model or "",
-            "model_provider": settings.d2_model_provider,
-            "temperature": settings.d2_temperature,
-            "timeout": settings.d2_timeout,
-            "max_tokens": settings.d2_max_tokens,
-            "max_retries": settings.d2_max_retries,
-        }
-    if domain == "D3":
-        return {
-            "model": settings.d3_model or "",
-            "model_provider": settings.d3_model_provider,
-            "temperature": settings.d3_temperature,
-            "timeout": settings.d3_timeout,
-            "max_tokens": settings.d3_max_tokens,
-            "max_retries": settings.d3_max_retries,
-        }
-    if domain == "D4":
-        return {
-            "model": settings.d4_model or "",
-            "model_provider": settings.d4_model_provider,
-            "temperature": settings.d4_temperature,
-            "timeout": settings.d4_timeout,
-            "max_tokens": settings.d4_max_tokens,
-            "max_retries": settings.d4_max_retries,
-        }
-    return {
-        "model": settings.d5_model or "",
-        "model_provider": settings.d5_model_provider,
-        "temperature": settings.d5_temperature,
-        "timeout": settings.d5_timeout,
-        "max_tokens": settings.d5_max_tokens,
-        "max_retries": settings.d5_max_retries,
+def read_domain_llm_config(
+    state: Mapping[str, Any],
+    *,
+    prefix: str,
+    default_temperature: float = 0.0,
+    default_max_retries: int = 2,
+) -> tuple[LLMReasoningConfig, dict[str, Any]]:
+    model_id = _read_str(state.get(f"{prefix}_model"))
+    model_provider = _read_str(state.get(f"{prefix}_model_provider"))
+    temperature = _read_float(state.get(f"{prefix}_temperature"), default_temperature)
+    timeout = _read_optional_float(state.get(f"{prefix}_timeout"))
+    max_tokens = _read_optional_int(state.get(f"{prefix}_max_tokens"))
+    max_retries = _read_int(state.get(f"{prefix}_max_retries"), default_max_retries)
+
+    config = LLMReasoningConfig(
+        model=model_id or "",
+        model_provider=model_provider,
+        temperature=temperature,
+        timeout=timeout,
+        max_tokens=max_tokens,
+        max_retries=max_retries,
+    )
+    return config, {
+        "model": model_id or "",
+        "model_provider": model_provider,
+        "temperature": temperature,
+        "timeout": timeout,
+        "max_tokens": max_tokens,
+        "max_retries": max_retries,
     }
+
+
+def _read_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _read_int(value: Any, default: int) -> int:
+    if value is None:
+        return int(default)
+    return int(str(value))
+
+
+def _read_optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    return int(str(value))
+
+
+def _read_float(value: Any, default: float) -> float:
+    if value is None:
+        return float(default)
+    return float(str(value))
+
+
+def _read_optional_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    return float(str(value))
 
 
 __all__ = [
@@ -496,6 +510,6 @@ __all__ = [
     "LLMReasoningConfig",
     "build_domain_prompts",
     "build_reasoning_config",
-    "get_domain_defaults",
+    "read_domain_llm_config",
     "run_domain_reasoning",
 ]

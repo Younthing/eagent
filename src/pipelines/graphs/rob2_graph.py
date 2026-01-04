@@ -14,7 +14,6 @@ from typing_extensions import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from core.config import get_settings
 from pipelines.graphs.nodes.fusion import fusion_node
 from pipelines.graphs.nodes.locators.retrieval_bm25 import bm25_retrieval_locator_node
 from pipelines.graphs.nodes.locators.retrieval_splade import (
@@ -48,23 +47,56 @@ class Rob2GraphState(TypedDict, total=False):
     pdf_path: str
     doc_structure: dict
     question_set: dict
+    docling_layout_model: str
+    docling_artifacts_path: str
+    docling_chunker_model: str
+    docling_chunker_max_tokens: int
 
     top_k: int
     per_query_top_n: int
     rrf_k: int
     query_planner: Literal["deterministic", "llm"]
+    query_planner_model: str
+    query_planner_model_provider: str
+    query_planner_temperature: float
+    query_planner_timeout: float
+    query_planner_max_tokens: int
+    query_planner_max_retries: int
+    query_planner_max_keywords: int
     reranker: Literal["none", "cross_encoder"]
+    reranker_model_id: str
+    reranker_device: str
+    reranker_max_length: int
+    reranker_batch_size: int
+    rerank_top_n: int
     use_structure: bool
+    section_bonus_weight: float
     splade_model_id: str
+    splade_device: str
+    splade_hf_token: str
+    splade_query_max_length: int
+    splade_doc_max_length: int
+    splade_batch_size: int
 
     fusion_top_k: int
     fusion_rrf_k: int
+    fusion_engine_weights: dict
 
     relevance_mode: Literal["none", "llm"]
     relevance_validator: dict
+    relevance_config: dict
+    relevance_debug: dict
     relevance_min_confidence: float
     relevance_require_quote: bool
     relevance_fill_to_top_k: bool
+    relevance_top_k: int
+    relevance_top_n: int
+    relevance_model: str
+    relevance_model_provider: str
+    relevance_temperature: float
+    relevance_timeout: float
+    relevance_max_tokens: int
+    relevance_max_retries: int
     relevance_llm: object
     d1_model: str
     d1_model_provider: str
@@ -76,10 +108,21 @@ class Rob2GraphState(TypedDict, total=False):
 
     existence_require_text_match: bool
     existence_require_quote_in_source: bool
+    existence_top_k: int
 
     consistency_mode: Literal["none", "llm"]
     consistency_validator: dict
+    consistency_config: dict
+    consistency_reports: dict
     consistency_min_confidence: float
+    consistency_require_quotes_for_fail: bool
+    consistency_top_n: int
+    consistency_model: str
+    consistency_model_provider: str
+    consistency_temperature: float
+    consistency_timeout: float
+    consistency_max_tokens: int
+    consistency_max_retries: int
     consistency_llm: object
     d2_model: str
     d2_model_provider: str
@@ -135,17 +178,22 @@ class Rob2GraphState(TypedDict, total=False):
     completeness_enforce: bool
     completeness_min_passed_per_question: int
     completeness_require_relevance: bool
+    completeness_required_questions: list[str]
+    validated_top_k: int
     domain_evidence_top_k: int
 
     rule_based_candidates: dict
     bm25_candidates: dict
     splade_candidates: dict
+    fulltext_candidates: dict
     fusion_candidates: dict
     relevance_candidates: dict
     existence_candidates: dict
 
     validated_evidence: list[dict]
     validated_candidates: dict
+    completeness_report: list[dict]
+    completeness_config: dict
     completeness_passed: bool
     completeness_failed_questions: list[str]
     consistency_failed_questions: list[str]
@@ -166,7 +214,6 @@ NodeFn = object
 
 
 def _init_validation_state_node(state: Rob2GraphState) -> dict:
-    settings = get_settings()
     attempt = state.get("validation_attempt")
     max_retries = state.get("validation_max_retries")
     fail_on_consistency = state.get("validation_fail_on_consistency")
@@ -184,7 +231,7 @@ def _init_validation_state_node(state: Rob2GraphState) -> dict:
         else bool(relax_on_retry),
         "validation_retry_log": [],
         "domain_audit_reports": [],
-        "domain_audit_final": settings.domain_audit_final
+        "domain_audit_final": False
         if state.get("domain_audit_final") is None
         else bool(state.get("domain_audit_final")),
         "completeness_enforce": False

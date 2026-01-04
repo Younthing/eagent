@@ -14,7 +14,6 @@ from core.config import get_settings
 from pipelines.graphs.nodes.domains.common import (
     build_domain_prompts,
     build_reasoning_config,
-    get_domain_defaults,
     run_domain_reasoning,
 )
 from pipelines.graphs.nodes.fusion import fusion_node
@@ -501,20 +500,20 @@ def _run_d1(
     if question_set is None:
         return "{}", "Question set missing."
 
-    defaults = get_domain_defaults("D1")
-    model_id = str(defaults["model"] or "").strip()
+    settings = get_settings()
+    model_id = str(settings.d1_model or "").strip()
     if not model_id:
         return "{}", "Missing D1 model (set D1_MODEL)."
 
     config = build_reasoning_config(
         model_id=model_id,
-        model_provider=defaults["model_provider"],
-        temperature=float(defaults["temperature"]),
-        timeout=float(defaults["timeout"]) if defaults["timeout"] is not None else None,
-        max_tokens=int(defaults["max_tokens"])
-        if defaults["max_tokens"] is not None
+        model_provider=settings.d1_model_provider,
+        temperature=float(settings.d1_temperature),
+        timeout=float(settings.d1_timeout) if settings.d1_timeout is not None else None,
+        max_tokens=int(settings.d1_max_tokens)
+        if settings.d1_max_tokens is not None
         else None,
-        max_retries=int(defaults["max_retries"]),
+        max_retries=int(settings.d1_max_retries),
     )
 
     system_prompt_value = system_prompt if mode == "custom" else None

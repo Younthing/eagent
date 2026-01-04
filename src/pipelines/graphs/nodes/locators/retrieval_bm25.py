@@ -10,7 +10,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
-from core.config import get_settings
 from retrieval.engines.bm25 import BM25Hit, BM25Index, build_bm25_index
 from retrieval.engines.fusion import rrf_fuse
 from retrieval.query_planning.llm import LLMQueryPlannerConfig, generate_query_plan_llm
@@ -25,6 +24,15 @@ from rob2.locator_rules import get_locator_rules
 from schemas.internal.documents import DocStructure
 from schemas.internal.evidence import EvidenceBundle, EvidenceCandidate
 from schemas.internal.rob2 import QuestionSet
+
+
+_DEFAULT_QUERY_PLANNER_TEMPERATURE = 0.0
+_DEFAULT_QUERY_PLANNER_MAX_RETRIES = 2
+_DEFAULT_QUERY_PLANNER_MAX_KEYWORDS = 10
+_DEFAULT_RERANKER_MAX_LENGTH = 512
+_DEFAULT_RERANKER_BATCH_SIZE = 8
+_DEFAULT_RERANKER_TOP_N = 50
+_DEFAULT_SECTION_BONUS_WEIGHT = 0.25
 
 
 @dataclass(frozen=True)
@@ -49,7 +57,6 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
     doc_structure = DocStructure.model_validate(raw_doc)
     question_set = QuestionSet.model_validate(raw_questions)
 
-    settings = get_settings()
     rules = get_locator_rules()
     planner_requested = str(state.get("query_planner") or "deterministic").strip().lower()
     if planner_requested not in {"deterministic", "llm"}:
@@ -62,43 +69,36 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
     planner_model_provider: str | None = None
 
     if planner_requested == "llm":
-        planner_model = str(
-            state.get("query_planner_model") or settings.query_planner_model or ""
-        ).strip()
-        planner_model_provider = (
-            state.get("query_planner_model_provider")
-            or settings.query_planner_model_provider
-        )
+        planner_model = str(state.get("query_planner_model") or "").strip()
+        planner_model_provider = state.get("query_planner_model_provider")
         temperature_raw = state.get("query_planner_temperature")
         planner_temperature = (
-            settings.query_planner_temperature
+            _DEFAULT_QUERY_PLANNER_TEMPERATURE
             if temperature_raw is None
             else float(str(temperature_raw))
         )
 
         timeout_raw = state.get("query_planner_timeout")
-        planner_timeout = (
-            settings.query_planner_timeout
-            if timeout_raw is None
-            else float(str(timeout_raw))
-        )
+        planner_timeout = None if timeout_raw is None else float(str(timeout_raw))
 
         max_tokens_raw = state.get("query_planner_max_tokens")
         planner_max_tokens = (
-            settings.query_planner_max_tokens
-            if max_tokens_raw is None
-            else int(str(max_tokens_raw))
+            None if max_tokens_raw is None else int(str(max_tokens_raw))
         )
 
         max_retries_raw = state.get("query_planner_max_retries")
         planner_max_retries = (
-            settings.query_planner_max_retries
+            _DEFAULT_QUERY_PLANNER_MAX_RETRIES
             if max_retries_raw is None
             else int(str(max_retries_raw))
         )
 
         max_keywords_raw = state.get("query_planner_max_keywords")
-        max_keywords = 10 if max_keywords_raw is None else int(str(max_keywords_raw))
+        max_keywords = (
+            _DEFAULT_QUERY_PLANNER_MAX_KEYWORDS
+            if max_keywords_raw is None
+            else int(str(max_keywords_raw))
+        )
 
         if not planner_model:
             planner_used = "deterministic"
@@ -144,22 +144,20 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
 
     if reranker_requested == "cross_encoder":
         reranker_model_id = str(
-            state.get("reranker_model_id")
-            or settings.reranker_model_id
-            or DEFAULT_CROSS_ENCODER_MODEL_ID
+            state.get("reranker_model_id") or DEFAULT_CROSS_ENCODER_MODEL_ID
         ).strip()
         reranker_device = (
             str(state.get("reranker_device")).strip()
             if state.get("reranker_device") is not None
-            else settings.reranker_device
+            else None
         )
         reranker_max_length = int(
-            state.get("reranker_max_length") or settings.reranker_max_length
+            state.get("reranker_max_length") or _DEFAULT_RERANKER_MAX_LENGTH
         )
         reranker_batch_size = int(
-            state.get("reranker_batch_size") or settings.reranker_batch_size
+            state.get("reranker_batch_size") or _DEFAULT_RERANKER_BATCH_SIZE
         )
-        reranker_top_n = int(state.get("rerank_top_n") or settings.reranker_top_n)
+        reranker_top_n = int(state.get("rerank_top_n") or _DEFAULT_RERANKER_TOP_N)
 
         if reranker_max_length < 1:
             raise ValueError("reranker_max_length must be >= 1")
@@ -181,7 +179,7 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
     per_query_top_n = int(state.get("per_query_top_n") or 50)
     rrf_k = int(state.get("rrf_k") or 60)
     use_structure = bool(state.get("use_structure", False))
-    section_bonus_weight = float(state.get("section_bonus_weight", 0.25))
+    section_bonus_weight = float(state.get("section_bonus_weight", _DEFAULT_SECTION_BONUS_WEIGHT))
     if section_bonus_weight < 0:
         raise ValueError("section_bonus_weight must be >= 0")
 

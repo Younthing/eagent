@@ -1,8 +1,4 @@
-"""Run the compiled ROB2 graph (workflow mode).
-
-This is a thin wrapper around `pipelines.graphs.rob2_graph.build_rob2_graph()`
-to validate Milestone 7 retry/rollback behaviour end-to-end.
-"""
+"""Run the ROB2 workflow end-to-end via the core runner service."""
 
 from __future__ import annotations
 
@@ -16,10 +12,8 @@ SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from pipelines.graphs.rob2_graph import build_rob2_graph  # noqa: E402
-from retrieval.engines.splade import DEFAULT_SPLADE_MODEL_ID  # noqa: E402
-
-DEFAULT_LOCAL_SPLADE = PROJECT_ROOT / "models" / "splade_distil_CoCodenser_large"
+from schemas.requests import Rob2Input, Rob2RunOptions  # noqa: E402
+from services.rob2_runner import run_rob2  # noqa: E402
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -44,12 +38,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=True,
         help="Enable structure-aware corpus filtering (Milestone 5).",
     )
-    parser.add_argument(
-        "--splade-model-id",
-        default=str(DEFAULT_LOCAL_SPLADE)
-        if DEFAULT_LOCAL_SPLADE.exists()
-        else DEFAULT_SPLADE_MODEL_ID,
-    )
+    parser.add_argument("--splade-model-id", default=None)
     parser.add_argument(
         "--relevance",
         choices=("none", "llm"),
@@ -112,44 +101,44 @@ def main() -> int:
         print(f"PDF not found: {args.pdf_path}", file=sys.stderr)
         return 2
 
-    app = build_rob2_graph()
-    final = app.invoke(
-        {
-            "pdf_path": str(args.pdf_path),
-            "top_k": args.top_k,
-            "per_query_top_n": args.per_query_top_n,
-            "rrf_k": args.rrf_k,
-            "query_planner": args.planner,
-            "reranker": args.rerank,
-            "use_structure": bool(args.structure),
-            "splade_model_id": args.splade_model_id,
-            "fusion_top_k": args.top_k,
-            "fusion_rrf_k": args.rrf_k,
-            "relevance_mode": args.relevance,
-            "consistency_mode": args.consistency,
-            "relevance_min_confidence": args.min_confidence,
-            "consistency_min_confidence": args.min_confidence,
-            "completeness_enforce": bool(args.enforce_completeness),
-            "validation_max_retries": args.max_retries,
-            "validation_fail_on_consistency": bool(args.fail_on_consistency),
-            "validation_relax_on_retry": bool(args.relax_on_retry),
-            "d2_effect_type": args.d2_effect_type,
-            "domain_evidence_top_k": args.domain_evidence_top_k,
-            "domain_audit_mode": args.domain_audit,
-            "domain_audit_patch_window": args.audit_window,
-            "domain_audit_rerun_domains": bool(args.audit_rerun),
-            "domain_audit_final": bool(args.audit_final),
-        }
+    debug_level = "full" if args.json else "min"
+    options = Rob2RunOptions(
+        top_k=args.top_k,
+        per_query_top_n=args.per_query_top_n,
+        rrf_k=args.rrf_k,
+        query_planner=args.planner,
+        reranker=args.rerank,
+        use_structure=bool(args.structure),
+        splade_model_id=args.splade_model_id,
+        relevance_mode=args.relevance,
+        consistency_mode=args.consistency,
+        relevance_min_confidence=args.min_confidence,
+        consistency_min_confidence=args.min_confidence,
+        completeness_enforce=bool(args.enforce_completeness),
+        validation_max_retries=args.max_retries,
+        validation_fail_on_consistency=bool(args.fail_on_consistency),
+        validation_relax_on_retry=bool(args.relax_on_retry),
+        d2_effect_type=args.d2_effect_type,
+        domain_evidence_top_k=args.domain_evidence_top_k,
+        domain_audit_mode=args.domain_audit,
+        domain_audit_patch_window=args.audit_window,
+        domain_audit_rerun_domains=bool(args.audit_rerun),
+        domain_audit_final=bool(args.audit_final),
+        debug_level=debug_level,
     )
+    result = run_rob2(Rob2Input(pdf_path=str(args.pdf_path)), options)
+    debug_state = {}
+    if result.debug and isinstance(result.debug, dict):
+        debug_state = result.debug.get("state") or {}
 
     if args.json:
-        print(json.dumps(final, ensure_ascii=False, indent=2))
+        print(json.dumps(debug_state or result.model_dump(), ensure_ascii=False, indent=2))
         return 0
 
-    attempt = final.get("validation_attempt")
-    passed = bool(final.get("completeness_passed"))
-    failed = final.get("completeness_failed_questions") or []
-    consistency_failed = final.get("consistency_failed_questions") or []
+    attempt = debug_state.get("validation_attempt")
+    passed = bool(debug_state.get("completeness_passed"))
+    failed = debug_state.get("completeness_failed_questions") or []
+    consistency_failed = debug_state.get("consistency_failed_questions") or []
     print(
         "Validation result:",
         f"attempt={attempt}",
@@ -158,7 +147,7 @@ def main() -> int:
         f"consistency_failed_questions={len(consistency_failed)}",
     )
 
-    retry_log = final.get("validation_retry_log") or []
+    retry_log = debug_state.get("validation_retry_log") or []
     if isinstance(retry_log, list) and retry_log:
         print("\nRetry log:")
         for item in retry_log:
@@ -172,13 +161,9 @@ def main() -> int:
                 f"updates={updates}"
             )
 
-    rob2 = final.get("rob2_result")
-    if isinstance(rob2, dict):
-        overall = (rob2.get("overall") or {}).get("risk")
-        print("\nROB2:", f"overall={overall}")
-        table = final.get("rob2_table_markdown")
-        if isinstance(table, str) and table.strip():
-            print("\nROB2 table:\n" + table)
+    print("\nROB2:", f"overall={result.result.overall.risk}")
+    if result.table_markdown.strip():
+        print("\nROB2 table:\n" + result.table_markdown)
 
     return 0
 

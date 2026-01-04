@@ -62,10 +62,10 @@ flowchart TD
     EV --> EC[existence_candidates<br/>annotated candidates]
     EV --> EE[existence_evidence<br/>FusedEvidenceBundle top-k<br/>filtered]
 
-    EE --> CV[consistency_validator_node<br/>optional LLM<br/>M7]
+    EC --> CV[consistency_validator_node<br/>optional LLM<br/>M7]
     CV --> CR[consistency_reports]
 
-    EE --> CM[completeness_validator_node<br/>select validated evidence<br/>M7]
+    EC --> CM[completeness_validator_node<br/>select validated evidence<br/>M7]
     CM --> VE[validated_evidence<br/>FusedEvidenceBundle top-k]
     CM --> CP[completeness_report]
   end

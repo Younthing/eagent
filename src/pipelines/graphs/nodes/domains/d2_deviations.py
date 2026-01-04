@@ -6,8 +6,7 @@ from typing import Mapping, cast
 
 from pipelines.graphs.nodes.domains.common import (
     EffectType,
-    build_reasoning_config,
-    get_domain_defaults,
+    read_domain_llm_config,
     run_domain_reasoning,
 )
 from schemas.internal.decisions import DomainDecision
@@ -32,41 +31,9 @@ def d2_deviations_node(state: dict) -> dict:
     effect_type = cast(EffectType, effect_type)
 
     llm = state.get("d2_llm")
-    defaults = get_domain_defaults("D2")
-    model_id = str(state.get("d2_model") or defaults["model"] or "").strip()
-    model_provider = state.get("d2_model_provider") or defaults["model_provider"]
-    temperature = (
-        defaults["temperature"]
-        if state.get("d2_temperature") is None
-        else float(str(state.get("d2_temperature")))
-    )
-    timeout = (
-        defaults["timeout"]
-        if state.get("d2_timeout") is None
-        else float(str(state.get("d2_timeout")))
-    )
-    max_tokens = (
-        defaults["max_tokens"]
-        if state.get("d2_max_tokens") is None
-        else int(str(state.get("d2_max_tokens")))
-    )
-    max_retries = (
-        defaults["max_retries"]
-        if state.get("d2_max_retries") is None
-        else int(str(state.get("d2_max_retries")))
-    )
-
-    if llm is None and not model_id:
+    config, config_report = read_domain_llm_config(state, prefix="d2")
+    if llm is None and not config.model:
         raise ValueError("Missing D2 model (set D2_MODEL or state['d2_model']).")
-
-    config = build_reasoning_config(
-        model_id=model_id,
-        model_provider=str(model_provider) if model_provider else None,
-        temperature=float(temperature),
-        timeout=float(timeout) if timeout is not None else None,
-        max_tokens=int(max_tokens) if max_tokens is not None else None,
-        max_retries=int(max_retries),
-    )
 
     decision: DomainDecision = run_domain_reasoning(
         domain="D2",
@@ -81,12 +48,7 @@ def d2_deviations_node(state: dict) -> dict:
     return {
         "d2_decision": decision.model_dump(),
         "d2_config": {
-            "model": model_id,
-            "model_provider": model_provider,
-            "temperature": temperature,
-            "timeout": timeout,
-            "max_tokens": max_tokens,
-            "max_retries": max_retries,
+            **config_report,
             "effect_type": effect_type,
         },
     }

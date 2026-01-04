@@ -27,18 +27,26 @@ _CHUNKER_CACHE: tuple[Optional["BaseChunker"], dict[str, object]] | None = None
 
 def preprocess_node(state: dict) -> dict:
     """LangGraph node: parse PDF into a normalized document structure."""
-    source = state.get("pdf_path") or state.get("source") or state.get("file_path")
-    if not source:
-        raise ValueError("preprocess_node requires 'pdf_path' or 'source'.")
+    pdf_path = state.get("pdf_path")
+    if not pdf_path:
+        raise ValueError("preprocess_node requires 'pdf_path'.")
 
-    doc_structure = parse_docling_pdf(source)
+    overrides = _read_docling_overrides(state)
+    doc_structure = parse_docling_pdf(pdf_path, overrides=overrides)
     return {"doc_structure": doc_structure.model_dump()}
 
 
-def parse_docling_pdf(source: str | Path) -> DocStructure:
+def parse_docling_pdf(
+    source: str | Path,
+    *,
+    overrides: Optional[dict[str, object]] = None,
+) -> DocStructure:
     """Parse a PDF into DocStructure using Docling metadata."""
     resolved_source = _resolve_docling_source(source)
-    spans, body_text, docling_config = _load_with_docling(resolved_source)
+    spans, body_text, docling_config = _load_with_docling(
+        resolved_source,
+        overrides=overrides,
+    )
 
     section_map = _aggregate_sections_by_title(spans)
     payload = {
@@ -54,11 +62,13 @@ def parse_docling_pdf(source: str | Path) -> DocStructure:
 
 def _load_with_docling(
     source: str,
+    *,
+    overrides: Optional[dict[str, object]] = None,
 ) -> tuple[List[SectionSpan], str, dict[str, object]]:
     """Load content with Docling via LangChain DoclingLoader."""
     try:
-        converter, config = _build_docling_converter()
-        chunker, chunker_config = _build_docling_chunker()
+        converter, config = _build_docling_converter(overrides=overrides)
+        chunker, chunker_config = _build_docling_chunker(overrides=overrides)
         config = {**config, **chunker_config}
         loader = DoclingLoader(
             file_path=source,
@@ -81,9 +91,10 @@ def _load_with_docling(
         raise RuntimeError(f"Docling parsing failed for {source}") from exc
 
 
-def _build_docling_converter() -> tuple[
-    Optional["DocumentConverter"], dict[str, object]
-]:
+def _build_docling_converter(
+    *,
+    overrides: Optional[dict[str, object]] = None,
+) -> tuple[Optional["DocumentConverter"], dict[str, object]]:
     """Build a Docling converter with explicit, configurable model settings.
 
     Environment:
@@ -91,7 +102,7 @@ def _build_docling_converter() -> tuple[
         DOCLING_ARTIFACTS_PATH: local model artifacts directory.
     """
     global _CONVERTER_CACHE
-    if _CONVERTER_CACHE is not None:
+    if overrides is None and _CONVERTER_CACHE is not None:
         return _CONVERTER_CACHE
 
     try:
@@ -105,6 +116,11 @@ def _build_docling_converter() -> tuple[
     config: dict[str, object] = {"pipeline": "standard_pdf"}
     artifacts_path = settings.docling_artifacts_path
     layout_model_name = settings.docling_layout_model
+    if overrides:
+        if overrides.get("docling_artifacts_path") is not None:
+            artifacts_path = str(overrides["docling_artifacts_path"])
+        if overrides.get("docling_layout_model") is not None:
+            layout_model_name = str(overrides["docling_layout_model"])
 
     pipeline_options = PdfPipelineOptions()
     if artifacts_path:
@@ -134,14 +150,19 @@ def _build_docling_converter() -> tuple[
             InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
         }
     )
-    _CONVERTER_CACHE = (converter, config)
-    return _CONVERTER_CACHE
+    if overrides is None:
+        _CONVERTER_CACHE = (converter, config)
+        return _CONVERTER_CACHE
+    return converter, config
 
 
-def _build_docling_chunker() -> tuple[Optional["BaseChunker"], dict[str, object]]:
+def _build_docling_chunker(
+    *,
+    overrides: Optional[dict[str, object]] = None,
+) -> tuple[Optional["BaseChunker"], dict[str, object]]:
     """Build HybridChunker with configurable tokenizer and max tokens."""
     global _CHUNKER_CACHE
-    if _CHUNKER_CACHE is not None:
+    if overrides is None and _CHUNKER_CACHE is not None:
         return _CHUNKER_CACHE
 
     try:
@@ -156,10 +177,13 @@ def _build_docling_chunker() -> tuple[Optional["BaseChunker"], dict[str, object]
         ) from exc
 
     settings = get_settings()
-    model_id = (
-        settings.docling_chunker_model or "sentence-transformers/all-MiniLM-L6-v2"
-    )
+    model_id = settings.docling_chunker_model or "sentence-transformers/all-MiniLM-L6-v2"
     max_tokens = settings.docling_chunker_max_tokens
+    if overrides:
+        if overrides.get("docling_chunker_model") is not None:
+            model_id = str(overrides["docling_chunker_model"])
+        if overrides.get("docling_chunker_max_tokens") is not None:
+            max_tokens = int(overrides["docling_chunker_max_tokens"])
 
     raw_tokenizer = AutoTokenizer.from_pretrained(model_id)
     if max_tokens is None:
@@ -175,8 +199,21 @@ def _build_docling_chunker() -> tuple[Optional["BaseChunker"], dict[str, object]
         "chunker_model": model_id,
         "chunker_max_tokens": max_tokens,
     }
-    _CHUNKER_CACHE = (chunker, config)
-    return _CHUNKER_CACHE
+    if overrides is None:
+        _CHUNKER_CACHE = (chunker, config)
+        return _CHUNKER_CACHE
+    return chunker, config
+
+
+def _read_docling_overrides(state: dict) -> Optional[dict[str, object]]:
+    keys = (
+        "docling_layout_model",
+        "docling_artifacts_path",
+        "docling_chunker_model",
+        "docling_chunker_max_tokens",
+    )
+    overrides = {key: state.get(key) for key in keys if state.get(key) is not None}
+    return overrides or None
 
 
 def _resolve_layout_model(name: Optional[str]) -> Optional["LayoutModelConfig"]:

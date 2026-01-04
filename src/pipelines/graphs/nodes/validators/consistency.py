@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Mapping
 
-from core.config import get_settings
 from evidence.validators.consistency import (
     ConsistencyValidationConfig,
     LLMConsistencyValidatorConfig,
@@ -52,7 +51,6 @@ def consistency_validator_node(state: dict) -> dict:
         require_quotes_for_fail=require_quotes_for_fail,
     )
 
-    settings = get_settings()
     requested = str(state.get("consistency_mode") or "none").strip().lower()
     if requested not in {"none", "llm"}:
         raise ValueError("consistency_validator must be 'none' or 'llm'")
@@ -65,36 +63,16 @@ def consistency_validator_node(state: dict) -> dict:
     llm_config: LLMConsistencyValidatorConfig | None = None
 
     if requested == "llm":
-        model_id = str(
-            state.get("consistency_model") or settings.consistency_model or ""
-        ).strip()
-        model_provider = (
-            state.get("consistency_model_provider") or settings.consistency_model_provider
-        )
+        model_id = str(state.get("consistency_model") or "").strip()
+        model_provider = state.get("consistency_model_provider")
         temperature_raw = state.get("consistency_temperature")
-        temperature = (
-            settings.consistency_temperature
-            if temperature_raw is None
-            else float(str(temperature_raw))
-        )
+        temperature = 0.0 if temperature_raw is None else float(str(temperature_raw))
         timeout_raw = state.get("consistency_timeout")
-        timeout = (
-            settings.consistency_timeout
-            if timeout_raw is None
-            else float(str(timeout_raw))
-        )
+        timeout = None if timeout_raw is None else float(str(timeout_raw))
         max_tokens_raw = state.get("consistency_max_tokens")
-        max_tokens = (
-            settings.consistency_max_tokens
-            if max_tokens_raw is None
-            else int(str(max_tokens_raw))
-        )
+        max_tokens = None if max_tokens_raw is None else int(str(max_tokens_raw))
         max_retries_raw = state.get("consistency_max_retries")
-        max_retries = (
-            settings.consistency_max_retries
-            if max_retries_raw is None
-            else int(str(max_retries_raw))
-        )
+        max_retries = 2 if max_retries_raw is None else int(str(max_retries_raw))
 
         if not model_id and llm is None:
             used = "none"

@@ -121,6 +121,10 @@ eagent/
 │   │   ├── telemetry.py           # tracing hooks(可选：OTel/LangSmith等)
 │   │   └── feature_flags.py       # 可切换：启用RAG/启用某validator/模型选择
 │   │
+│   ├── services/                  # [核心服务层] CLI/API 共用的运行入口
+│   │   ├── rob2_runner.py          # 统一参数解析/状态构建/图执行
+│   │   └── io.py                   # PDF 临时文件处理
+│   │
 │   ├── schemas/                   # [DTO] FastAPI 入参/出参 + 内部契约
 │   │   ├── requests.py            # EvaluateRequest (PDF元信息、选项)
 │   │   ├── responses.py           # EvaluateResponse (ROB2表+证据引用)
@@ -155,7 +159,6 @@ eagent/
 │   │   │   │   ├── domain_audit.py # Full-text audit + evidence patch (M9)
 │   │   │   │   └── aggregate.py   # ROB2汇总 + 输出整形
 │   │   │   └── routing.py         # conditional edges/重试策略/回滚策略
-│   │   └── runner.py              # GraphRunner：同步/异步执行、超时、日志注入
 │   │
 │   ├── llm/                       # [LLM层] 模型客户端与提示词资产（LangChain更常用）
 │   │   ├── clients.py             # OpenAI/本地模型/多模型路由

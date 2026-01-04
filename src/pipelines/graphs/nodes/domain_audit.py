@@ -19,7 +19,6 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from core.config import get_settings
 from schemas.internal.decisions import AnswerOption, DomainDecision
 from schemas.internal.documents import DocStructure, SectionSpan
 from schemas.internal.evidence import (
@@ -42,6 +41,9 @@ AuditMode = str  # "none" | "llm"
 
 _CODE_BLOCK_JSON = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 _WHITESPACE = re.compile(r"\s+")
+_DEFAULT_AUDIT_MAX_RETRIES = 2
+_DEFAULT_AUDIT_PATCH_WINDOW = 0
+_DEFAULT_AUDIT_MAX_PATCHES = 3
 
 
 class ChatModelLike:
@@ -325,7 +327,7 @@ def _select_domain_questions(
 
 
 def _read_audit_mode(state: Mapping[str, Any]) -> AuditMode:
-    mode = str(state.get("domain_audit_mode") or get_settings().domain_audit_mode or "none").strip().lower()
+    mode = str(state.get("domain_audit_mode") or "none").strip().lower()
     if mode in {"0", "false", "off"}:
         mode = "none"
     if mode not in {"none", "llm"}:
@@ -335,31 +337,29 @@ def _read_audit_mode(state: Mapping[str, Any]) -> AuditMode:
 
 def _read_audit_llm(state: Mapping[str, Any]) -> tuple[Optional[ChatModelLike], dict[str, Any]]:
     llm = cast(Optional[ChatModelLike], state.get("domain_audit_llm"))
-    settings = get_settings()
     model_id = str(
         state.get("domain_audit_model")
-        or settings.domain_audit_model
-        or settings.d1_model
+        or state.get("d1_model")
         or ""
     ).strip()
-    model_provider = state.get("domain_audit_model_provider") or settings.domain_audit_model_provider
+    model_provider = state.get("domain_audit_model_provider")
     temperature = (
-        settings.domain_audit_temperature
+        0.0
         if state.get("domain_audit_temperature") is None
         else float(str(state.get("domain_audit_temperature")))
     )
     timeout = (
-        settings.domain_audit_timeout
+        None
         if state.get("domain_audit_timeout") is None
         else float(str(state.get("domain_audit_timeout")))
     )
     max_tokens = (
-        settings.domain_audit_max_tokens
+        None
         if state.get("domain_audit_max_tokens") is None
         else int(str(state.get("domain_audit_max_tokens")))
     )
     max_retries = (
-        settings.domain_audit_max_retries
+        _DEFAULT_AUDIT_MAX_RETRIES
         if state.get("domain_audit_max_retries") is None
         else int(str(state.get("domain_audit_max_retries")))
     )
@@ -385,23 +385,18 @@ def _report_model_fields(model_kwargs: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _read_patch_config(state: Mapping[str, Any]) -> tuple[int, int]:
-    settings = get_settings()
-    patch_window = int(state.get("domain_audit_patch_window") or settings.domain_audit_patch_window or 0)
+    patch_window = int(state.get("domain_audit_patch_window") or _DEFAULT_AUDIT_PATCH_WINDOW)
     max_patches = int(
         state.get("domain_audit_max_patches_per_question")
-        or settings.domain_audit_max_patches_per_question
-        or 3
+        or _DEFAULT_AUDIT_MAX_PATCHES
     )
     return patch_window, max_patches
 
 
 def _read_rerun_enabled(state: Mapping[str, Any]) -> bool:
-    settings = get_settings()
-    return bool(
-        settings.domain_audit_rerun_domains
-        if state.get("domain_audit_rerun_domains") is None
-        else bool(state.get("domain_audit_rerun_domains"))
-    )
+    if state.get("domain_audit_rerun_domains") is None:
+        return True
+    return bool(state.get("domain_audit_rerun_domains"))
 
 
 def _build_user_prompt(questions: Sequence[Rob2Question], doc_structure: DocStructure) -> str:

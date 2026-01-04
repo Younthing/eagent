@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Mapping
 
-from core.config import get_settings
 from evidence.validators.relevance import (
     LLMRelevanceValidatorConfig,
     RelevanceValidationConfig,
@@ -65,7 +64,6 @@ def relevance_validator_node(state: dict) -> dict:
         require_supporting_quote=require_quote,
     )
 
-    settings = get_settings()
     requested = str(state.get("relevance_mode") or "none").strip().lower()
     if requested not in {"none", "llm"}:
         raise ValueError("relevance_validator must be 'none' or 'llm'")
@@ -79,34 +77,16 @@ def relevance_validator_node(state: dict) -> dict:
     llm_config: LLMRelevanceValidatorConfig | None = None
 
     if requested == "llm":
-        model_id = str(
-            state.get("relevance_model") or settings.relevance_model or ""
-        ).strip()
-        model_provider = (
-            state.get("relevance_model_provider") or settings.relevance_model_provider
-        )
+        model_id = str(state.get("relevance_model") or "").strip()
+        model_provider = state.get("relevance_model_provider")
         temperature_raw = state.get("relevance_temperature")
-        temperature = (
-            settings.relevance_temperature
-            if temperature_raw is None
-            else float(str(temperature_raw))
-        )
+        temperature = 0.0 if temperature_raw is None else float(str(temperature_raw))
         timeout_raw = state.get("relevance_timeout")
-        timeout = (
-            settings.relevance_timeout if timeout_raw is None else float(str(timeout_raw))
-        )
+        timeout = None if timeout_raw is None else float(str(timeout_raw))
         max_tokens_raw = state.get("relevance_max_tokens")
-        max_tokens = (
-            settings.relevance_max_tokens
-            if max_tokens_raw is None
-            else int(str(max_tokens_raw))
-        )
+        max_tokens = None if max_tokens_raw is None else int(str(max_tokens_raw))
         max_retries_raw = state.get("relevance_max_retries")
-        max_retries = (
-            settings.relevance_max_retries
-            if max_retries_raw is None
-            else int(str(max_retries_raw))
-        )
+        max_retries = 2 if max_retries_raw is None else int(str(max_retries_raw))
 
         if not model_id and llm is None:
             used = "none"
