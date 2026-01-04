@@ -165,6 +165,14 @@ def main() -> int:
                 f"updates={updates}"
             )
 
+    rob2 = final.get("rob2_result")
+    if isinstance(rob2, dict):
+        overall = (rob2.get("overall") or {}).get("risk")
+        print("\nROB2:", f"overall={overall}")
+        table = final.get("rob2_table_markdown")
+        if isinstance(table, str) and table.strip():
+            print("\nROB2 table:\n" + table)
+
     return 0
 
 

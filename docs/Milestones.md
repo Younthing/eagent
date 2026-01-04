@@ -281,6 +281,12 @@
 * 生成 overall risk
 * 输出表格 + JSON + 引文索引
 
+### 当前实现
+
+* `aggregate_node` 已接入工作流，产出：
+  * `rob2_result`：结构化 JSON（含 overall、domains、citations）
+  * `rob2_table_markdown`：可读表格（Markdown）
+
 ### DoD
 
 * 输出可直接用于 systematic review

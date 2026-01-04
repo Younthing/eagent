@@ -28,6 +28,7 @@ from pipelines.graphs.nodes.domains.d3_missing_data import d3_missing_data_node
 from pipelines.graphs.nodes.domains.d4_measurement import d4_measurement_node
 from pipelines.graphs.nodes.domains.d5_reporting import d5_reporting_node
 from pipelines.graphs.nodes.domain_audit import domain_audit_node
+from pipelines.graphs.nodes.aggregate import aggregate_node
 from pipelines.graphs.nodes.validators.completeness import completeness_validator_node
 from pipelines.graphs.nodes.validators.consistency import consistency_validator_node
 from pipelines.graphs.nodes.validators.existence import existence_validator_node
@@ -117,6 +118,9 @@ class Rob2GraphState(TypedDict, total=False):
     domain_audit_rerun_domains: bool
     domain_audit_llm: object
     domain_audit_report: dict
+
+    rob2_result: dict
+    rob2_table_markdown: str
 
     completeness_enforce: bool
     completeness_min_passed_per_question: int
@@ -286,6 +290,10 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
         "domain_audit",
         cast(Any, overrides.get("domain_audit") or domain_audit_node),
     )
+    builder.add_node(
+        "aggregate",
+        cast(Any, overrides.get("aggregate") or aggregate_node),
+    )
 
     builder.add_node("prepare_retry", cast(Any, _prepare_validation_retry_node))
 
@@ -313,7 +321,8 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
     builder.add_edge("d3_missing_data", "d4_measurement")
     builder.add_edge("d4_measurement", "d5_reporting")
     builder.add_edge("d5_reporting", "domain_audit")
-    builder.add_edge("domain_audit", END)
+    builder.add_edge("domain_audit", "aggregate")
+    builder.add_edge("aggregate", END)
 
     compiled = builder.compile()
     # This graph includes an intentional retry loop (Milestone 7). With additional

@@ -241,7 +241,7 @@ Notes:
 * **Evidence Fusion**：合并、去重、排序，形成每题 Top-k 证据包。
 * **Evidence Validation**：存在性/相关性/一致性/完整性校验，失败则回到定位层。
 * **Domain Reasoning (D1-D5)**：LLM 产出子问题答案，风险由规则树（`rob2/decision_rules.py`）判定。
-* **Cross-Domain Validator**：检测跨域冲突并触发回滚或重评。
+* **Full-Text Domain Audit（可选）**：全文审核信号答案，提供引用并补全证据后重跑受影响 domain。
 * **ROB2 Aggregator**：汇总五域与 overall risk，输出结构化结果。
 * **Runtime/Orchestration**：LangGraph 装配、并行调度与中断恢复。
 
@@ -253,7 +253,9 @@ Notes:
 * **EvidenceBundle**: `{ question_id, items: list[EvidenceCandidate] }`
 * **ValidatedEvidence**: `{ question_id, items, status, failure_reason? }`
 * **DomainDecision**: `{ domain, effect_type?, answers, risk, risk_rationale, missing_questions }`（risk 由规则树判定）
-* **FinalReport**: `{ domain_results, overall_risk, citations, json }`
+* **Rob2FinalOutput**: `{ overall, domains, citations }`（见 `src/schemas/internal/results.py`）
+  * `citations[*]`: `{ paragraph_id, page, title, text, uses[] }`
+  * 额外输出：`rob2_table_markdown`（Markdown 表格，便于人读）
 
 ### Subsystem vs Package Boundary
 
@@ -278,5 +280,5 @@ Notes:
 3. Evidence Location 并行产出 EvidenceCandidates。
 4. Fusion + Validation 形成 ValidatedEvidence。
 5. D1-D5 推理产出 DomainDecision。
-6. Cross-Domain Validator 校验一致性。
-7. Aggregator 输出 FinalReport。
+6. Full-Text Domain Audit（可选）补全证据并重跑 domain。
+7. Aggregator 输出 Rob2FinalOutput。

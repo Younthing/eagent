@@ -77,6 +77,7 @@ flowchart TD
     D3 --> D4[d4_measurement_node<br/>LLM decision<br/>M8]
     D4 --> D5[d5_reporting_node<br/>LLM decision<br/>M8]
     D5 --> AUD[domain_audit_node<br/>full-text audit + patch + optional rerun<br/>M9]
+    AUD --> AGG[aggregate_node<br/>final output + citations<br/>M10]
     P1[src/llm/prompts/domains/d1_system.md] --> D1
     P2[src/llm/prompts/domains/d2_system.md] --> D2
     P3[src/llm/prompts/domains/d3_system.md] --> D3
@@ -103,4 +104,5 @@ Notes:
 - Domain reasoning loads system prompts from `src/llm/prompts/domains/{domain}_system.md`, with a fallback to `rob2_domain_system.md`.
 - Domain reasoning normalizes answers and applies decision-tree rules (`src/rob2/decision_rules.py`) to set domain risk when defined.
 - `domain_audit_node` is an optional Milestone 9 step that reads the full document, proposes citations, and patches `validated_candidates` before optionally re-running affected domains.
-- Dense/fulltext locators, cross-domain validation, and aggregation are not implemented yet.
+- `aggregate_node` produces `rob2_result` (JSON) + `rob2_table_markdown` (human-readable).
+- Dense/fulltext locators and cross-domain validation are not implemented yet.

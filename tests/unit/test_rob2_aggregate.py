@@ -1,0 +1,110 @@
+from __future__ import annotations
+
+from pipelines.graphs.nodes.aggregate import aggregate_node
+from schemas.internal.decisions import DomainAnswer, DomainDecision, EvidenceRef
+from schemas.internal.documents import DocStructure, SectionSpan
+from schemas.internal.rob2 import QuestionSet, Rob2Question
+
+
+def _doc() -> DocStructure:
+    return DocStructure(
+        body="P1. P2.",
+        sections=[
+            SectionSpan(paragraph_id="p1", title="Methods", page=1, text="P1."),
+            SectionSpan(paragraph_id="p2", title="Results", page=2, text="P2."),
+        ],
+    )
+
+
+def _question_set() -> QuestionSet:
+    return QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q1",
+                rob2_id="1.1",
+                domain="D1",
+                text="D1 question",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            )
+        ],
+    )
+
+
+def _empty(domain: str, *, risk: str) -> DomainDecision:
+    return DomainDecision(
+        domain=domain,  # type: ignore[arg-type]
+        risk=risk,  # type: ignore[arg-type]
+        risk_rationale="stub",
+        answers=[],
+        missing_questions=[],
+    )
+
+
+def test_aggregate_overall_risk_high_when_any_domain_high() -> None:
+    out = aggregate_node(
+        {
+            "doc_structure": _doc().model_dump(),
+            "question_set": _question_set().model_dump(),
+            "d1_decision": _empty("D1", risk="low").model_dump(),
+            "d2_decision": _empty("D2", risk="some_concerns").model_dump(),
+            "d3_decision": _empty("D3", risk="high").model_dump(),
+            "d4_decision": _empty("D4", risk="low").model_dump(),
+            "d5_decision": _empty("D5", risk="low").model_dump(),
+        }
+    )
+    rob2 = out["rob2_result"]
+    assert rob2["overall"]["risk"] == "high"
+
+
+def test_aggregate_overall_risk_high_when_multiple_concerns() -> None:
+    out = aggregate_node(
+        {
+            "doc_structure": _doc().model_dump(),
+            "question_set": _question_set().model_dump(),
+            "d1_decision": _empty("D1", risk="low").model_dump(),
+            "d2_decision": _empty("D2", risk="some_concerns").model_dump(),
+            "d3_decision": _empty("D3", risk="some_concerns").model_dump(),
+            "d4_decision": _empty("D4", risk="low").model_dump(),
+            "d5_decision": _empty("D5", risk="low").model_dump(),
+        }
+    )
+    rob2 = out["rob2_result"]
+    assert rob2["overall"]["risk"] == "high"
+
+
+def test_aggregate_builds_citation_index() -> None:
+    d1 = DomainDecision(
+        domain="D1",
+        risk="low",
+        risk_rationale="ok",
+        answers=[
+            DomainAnswer(
+                question_id="q1",
+                answer="Y",
+                rationale="supported",
+                evidence_refs=[
+                    EvidenceRef(paragraph_id="p1", page=1, title="Methods", quote="P1")
+                ],
+            )
+        ],
+        missing_questions=[],
+    )
+    out = aggregate_node(
+        {
+            "doc_structure": _doc().model_dump(),
+            "question_set": _question_set().model_dump(),
+            "d1_decision": d1.model_dump(),
+            "d2_decision": _empty("D2", risk="low").model_dump(),
+            "d3_decision": _empty("D3", risk="low").model_dump(),
+            "d4_decision": _empty("D4", risk="low").model_dump(),
+            "d5_decision": _empty("D5", risk="low").model_dump(),
+        }
+    )
+    citations = out["rob2_result"]["citations"]
+    assert len(citations) == 1
+    assert citations[0]["paragraph_id"] == "p1"
+    assert citations[0]["uses"][0]["domain"] == "D1"
+    assert citations[0]["uses"][0]["question_id"] == "q1"
