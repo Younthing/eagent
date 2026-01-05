@@ -1,5 +1,10 @@
 """eagent package entrypoints."""
 
-from .main import main
+from importlib.metadata import PackageNotFoundError, version
 
-__all__ = ["main"]
+try:
+    __version__ = version("eagent")
+except PackageNotFoundError:
+    __version__ = "unknown"
+
+__all__ = ["__version__"]

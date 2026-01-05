@@ -9,13 +9,33 @@ from typing import Any
 import typer
 from pydantic import ValidationError
 
+from eagent import __version__
 from schemas.requests import Rob2Input, Rob2RunOptions
 from services.rob2_runner import run_rob2
 
 app = typer.Typer(
     help="ROB2 命令行工具",
     context_settings={"help_option_names": ["-h", "--help"]},
+    invoke_without_command=True,
 )
+
+
+@app.callback()
+def root(
+    ctx: typer.Context,
+    version_flag: bool = typer.Option(
+        False,
+        "-v",
+        "--version",
+        help="输出版本信息。",
+    ),
+) -> None:
+    if version_flag:
+        typer.echo(__version__)
+        raise typer.Exit()
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+        raise typer.Exit()
 
 
 @app.command()

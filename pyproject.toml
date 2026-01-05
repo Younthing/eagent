@@ -39,8 +39,6 @@ visual = [
 ]
 
 [project.scripts]
-eagent = "eagent:main"
-eagent-visualize = "eagent.visualize:main"
 rob2 = "cli.app:main"
 
 [tool.pytest.ini_options]
