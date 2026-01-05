@@ -26,7 +26,13 @@ app = typer.Typer(
 
 @app.command("run", help="运行融合并输出候选")
 def run_fusion(
-    pdf_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+    pdf_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        metavar="PDF路径",
+    ),
     question_id: str | None = typer.Option(None, "--question-id", help="仅输出指定问题"),
     top_k: int = typer.Option(5, "--top-k", help="输出的候选数量"),
     per_query_top_n: int = typer.Option(50, "--per-query-top-n", help="每个查询保留的候选数"),

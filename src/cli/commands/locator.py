@@ -23,7 +23,13 @@ app = typer.Typer(
 
 @app.command("rule", help="运行规则定位")
 def rule_locator(
-    pdf_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+    pdf_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        metavar="PDF路径",
+    ),
     question_id: str | None = typer.Option(
         None,
         "--question-id",

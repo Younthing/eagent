@@ -23,7 +23,13 @@ app = typer.Typer(
 
 @app.command("run", help="运行领域审计")
 def run_audit(
-    pdf_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+    pdf_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        metavar="PDF路径",
+    ),
     mode: str = typer.Option("llm", "--mode", help="审计模式：llm|none"),
     audit_window: int | None = typer.Option(None, "--audit-window", help="证据补丁窗口"),
     audit_rerun: bool | None = typer.Option(

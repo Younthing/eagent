@@ -24,7 +24,13 @@ app = typer.Typer(
 
 @app.command("bm25", help="运行 BM25 检索")
 def bm25(
-    pdf_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+    pdf_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        metavar="PDF路径",
+    ),
     question_id: str | None = typer.Option(
         None,
         "--question-id",
@@ -100,7 +106,13 @@ def bm25(
 
 @app.command("splade", help="运行 SPLADE 检索")
 def splade(
-    pdf_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+    pdf_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        metavar="PDF路径",
+    ),
     question_id: str | None = typer.Option(
         None,
         "--question-id",

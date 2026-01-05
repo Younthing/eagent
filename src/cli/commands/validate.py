@@ -102,7 +102,13 @@ def _run_locators(state: dict) -> dict:
 
 @app.command("full", help="运行完整验证链路")
 def validate_full(
-    pdf_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+    pdf_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        metavar="PDF路径",
+    ),
     top_k: int = typer.Option(5, "--top-k", help="输出的候选数量"),
     per_query_top_n: int = typer.Option(50, "--per-query-top-n", help="每个查询保留的候选数"),
     rrf_k: int = typer.Option(60, "--rrf-k", help="RRF 常量"),
@@ -220,7 +226,13 @@ def validate_full(
 
 @app.command("relevance", help="运行相关性验证")
 def validate_relevance(
-    pdf_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+    pdf_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        metavar="PDF路径",
+    ),
     question_id: str | None = typer.Option(None, "--question-id", help="仅输出指定问题"),
     top_k: int = typer.Option(5, "--top-k", help="输出的候选数量"),
     per_query_top_n: int = typer.Option(50, "--per-query-top-n", help="每个查询保留的候选数"),
@@ -289,7 +301,13 @@ def validate_relevance(
 
 @app.command("consistency", help="运行一致性验证")
 def validate_consistency(
-    pdf_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+    pdf_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        metavar="PDF路径",
+    ),
     min_confidence: float = typer.Option(0.6, "--min-confidence", help="最小置信度"),
     require_quotes_for_fail: bool = typer.Option(
         True,
@@ -358,7 +376,13 @@ def validate_consistency(
 
 @app.command("completeness", help="运行完整性验证")
 def validate_completeness(
-    pdf_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+    pdf_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        metavar="PDF路径",
+    ),
     enforce: bool = typer.Option(False, "--enforce", help="严格完整性"),
     json_out: bool = typer.Option(False, "--json", help="输出 JSON"),
 ) -> None:

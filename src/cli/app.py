@@ -71,7 +71,13 @@ def root(
 
 @app.command(help="运行 ROB2 全流程并输出结果")
 def run(
-    pdf_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+    pdf_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        metavar="PDF路径",
+    ),
     options: str | None = typer.Option(
         None,
         "--options",

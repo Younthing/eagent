@@ -15,6 +15,7 @@ def apply_cli_localization() -> None:
     _patch_rich_labels()
     _patch_usage_labels()
     _patch_help_option()
+    _patch_click_errors()
 
 
 def _patch_rich_labels() -> None:
@@ -39,7 +40,9 @@ def _patch_rich_labels() -> None:
 
 def _patch_usage_labels() -> None:
     def _format_usage(self: click.Command, ctx: click.Context, formatter: click.HelpFormatter) -> None:
-        pieces = self.collect_usage_pieces(ctx)
+        pieces = [
+            piece.replace("[OPTIONS]", "[选项]") for piece in self.collect_usage_pieces(ctx)
+        ]
         formatter.write_usage(ctx.command_path, " ".join(pieces), prefix=_USAGE_PREFIX)
 
     TyperCommand.format_usage = _format_usage  # type: ignore[assignment]
@@ -57,5 +60,20 @@ def _patch_help_option() -> None:
     TyperGroup.get_help_option = _get_help_option  # type: ignore[assignment]
 
 
-__all__ = ["apply_cli_localization"]
+def _patch_click_errors() -> None:
+    import click.exceptions as exceptions
 
+    translations = {
+        "Missing argument": "缺少参数",
+        "Missing option": "缺少选项",
+        "Missing parameter": "缺少参数",
+        "Missing {param_type}": "缺少{param_type}",
+    }
+
+    def _translate(text: str) -> str:
+        return translations.get(text, text)
+
+    exceptions._ = _translate  # type: ignore[attr-defined]
+
+
+__all__ = ["apply_cli_localization"]

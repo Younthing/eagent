@@ -67,7 +67,13 @@ def show_graph(
 
 @app.command("run", help="运行图并输出结果")
 def run_graph(
-    pdf_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+    pdf_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        metavar="PDF路径",
+    ),
     options: str | None = typer.Option(
         None,
         "--options",
