@@ -2,22 +2,53 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from typing import Any
 
 import typer
-from pydantic import ValidationError
 
 from eagent import __version__
-from schemas.requests import Rob2Input, Rob2RunOptions
+from cli.i18n import apply_cli_localization
+from schemas.requests import Rob2Input
+from schemas.responses import Rob2RunResult
 from services.rob2_runner import run_rob2
+from cli.common import build_options, emit_json, load_options_payload
+from cli.commands import (
+    audit as audit_command,
+    cache as cache_command,
+    config as config_command,
+    fusion as fusion_command,
+    graph as graph_command,
+    locator as locator_command,
+    playground as playground_command,
+    questions as questions_command,
+    retrieval as retrieval_command,
+    validate as validate_command,
+)
+
+apply_cli_localization()
 
 app = typer.Typer(
-    help="ROB2 命令行工具",
+    help=(
+        "ROB2 命令行工具\n\n用于运行 ROB2 评估流程并进行检索、验证、审计和图结构调试\n"
+        "常用命令: rob2 run / rob2 retrieval / rob2 validate / rob2 audit\n"
+    ),
     context_settings={"help_option_names": ["-h", "--help"]},
     invoke_without_command=True,
+    add_completion=False,
+    options_metavar="[选项]",
+    subcommand_metavar="命令 [参数]",
 )
+
+app.add_typer(config_command.app, name="config")
+app.add_typer(questions_command.app, name="questions")
+app.add_typer(graph_command.app, name="graph")
+app.add_typer(validate_command.app, name="validate")
+app.add_typer(retrieval_command.app, name="retrieval")
+app.add_typer(fusion_command.app, name="fusion")
+app.add_typer(locator_command.app, name="locator")
+app.add_typer(audit_command.app, name="audit")
+app.add_typer(cache_command.app, name="cache")
+app.add_typer(playground_command.app, name="playground")
 
 
 @app.callback()
@@ -27,7 +58,7 @@ def root(
         False,
         "-v",
         "--version",
-        help="输出版本信息。",
+        help="输出版本信息",
     ),
 ) -> None:
     if version_flag:
@@ -38,138 +69,65 @@ def root(
         raise typer.Exit()
 
 
-@app.command()
+@app.command(help="运行 ROB2 全流程并输出结果")
 def run(
     pdf_path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
     options: str | None = typer.Option(
         None,
         "--options",
-        help="Rob2RunOptions 的 JSON 字符串。",
+        help="Rob2RunOptions 的 JSON 字符串",
     ),
     options_file: Path | None = typer.Option(
         None,
         "--options-file",
-        help="包含 Rob2RunOptions 的 JSON/YAML 文件路径。",
+        help="包含 Rob2RunOptions 的 JSON/YAML 文件路径",
     ),
     set_values: list[str] = typer.Option(
         None,
         "--set",
-        help="使用 key=value 覆盖单个选项，可重复传入。",
+        help="使用 key=value 覆盖单个选项，可重复传入",
     ),
     debug: str = typer.Option(
         "none",
         "--debug",
-        help="调试级别：none|min|full。",
+        help="调试级别：none|min|full",
     ),
     include_reports: bool | None = typer.Option(
         None,
         "--include-reports/--no-include-reports",
-        help="JSON 输出中包含验证报告。",
+        help="JSON 输出中包含验证报告",
     ),
     include_audit_reports: bool | None = typer.Option(
         None,
         "--include-audit-reports/--no-include-audit-reports",
-        help="JSON 输出中包含审计报告。",
+        help="JSON 输出中包含审计报告",
     ),
     json_out: bool = typer.Option(
         False,
         "--json",
-        help="输出 JSON 结果。",
+        help="输出 JSON 结果",
     ),
     table: bool = typer.Option(
         True,
         "--table/--no-table",
-        help="输出 ROB2 Markdown 表格。",
+        help="输出 ROB2 Markdown 表格",
     ),
 ) -> None:
-    payload = _load_options_payload(options, options_file, set_values)
+    payload = load_options_payload(options, options_file, set_values)
     payload.setdefault("debug_level", debug)
     if include_reports is not None:
         payload["include_reports"] = include_reports
     if include_audit_reports is not None:
         payload["include_audit_reports"] = include_audit_reports
 
-    try:
-        options_obj = Rob2RunOptions.model_validate(payload)
-    except ValidationError as exc:
-        raise typer.BadParameter(str(exc)) from exc
-
+    options_obj = build_options(payload)
     result = run_rob2(Rob2Input(pdf_path=str(pdf_path)), options_obj)
     _emit_result(result, json_out=json_out, table=table)
 
 
-def _load_options_payload(
-    options: str | None,
-    options_file: Path | None,
-    set_values: list[str] | None,
-) -> dict[str, Any]:
-    payload: dict[str, Any] = {}
-
-    if options:
-        payload.update(_parse_json_string(options))
-
-    if options_file:
-        payload.update(_load_options_file(options_file))
-
-    if set_values:
-        payload.update(_parse_set_values(set_values))
-
-    return payload
-
-
-def _parse_json_string(text: str) -> dict[str, Any]:
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise typer.BadParameter(f"Invalid JSON in --options: {exc}") from exc
-    if not isinstance(data, dict):
-        raise typer.BadParameter("--options must be a JSON object.")
-    return data
-
-
-def _load_options_file(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        raise typer.BadParameter(f"Options file not found: {path}")
-    text = path.read_text(encoding="utf-8")
-    if path.suffix.lower() in {".yaml", ".yml"}:
-        try:
-            import yaml
-        except Exception as exc:
-            raise typer.BadParameter("PyYAML is required for YAML options.") from exc
-        data = yaml.safe_load(text) or {}
-    else:
-        data = _parse_json_string(text)
-    if not isinstance(data, dict):
-        raise typer.BadParameter("Options file must contain a JSON/YAML object.")
-    return data
-
-
-def _parse_set_values(items: list[str]) -> dict[str, Any]:
-    parsed: dict[str, Any] = {}
-    for item in items:
-        if "=" not in item:
-            raise typer.BadParameter("--set requires key=value syntax.")
-        key, raw_value = item.split("=", 1)
-        key = key.strip()
-        if not key:
-            raise typer.BadParameter("--set requires a non-empty key.")
-        parsed[key] = _parse_value(raw_value.strip())
-    return parsed
-
-
-def _parse_value(value: str) -> Any:
-    if value == "":
-        return ""
-    try:
-        return json.loads(value)
-    except json.JSONDecodeError:
-        return value
-
-
-def _emit_result(result: Any, *, json_out: bool, table: bool) -> None:
+def _emit_result(result: Rob2RunResult, *, json_out: bool, table: bool) -> None:
     if json_out:
-        payload = result.model_dump()
-        typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        emit_json(result.model_dump())
 
     if table and getattr(result, "table_markdown", ""):
         typer.echo(result.table_markdown)

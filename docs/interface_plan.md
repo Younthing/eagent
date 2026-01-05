@@ -169,7 +169,7 @@ rob2 playground [d1]                         # 交互式调试
 | `scripts/check_splade_retrieval.py` | `rob2 retrieval splade` |
 | `scripts/check_fusion.py` | `rob2 fusion run` |
 | `scripts/check_question_bank.py` | `rob2 questions check` |
-| `scripts/d1_playground.py` | `rob2 playground d1` |
+| `src/playground/d1_playground.py` | `rob2 playground d1` |
 
 > 脚本可以暂时保留；新功能优先进入 Typer 命令树，避免能力分散。
 

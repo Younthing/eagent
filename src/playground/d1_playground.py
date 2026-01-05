@@ -30,7 +30,7 @@ from retrieval.engines.splade import DEFAULT_SPLADE_MODEL_ID
 from rob2.question_bank import load_question_bank
 from schemas.internal.rob2 import QuestionSet
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_LOCAL_SPLADE = PROJECT_ROOT / "models" / "splade_distil_CoCodenser_large"
 
 
