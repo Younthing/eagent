@@ -30,7 +30,6 @@ apply_cli_localization()
 app = typer.Typer(
     help=(
         "ROB2 命令行工具\n\n用于运行 ROB2 评估流程并进行检索、验证、审计和图结构调试\n"
-        "常用命令: rob2 run / rob2 retrieval / rob2 validate / rob2 audit\n"
     ),
     context_settings={"help_option_names": ["-h", "--help"]},
     invoke_without_command=True,
