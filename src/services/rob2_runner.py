@@ -85,6 +85,14 @@ def _build_run_state(
     per_query_top_n = _resolve_int(options.per_query_top_n, _DEFAULT_PER_QUERY_TOP_N)
     rrf_k = _resolve_int(options.rrf_k, _DEFAULT_RRF_K)
     use_structure = _resolve_bool(options.use_structure, False)
+    locator_tokenizer = (
+        _resolve_str(options.locator_tokenizer)
+        or _resolve_str(settings.locator_tokenizer)
+        or "auto"
+    )
+    locator_char_ngram = _resolve_int(
+        options.locator_char_ngram, settings.locator_char_ngram or 2
+    )
 
     relevance_mode = _resolve_choice(options.relevance_mode, "none")
     consistency_mode = _resolve_choice(options.consistency_mode, "none")
@@ -180,6 +188,8 @@ def _build_run_state(
         "section_bonus_weight": _resolve_float(
             options.section_bonus_weight, _DEFAULT_SECTION_BONUS_WEIGHT
         ),
+        "locator_tokenizer": locator_tokenizer,
+        "locator_char_ngram": locator_char_ngram,
         "splade_model_id": splade_model_id,
         "splade_device": _resolve_str(options.splade_device) or _resolve_str(settings.splade_device),
         "splade_hf_token": _resolve_str(options.splade_hf_token) or _resolve_str(settings.splade_hf_token),

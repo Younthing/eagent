@@ -6,13 +6,11 @@ import re
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from rob2.locator_rules import get_locator_rules
+from retrieval.tokenization import normalize_for_match
 from schemas.internal.documents import DocStructure, SectionSpan
 from schemas.internal.evidence import EvidenceBundle, EvidenceCandidate
 from schemas.internal.locator import LocatorRules
 from schemas.internal.rob2 import QuestionSet, Rob2Question
-
-_NON_WORD = re.compile(r"[^a-z0-9]+")
-_WS = re.compile(r"\s+")
 
 
 def rule_based_locator_node(state: dict) -> dict:
@@ -151,10 +149,7 @@ def _merge_unique(base: Iterable[str], extra: Optional[Iterable[str]]) -> List[s
 
 
 def _normalize_for_match(text: str) -> str:
-    lowered = text.casefold()
-    lowered = lowered.replace("-", " ").replace("–", " ").replace("—", " ")
-    lowered = _NON_WORD.sub(" ", lowered)
-    return _WS.sub(" ", lowered).strip()
+    return normalize_for_match(text)
 
 
 def _score_section(title: str, priors: Sequence[str]) -> Tuple[int, List[str]]:
@@ -212,7 +207,7 @@ def _match_keywords(text: str, keywords: Sequence[str]) -> List[str]:
 
 
 def _is_short_token(token: str) -> bool:
-    return len(token) <= 4 and token.isalnum()
+    return token.isascii() and len(token) <= 4 and token.isalnum()
 
 
 __all__ = ["rule_based_locate", "rule_based_locator_node"]

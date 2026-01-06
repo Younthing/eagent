@@ -176,6 +176,8 @@ def _options_catalog() -> list[dict[str, Any]]:
                 {"key": "rerank_top_n", "desc": "重排 top-N"},
                 {"key": "use_structure", "desc": "启用结构感知过滤"},
                 {"key": "section_bonus_weight", "desc": "章节加权系数"},
+                {"key": "locator_tokenizer", "desc": "定位分词器策略"},
+                {"key": "locator_char_ngram", "desc": "中文 n-gram 长度"},
                 {"key": "splade_model_id", "desc": "SPLADE 模型 ID"},
                 {"key": "splade_device", "desc": "SPLADE 设备"},
                 {"key": "splade_hf_token", "desc": "HuggingFace token"},

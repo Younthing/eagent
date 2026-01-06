@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import math
-import re
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Sequence
 
 from schemas.internal.documents import SectionSpan
-
-_NON_WORD = re.compile(r"[^a-z0-9]+")
+from retrieval.tokenization import TokenizerConfig, tokenize_text
 
 
 @dataclass(frozen=True)
@@ -30,6 +28,7 @@ class BM25Index:
         avgdl: float,
         k1: float = 1.5,
         b: float = 0.75,
+        tokenizer: TokenizerConfig | None = None,
     ) -> None:
         self._term_freqs = term_freqs
         self._doc_lengths = doc_lengths
@@ -37,6 +36,7 @@ class BM25Index:
         self._avgdl = avgdl
         self._k1 = k1
         self._b = b
+        self._tokenizer = tokenizer or TokenizerConfig()
 
     @property
     def size(self) -> int:
@@ -44,7 +44,7 @@ class BM25Index:
 
     def search(self, query: str, *, top_n: int = 50) -> List[BM25Hit]:
         """Return top_n BM25 hits for the query."""
-        tokens = tokenize(query)
+        tokens = tokenize_text(query, config=self._tokenizer)
         if not tokens:
             return []
 
@@ -74,6 +74,7 @@ def build_bm25_index(
     *,
     k1: float = 1.5,
     b: float = 0.75,
+    tokenizer: TokenizerConfig | None = None,
 ) -> BM25Index:
     """Build a BM25 index over spans."""
     term_freqs: List[Dict[str, int]] = []
@@ -81,7 +82,7 @@ def build_bm25_index(
     doc_freq: Dict[str, int] = {}
 
     for span in spans:
-        tokens = tokenize(span.text)
+        tokens = tokenize_text(span.text, config=tokenizer)
         tf: Dict[str, int] = {}
         seen: set[str] = set()
         for token in tokens:
@@ -103,15 +104,13 @@ def build_bm25_index(
         avgdl=avgdl,
         k1=k1,
         b=b,
+        tokenizer=tokenizer,
     )
 
 
 def tokenize(text: str) -> List[str]:
-    """Tokenize text for BM25."""
-    lowered = text.casefold()
-    lowered = lowered.replace("-", " ").replace("–", " ").replace("—", " ")
-    lowered = _NON_WORD.sub(" ", lowered)
-    return [token for token in lowered.split() if token]
+    """Tokenize text for BM25 with default configuration."""
+    return tokenize_text(text)
 
 
 def _idf(n_docs: int, df: int) -> float:
@@ -145,4 +144,3 @@ def _bm25_score(
 
 
 __all__ = ["BM25Hit", "BM25Index", "build_bm25_index", "tokenize"]
-

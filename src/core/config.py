@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     preprocess_reference_titles: str | None = Field(
         default=None, validation_alias="PREPROCESS_REFERENCE_TITLES"
     )
+    locator_tokenizer: str = Field(
+        default="auto", validation_alias="LOCATOR_TOKENIZER"
+    )
+    locator_char_ngram: int = Field(
+        default=2, validation_alias="LOCATOR_CHAR_NGRAM"
+    )
 
     query_planner_model: str | None = Field(
         default=None, validation_alias="QUERY_PLANNER_MODEL"

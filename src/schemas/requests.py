@@ -54,6 +54,15 @@ class Rob2RunOptions(BaseModel):
 
     use_structure: bool | None = None
     section_bonus_weight: float | None = Field(default=None, ge=0)
+    locator_tokenizer: Literal[
+        "auto",
+        "english",
+        "pkuseg_medicine",
+        "pkuseg",
+        "jieba",
+        "char",
+    ] | None = None
+    locator_char_ngram: int | None = Field(default=None, ge=1)
 
     splade_model_id: str | None = None
     splade_device: str | None = None

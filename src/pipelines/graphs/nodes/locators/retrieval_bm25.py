@@ -20,6 +20,7 @@ from retrieval.rerankers.cross_encoder import (
     get_cross_encoder_reranker,
 )
 from retrieval.structure.filters import filter_spans_by_section_priors
+from retrieval.tokenization import resolve_tokenizer_config
 from rob2.locator_rules import get_locator_rules
 from schemas.internal.documents import DocStructure
 from schemas.internal.evidence import EvidenceBundle, EvidenceCandidate
@@ -183,8 +184,13 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
     if section_bonus_weight < 0:
         raise ValueError("section_bonus_weight must be >= 0")
 
+    tokenizer_config = resolve_tokenizer_config(
+        state.get("locator_tokenizer"),
+        state.get("locator_char_ngram"),
+    )
+
     spans = doc_structure.sections
-    full_index = build_bm25_index(spans)
+    full_index = build_bm25_index(spans, tokenizer=tokenizer_config)
     full_mapping = list(range(len(spans)))
 
     domain_indices: Dict[str, _StructuredIndex] = {}
@@ -194,7 +200,10 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
             filtered = filter_spans_by_section_priors(spans, priors)
             if filtered.indices:
                 domain_indices[domain] = _StructuredIndex(
-                    index=build_bm25_index([spans[i] for i in filtered.indices]),
+                    index=build_bm25_index(
+                        [spans[i] for i in filtered.indices],
+                        tokenizer=tokenizer_config,
+                    ),
                     mapping=filtered.indices,
                     section_scores=filtered.section_scores,
                     matched_priors=filtered.matched_priors,
@@ -236,7 +245,10 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
                 filtered = filter_spans_by_section_priors(spans, priors_used)
                 if filtered.indices:
                     selected = _StructuredIndex(
-                        index=build_bm25_index([spans[i] for i in filtered.indices]),
+                        index=build_bm25_index(
+                            [spans[i] for i in filtered.indices],
+                            tokenizer=tokenizer_config,
+                        ),
                         mapping=filtered.indices,
                         section_scores=filtered.section_scores,
                         matched_priors=filtered.matched_priors,
@@ -362,6 +374,8 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
             "index_size": full_index.size,
             "use_structure": use_structure,
             "section_bonus_weight": section_bonus_weight,
+            "tokenizer": tokenizer_config.mode,
+            "char_ngram": tokenizer_config.char_ngram,
         },
         "bm25_structure": structure_debug if use_structure else None,
     }

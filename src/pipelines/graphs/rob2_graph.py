@@ -73,6 +73,8 @@ class Rob2GraphState(TypedDict, total=False):
     rerank_top_n: int
     use_structure: bool
     section_bonus_weight: float
+    locator_tokenizer: str
+    locator_char_ngram: int
     splade_model_id: str
     splade_device: str
     splade_hf_token: str
