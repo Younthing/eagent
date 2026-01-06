@@ -63,6 +63,21 @@ def export_questions(
     typer.echo(f"已写入: {output}")
 
 
+@app.command("check", help="校验题库格式与可解析性")
+def check_questions(
+    path: Path = typer.Option(
+        DEFAULT_QUESTION_BANK,
+        "--path",
+        help="题库 YAML 路径",
+    ),
+) -> None:
+    try:
+        load_question_bank(path)
+    except Exception as exc:
+        raise typer.BadParameter(f"题库校验失败: {exc}") from exc
+    typer.echo("题库校验通过")
+
+
 def _print_summary(question_set: QuestionSet, path: Path) -> None:
     assignment = [
         question

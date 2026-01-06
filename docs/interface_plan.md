@@ -133,26 +133,29 @@ def run_rob2(input: Rob2Input, options: Rob2RunOptions) -> Rob2RunResult
 **主命令**：`rob2`
 
 **基础用法**
-- `rob2 run <pdf_path> [--json] [--table] [options...]`
+- `rob2 run <pdf_path> [--json] [--table] [--output-dir DIR] [--include ...] [options...]`
 
 **命令树（建议最终形态）**
 ```
 rob2 run <pdf_path> [options]                # 一键全流程
-rob2 audit <pdf_path> [--domain D1|D2...]     # 独立审核流程（调试）
-rob2 validate <pdf_path> [--scope ...]        # 验证/一致性/完整性单跑
-rob2 retrieval <pdf_path> [--engine ...]      # 检索/融合单跑
-rob2 questions [list|export]                 # 题库查看/导出
-rob2 graph [show|run]                         # 图结构与运行
-rob2 config [show|export|diff]               # 生效配置与覆盖源
+rob2 audit run <pdf_path>                    # 独立审核流程（调试）
+rob2 validate <pdf_path> [--scope ...]       # 验证/一致性/完整性单跑
+rob2 retrieval bm25|splade <pdf_path>        # 检索型定位（BM25/SPLADE）
+rob2 locator rule <pdf_path>                 # 规则型定位
+rob2 questions [list|export|check]           # 题库查看/导出/校验
+rob2 graph [show|run]                        # 图结构与运行
+rob2 config [show|export|diff|options|example] # 生效配置、可配项与示例配置
 rob2 cache [stats|clear]                     # 缓存管理（模型/向量）
 # 开发/诊断（可选）
 rob2 fusion [run|inspect]                    # 融合调试
-rob2 locator [rule|bm25|splade]              # 定位调试
 rob2 playground [d1]                         # 交互式调试
 ```
 
+**说明**
+- 规则型定位归 `locator`，检索型定位（BM25/SPLADE）归 `retrieval`，避免命令重复。
+
 **统一参数与输出**
-- 输出模式：`--json`（结构化）/ `--table`（表格）/ `--output-dir`
+- 输出模式：`--json`（结构化）/ `--table`（表格）/ `--output-dir` / `--include`
 - 调试级别：`--debug none|min|full`
 - 覆盖方式：`--set key=value`（任意覆盖，CLI 与 API 共用同一键名）
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import typer
@@ -107,6 +108,11 @@ def run(
         "--include-audit-reports/--no-include-audit-reports",
         help="JSON 输出中包含审计报告",
     ),
+    include: list[str] = typer.Option(
+        None,
+        "--include",
+        help="额外输出项：reports|audit_reports|debug|debug_full|table",
+    ),
     json_out: bool = typer.Option(
         False,
         "--json",
@@ -117,6 +123,11 @@ def run(
         "--table/--no-table",
         help="输出 ROB2 Markdown 表格",
     ),
+    output_dir: Path | None = typer.Option(
+        None,
+        "--output-dir",
+        help="输出目录（写入 result.json/table.md 等）",
+    ),
 ) -> None:
     payload = load_options_payload(options, options_file, set_values)
     payload.setdefault("debug_level", debug)
@@ -124,10 +135,24 @@ def run(
         payload["include_reports"] = include_reports
     if include_audit_reports is not None:
         payload["include_audit_reports"] = include_audit_reports
+    include_set = _normalize_include(include)
+    if include_set:
+        if "reports" in include_set:
+            payload["include_reports"] = True
+        if "audit_reports" in include_set or "audit" in include_set:
+            payload["include_audit_reports"] = True
+        if "debug_full" in include_set:
+            payload["debug_level"] = "full"
+        elif "debug" in include_set:
+            payload["debug_level"] = "min"
+        if "table" in include_set:
+            table = True
 
     options_obj = build_options(payload)
     result = run_rob2(Rob2Input(pdf_path=str(pdf_path)), options_obj)
     _emit_result(result, json_out=json_out, table=table)
+    if output_dir is not None:
+        _write_output_dir(result, output_dir, include_table=table)
 
 
 def _emit_result(result: Rob2RunResult, *, json_out: bool, table: bool) -> None:
@@ -136,6 +161,47 @@ def _emit_result(result: Rob2RunResult, *, json_out: bool, table: bool) -> None:
 
     if table and getattr(result, "table_markdown", ""):
         typer.echo(result.table_markdown)
+
+
+def _normalize_include(values: list[str] | None) -> set[str]:
+    if not values:
+        return set()
+    normalized = {value.strip().lower().replace("-", "_") for value in values if value}
+    allowed = {"reports", "audit_reports", "audit", "debug", "debug_full", "table"}
+    unknown = sorted(normalized - allowed)
+    if unknown:
+        raise typer.BadParameter(f"--include 不支持: {', '.join(unknown)}")
+    return normalized
+
+
+def _write_output_dir(
+    result: Rob2RunResult, output_dir: Path, *, include_table: bool
+) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    result_path = output_dir / "result.json"
+    result_path.write_text(
+        json.dumps(result.model_dump(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    if include_table and result.table_markdown:
+        (output_dir / "table.md").write_text(result.table_markdown, encoding="utf-8")
+
+    if result.reports is not None:
+        (output_dir / "reports.json").write_text(
+            json.dumps(result.reports, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    if result.audit_reports is not None:
+        (output_dir / "audit_reports.json").write_text(
+            json.dumps(result.audit_reports, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    if result.debug is not None:
+        (output_dir / "debug.json").write_text(
+            json.dumps(result.debug, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
 
 def main() -> None:
