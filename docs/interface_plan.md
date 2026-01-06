@@ -148,7 +148,7 @@ rob2 config [show|export|diff|options|example] # 生效配置、可配项与示�
 rob2 cache [stats|clear]                     # 缓存管理（模型/向量）
 # 开发/诊断（可选）
 rob2 fusion [run|inspect]                    # 融合调试
-rob2 playground [d1]                         # 交互式调试
+rob2 playground [d1|d2|d3|d4|d5]             # 交互式调试
 ```
 
 **说明**
@@ -172,7 +172,7 @@ rob2 playground [d1]                         # 交互式调试
 | `scripts/check_splade_retrieval.py` | `rob2 retrieval splade` |
 | `scripts/check_fusion.py` | `rob2 fusion run` |
 | `scripts/check_question_bank.py` | `rob2 questions check` |
-| `src/playground/d1_playground.py` | `rob2 playground d1` |
+| `src/playground/domain_playground.py` | `rob2 playground d1` |
 
 > 脚本可以暂时保留；新功能优先进入 Typer 命令树，避免能力分散。
 

@@ -3,7 +3,7 @@
 <cite>
 **Referenced Files in This Document**   
 - [playground.py](file://src/cli/commands/playground.py)
-- [d1_playground.py](file://src/playground/d1_playground.py)
+- [domain_playground.py](file://src/playground/domain_playground.py)
 - [d1_randomization.py](file://src/pipelines/graphs/nodes/domains/d1_randomization.py)
 - [common.py](file://src/pipelines/graphs/nodes/domains/common.py)
 - [fusion.py](file://src/pipelines/graphs/nodes/fusion.py)
@@ -34,7 +34,7 @@ The playground command provides an interactive environment for testing and debug
 
 **Section sources**
 - [playground.py](file://src/cli/commands/playground.py#L1-L30)
-- [d1_playground.py](file://src/playground/d1_playground.py#L1-L692)
+- [domain_playground.py](file://src/playground/domain_playground.py#L1-L692)
 
 ## Subcommands and Access
 
@@ -52,11 +52,11 @@ Dependencies --> PIL[PIL]
 
 **Diagram sources **
 - [playground.py](file://src/cli/commands/playground.py#L8-L30)
-- [d1_playground.py](file://src/playground/d1_playground.py#L1-L692)
+- [domain_playground.py](file://src/playground/domain_playground.py#L1-L692)
 
 **Section sources**
 - [playground.py](file://src/cli/commands/playground.py#L8-L30)
-- [d1_playground.py](file://src/playground/d1_playground.py#L1-L692)
+- [domain_playground.py](file://src/playground/domain_playground.py#L1-L692)
 
 ## Interactive Features
 
@@ -77,17 +77,17 @@ J --> K[Compare Outputs]
 ```
 
 **Diagram sources **
-- [d1_playground.py](file://src/playground/d1_playground.py#L562-L682)
+- [domain_playground.py](file://src/playground/domain_playground.py#L562-L682)
 
 **Section sources**
-- [d1_playground.py](file://src/playground/d1_playground.py#L562-L682)
+- [domain_playground.py](file://src/playground/domain_playground.py#L562-L682)
 
 ## Use Cases
 
 The playground environment supports several key use cases for rapid prototyping and debugging specific workflow stages. For evidence validation testing, users can isolate the validation pipeline to assess how different evidence candidates pass or fail existence, relevance, and completeness checks. This allows for fine-tuning of validation thresholds and rules without running the entire assessment. For retrieval strategy evaluation, the playground enables comparison of different retrieval engines (BM25, SPLADE, rule-based) and their fusion strategies. Users can analyze how varying the top-k and per-query top-N parameters affects the quality of retrieved evidence. Domain reasoning experimentation allows users to test different prompt templates, LLM configurations, and reasoning approaches for the D1 randomization assessment. The ability to manually edit evidence and prompts facilitates A/B testing of different reasoning strategies and helps identify edge cases in the decision logic.
 
 **Section sources**
-- [d1_playground.py](file://src/playground/d1_playground.py#L303-L356)
+- [domain_playground.py](file://src/playground/domain_playground.py#L303-L356)
 - [d1_randomization.py](file://src/pipelines/graphs/nodes/domains/d1_randomization.py#L1-L48)
 - [common.py](file://src/pipelines/graphs/nodes/domains/common.py#L100-L129)
 
@@ -144,7 +144,7 @@ D1Playground --> DomainReasoning : "uses"
 ```
 
 **Diagram sources **
-- [d1_playground.py](file://src/playground/d1_playground.py#L1-L692)
+- [domain_playground.py](file://src/playground/domain_playground.py#L1-L692)
 - [preprocess.py](file://src/pipelines/graphs/nodes/preprocess.py#L1-L444)
 - [bm25.py](file://src/retrieval/engines/bm25.py#L1-L149)
 - [splade.py](file://src/retrieval/engines/splade.py#L1-L100)
@@ -155,7 +155,7 @@ D1Playground --> DomainReasoning : "uses"
 - [common.py](file://src/pipelines/graphs/nodes/domains/common.py#L1-L516)
 
 **Section sources**
-- [d1_playground.py](file://src/playground/d1_playground.py#L1-L692)
+- [domain_playground.py](file://src/playground/domain_playground.py#L1-L692)
 - [preprocess.py](file://src/pipelines/graphs/nodes/preprocess.py#L1-L444)
 - [bm25.py](file://src/retrieval/engines/bm25.py#L1-L149)
 - [splade.py](file://src/retrieval/engines/splade.py#L1-L100)
@@ -170,7 +170,7 @@ D1Playground --> DomainReasoning : "uses"
 To effectively use the playground, users should follow a systematic approach to experiment design and parameter tuning. Start by uploading a representative PDF document and running the default pipeline to establish a baseline. Then, systematically modify one parameter at a time to observe its impact on the results. For retrieval strategy testing, compare the evidence candidates from different engines (BM25, SPLADE, rule-based) and analyze their overlap and differences. When testing evidence validation, focus on edge cases where evidence might be borderline relevant or complete. For domain reasoning experiments, create controlled variations of the evidence set to test specific reasoning patterns. When transferring findings to production, document the parameter configurations and prompt templates that yield the best results. Use the playground to identify failure modes and develop corresponding fixes or improvements. The iterative nature of the playground allows for rapid hypothesis testing and refinement of the assessment pipeline.
 
 **Section sources**
-- [d1_playground.py](file://src/playground/d1_playground.py#L303-L356)
+- [domain_playground.py](file://src/playground/domain_playground.py#L303-L356)
 - [config.py](file://src/core/config.py#L1-L200)
 
 ## Limitations
@@ -178,7 +178,7 @@ To effectively use the playground, users should follow a systematic approach to 
 The playground environment has several limitations compared to full workflow execution. First, it focuses primarily on the D1 randomization assessment and does not provide interactive interfaces for other domains (D2-D5). Second, the playground uses a simplified version of the full pipeline, omitting certain production optimizations and error handling mechanisms. Third, the interactive nature of the playground means that it processes documents sequentially rather than in batch mode, which affects performance characteristics. Fourth, the playground's visualization capabilities are limited to evidence highlighting on PDF pages and do not provide comprehensive analytics or metrics that are available in the full system. Finally, certain advanced features like domain audit and evidence patching are not available in the playground environment, as they require coordination across multiple domains and assessment stages.
 
 **Section sources**
-- [d1_playground.py](file://src/playground/d1_playground.py#L1-L692)
+- [domain_playground.py](file://src/playground/domain_playground.py#L1-L692)
 - [d1_randomization.py](file://src/pipelines/graphs/nodes/domains/d1_randomization.py#L1-L48)
 
 ## Conclusion

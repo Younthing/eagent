@@ -10,7 +10,7 @@
 - [evidence.py](file://src/schemas/internal/evidence.py)
 - [rob2_questions.yaml](file://src/rob2/rob2_questions.yaml)
 - [decision_rules.py](file://src/rob2/decision_rules.py)
-- [d1_playground.py](file://src/playground/d1_playground.py)
+- [domain_playground.py](file://src/playground/domain_playground.py)
 - [test_domain_reasoning.py](file://tests/unit/test_domain_reasoning.py)
 </cite>
 
@@ -243,10 +243,10 @@ The playground demonstrates:
 This is useful for testing and debugging the D1 reasoning pipeline.
 
 **Section sources**
-- [d1_playground.py](file://src/playground/d1_playground.py#L303-L357)
-- [d1_playground.py](file://src/playground/d1_playground.py#L359-L432)
-- [d1_playground.py](file://src/playground/d1_playground.py#L457-L482)
-- [d1_playground.py](file://src/playground/d1_playground.py#L484-L542)
+- [domain_playground.py](file://src/playground/domain_playground.py#L303-L357)
+- [domain_playground.py](file://src/playground/domain_playground.py#L359-L432)
+- [domain_playground.py](file://src/playground/domain_playground.py#L457-L482)
+- [domain_playground.py](file://src/playground/domain_playground.py#L484-L542)
 
 ## Dependency Analysis
 High-level dependencies:

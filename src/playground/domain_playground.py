@@ -1,10 +1,10 @@
-"""Gradio playground for D1 reasoning with evidence highlighting."""
+"""Gradio playground for domain reasoning with evidence highlighting."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, cast
 
 import fitz  # PyMuPDF
 import gradio as gr
@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw
 
 from core.config import get_settings
 from pipelines.graphs.nodes.domains.common import (
+    EffectType,
     build_domain_prompts,
     build_reasoning_config,
     run_domain_reasoning,
@@ -28,10 +29,40 @@ from pipelines.graphs.nodes.validators.existence import existence_validator_node
 from pipelines.graphs.nodes.validators.relevance import relevance_validator_node
 from retrieval.engines.splade import DEFAULT_SPLADE_MODEL_ID
 from rob2.question_bank import load_question_bank
+from schemas.internal.locator import DomainId
 from schemas.internal.rob2 import QuestionSet
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_LOCAL_SPLADE = PROJECT_ROOT / "models" / "splade_distil_CoCodenser_large"
+
+_DOMAIN_LABELS = {
+    "D1": "D1",
+    "D2": "D2",
+    "D3": "D3",
+    "D4": "D4",
+    "D5": "D5",
+}
+
+
+def _domain_label(domain: str) -> str:
+    return _DOMAIN_LABELS.get(domain.upper(), domain.upper())
+
+
+def _normalize_domain(domain: str) -> DomainId:
+    key = domain.upper()
+    if key not in _DOMAIN_LABELS:
+        return cast(DomainId, "D1")
+    return cast(DomainId, key)
+
+
+def _normalize_effect_type(
+    domain: DomainId, effect_type: Optional[str]
+) -> Optional[EffectType]:
+    if domain != "D2":
+        return None
+    value = (effect_type or "assignment").strip().lower()
+    normalized = value if value in {"assignment", "adherence"} else "assignment"
+    return cast(EffectType, normalized)
 
 
 def _resolve_splade_model_id() -> str:
@@ -224,11 +255,21 @@ def _render_page(
         return image
 
 
-def _extract_question_ids(question_set: QuestionSet) -> List[str]:
+def _extract_question_ids(
+    question_set: QuestionSet,
+    *,
+    domain: DomainId,
+    effect_type: Optional[EffectType],
+) -> List[str]:
     return [
         question.question_id
         for question in sorted(
-            (q for q in question_set.questions if q.domain == "D1"),
+            (
+                q
+                for q in question_set.questions
+                if q.domain == domain
+                and (effect_type is None or q.effect_type == effect_type)
+            ),
             key=lambda item: item.order,
         )
     ]
@@ -361,6 +402,8 @@ def _load_pdf_and_evidence(
     top_k: int,
     per_query_top_n: int,
     use_structure: bool,
+    domain: str,
+    effect_type: Optional[str],
 ) -> Tuple[
     Dict[str, Any],
     Any,
@@ -392,14 +435,19 @@ def _load_pdf_and_evidence(
     with fitz.open(path) as pdf:
         page_count = pdf.page_count
 
-    question_ids = _extract_question_ids(question_set)
+    domain_key = _normalize_domain(domain)
+    normalized_effect = _normalize_effect_type(domain_key, effect_type)
+    question_ids = _extract_question_ids(
+        question_set, domain=domain_key, effect_type=normalized_effect
+    )
     simplified = _simplify_candidates(validated_candidates, question_ids)
     evidence_text = json.dumps(simplified, ensure_ascii=True, indent=2)
     expanded = _expand_candidates(simplified)
     system_prompt, user_prompt = build_domain_prompts(
-        domain="D1",
+        domain=domain_key,
         question_set=question_set,
         validated_candidates=expanded,
+        effect_type=normalized_effect,
         evidence_top_k=top_k,
     )
 
@@ -410,6 +458,8 @@ def _load_pdf_and_evidence(
         "question_set": question_set,
         "validated_candidates": expanded,
         "question_ids": question_ids,
+        "domain": domain_key,
+        "effect_type": normalized_effect,
     }
 
     selected_question = question_ids[0] if question_ids else ""
@@ -471,17 +521,20 @@ def _refresh_prompts(
     if question_set is None:
         return "", "", "Question set missing."
 
+    domain_key = _normalize_domain(str(state.get("domain") or "D1"))
+    effect_type = _normalize_effect_type(domain_key, state.get("effect_type"))
     system_prompt, user_prompt = build_domain_prompts(
-        domain="D1",
+        domain=domain_key,
         question_set=question_set,
         validated_candidates=expanded,
+        effect_type=effect_type,
         evidence_top_k=top_k,
     )
     state["validated_candidates"] = expanded
     return system_prompt, user_prompt, "Prompts refreshed."
 
 
-def _run_d1(
+def _run_domain(
     state: Dict[str, Any],
     evidence_text: str,
     top_k: int,
@@ -501,67 +554,79 @@ def _run_d1(
         return "{}", "Question set missing."
 
     settings = get_settings()
-    model_id = str(settings.d1_model or "").strip()
+    domain_key = _normalize_domain(str(state.get("domain") or "D1"))
+    effect_type = _normalize_effect_type(domain_key, state.get("effect_type"))
+    prefix = domain_key.lower()
+    model_id = str(getattr(settings, f"{prefix}_model", "") or "").strip()
     if not model_id:
-        return "{}", "Missing D1 model (set D1_MODEL)."
+        env_key = f"{domain_key}_MODEL"
+        return "{}", f"缺少 {domain_key} 模型（设置 {env_key}）"
 
     config = build_reasoning_config(
         model_id=model_id,
-        model_provider=settings.d1_model_provider,
-        temperature=float(settings.d1_temperature),
-        timeout=float(settings.d1_timeout) if settings.d1_timeout is not None else None,
-        max_tokens=int(settings.d1_max_tokens)
-        if settings.d1_max_tokens is not None
+        model_provider=getattr(settings, f"{prefix}_model_provider"),
+        temperature=float(getattr(settings, f"{prefix}_temperature")),
+        timeout=float(getattr(settings, f"{prefix}_timeout"))
+        if getattr(settings, f"{prefix}_timeout") is not None
         else None,
-        max_retries=int(settings.d1_max_retries),
+        max_tokens=int(getattr(settings, f"{prefix}_max_tokens"))
+        if getattr(settings, f"{prefix}_max_tokens") is not None
+        else None,
+        max_retries=int(getattr(settings, f"{prefix}_max_retries")),
     )
 
     system_prompt_value = system_prompt if mode == "custom" else None
     user_prompt = None
     if mode == "custom" and system_prompt:
         _, user_prompt = build_domain_prompts(
-            domain="D1",
+            domain=domain_key,
             question_set=question_set,
             validated_candidates=expanded,
+            effect_type=effect_type,
             evidence_top_k=top_k,
         )
 
     decision = run_domain_reasoning(
-        domain="D1",
+        domain=domain_key,
         question_set=question_set,
         validated_candidates=expanded,
         llm=None,
         llm_config=config,
+        effect_type=effect_type,
         evidence_top_k=top_k,
         system_prompt=system_prompt_value,
         user_prompt=user_prompt,
     )
     return json.dumps(
         decision.model_dump(), ensure_ascii=True, indent=2
-    ), "D1 run complete."
+    ), f"{domain_key} 运行完成"
 
 
-def _run_d1_default(
+def _run_domain_default(
     state: Dict[str, Any],
     evidence_text: str,
     top_k: int,
     system_prompt: str,
 ) -> Tuple[str, str]:
-    return _run_d1(state, evidence_text, top_k, system_prompt, "default")
+    return _run_domain(state, evidence_text, top_k, system_prompt, "default")
 
 
-def _run_d1_custom(
+def _run_domain_custom(
     state: Dict[str, Any],
     evidence_text: str,
     top_k: int,
     system_prompt: str,
 ) -> Tuple[str, str]:
-    return _run_d1(state, evidence_text, top_k, system_prompt, "custom")
+    return _run_domain(state, evidence_text, top_k, system_prompt, "custom")
 
 
-def build_app() -> gr.Blocks:
-    with gr.Blocks(title="D1 调试台") as demo:
-        gr.Markdown("## D1 调试台（PDF → 证据 → 提示词 → 结论）")
+def build_app(domain: str = "D1") -> gr.Blocks:
+    domain_key = _normalize_domain(domain)
+    label = _domain_label(domain_key)
+    show_effect = domain_key == "D2"
+
+    with gr.Blocks(title=f"{label} 调试台") as demo:
+        gr.Markdown(f"## {label} 调试台（PDF → 证据 → 提示词 → 结论）")
 
         state = gr.State({})
 
@@ -575,7 +640,13 @@ def build_app() -> gr.Blocks:
                         file_types=[".pdf"],
                         type="filepath",
                     )
-                    run_pipeline = gr.Button("运行 D1 流水线", variant="primary")
+                    run_pipeline = gr.Button(f"运行 {label} 流水线", variant="primary")
+                effect_type = gr.Dropdown(
+                    choices=["assignment", "adherence"],
+                    value="assignment",
+                    label=f"{label} 效应类型",
+                    visible=show_effect,
+                )
                 with gr.Row():
                     top_k = gr.Slider(1, 10, value=5, step=1, label="证据 Top-k")
                     per_query_top_n = gr.Slider(
@@ -587,50 +658,91 @@ def build_app() -> gr.Blocks:
                     page_slider = gr.Slider(
                         minimum=1, maximum=1, value=1, step=1, label="页码"
                     )
-                    question_dropdown = gr.Dropdown(choices=[], label="D1 问题")
+                    question_dropdown = gr.Dropdown(choices=[], label=f"{label} 问题")
                 image_output = gr.Image(label="证据高亮", type="pil")
-                evidence_text = gr.Textbox(label="D1 证据（可编辑 JSON）", lines=18)
+                evidence_text = gr.Textbox(label=f"{label} 证据（可编辑 JSON）", lines=18)
                 apply_evidence = gr.Button("应用证据")
                 status = gr.Textbox(label="状态", interactive=False)
                 with gr.Accordion("定位侧说明（可展开）", open=False):
-                    gr.Markdown(
-                        "\n".join(
-                            [
-                                "- `运行 D1 流水线`：解析 PDF 并生成初始证据。",
-                                "- `应用证据`：根据当前证据 JSON 刷新高亮。",
-                                "- 切换 `页码` 或 `D1 问题` 会更新高亮。",
-                            ]
-                        )
-                    )
+                    lines = [
+                        f"- `运行 {label} 流水线`：解析 PDF 并生成初始证据。",
+                        "- `应用证据`：根据当前证据 JSON 刷新高亮。",
+                        f"- 切换 `页码` 或 `{label} 问题` 会更新高亮。",
+                    ]
+                    if show_effect:
+                        lines.append("- 切换效应类型会自动刷新题目与证据。")
+                    gr.Markdown("\n".join(lines))
 
             with gr.Column(scale=1):
                 gr.Markdown("### 提示词与推理")
                 gr.Markdown("**步骤 3：刷新提示词并对比推理**")
-                system_prompt = gr.Textbox(label="D1 系统提示词（可编辑）", lines=10)
+                system_prompt = gr.Textbox(
+                    label=f"{label} 系统提示词（可编辑）", lines=10
+                )
                 user_prompt = gr.Textbox(
-                    label="D1 用户提示词（只读）", lines=10, interactive=False
+                    label=f"{label} 用户提示词（只读）", lines=10, interactive=False
                 )
                 with gr.Row():
                     refresh_prompts = gr.Button("刷新提示词")
-                    run_default = gr.Button("运行 D1（默认提示词）")
-                    run_custom = gr.Button("运行 D1（自定义提示词）")
-                output_default = gr.Textbox(label="D1 输出（默认提示词）", lines=18)
-                output_custom = gr.Textbox(label="D1 输出（自定义提示词）", lines=18)
+                    run_default = gr.Button(f"运行 {label}（默认提示词）")
+                    run_custom = gr.Button(f"运行 {label}（自定义提示词）")
+                output_default = gr.Textbox(label=f"{label} 输出（默认提示词）", lines=18)
+                output_custom = gr.Textbox(label=f"{label} 输出（自定义提示词）", lines=18)
                 with gr.Accordion("提示词侧说明（可展开）", open=False):
                     gr.Markdown(
                         "\n".join(
                             [
                                 "- `刷新提示词`：基于当前证据 JSON 重建提示词。",
-                                "- `运行 D1（默认提示词）`：使用自动生成提示词。",
-                                "- `运行 D1（自定义提示词）`：使用你编辑后的提示词。",
+                                f"- `运行 {label}（默认提示词）`：使用自动生成提示词。",
+                                f"- `运行 {label}（自定义提示词）`：使用你编辑后的提示词。",
                                 "- 对比左右输出以评估提示词调整效果。",
                             ]
                         )
                     )
 
+        def _load_handler(
+            file_input: Optional[str],
+            top_k: int,
+            per_query_top_n: int,
+            use_structure: bool,
+            effect_type: Optional[str],
+        ) -> Tuple[
+            Dict[str, Any],
+            Any,
+            Any,
+            str,
+            str,
+            str,
+            Optional[Image.Image],
+            str,
+        ]:
+            return _load_pdf_and_evidence(
+                file_input,
+                top_k,
+                per_query_top_n,
+                use_structure,
+                domain_key,
+                effect_type,
+            )
+
         run_pipeline.click(
-            _load_pdf_and_evidence,
-            inputs=[file_input, top_k, per_query_top_n, use_structure],
+            _load_handler,
+            inputs=[file_input, top_k, per_query_top_n, use_structure, effect_type],
+            outputs=[
+                state,
+                page_slider,
+                question_dropdown,
+                evidence_text,
+                system_prompt,
+                user_prompt,
+                image_output,
+                status,
+            ],
+        )
+
+        effect_type.change(
+            _load_handler,
+            inputs=[file_input, top_k, per_query_top_n, use_structure, effect_type],
             outputs=[
                 state,
                 page_slider,
@@ -668,13 +780,13 @@ def build_app() -> gr.Blocks:
         )
 
         run_default.click(
-            _run_d1_default,
+            _run_domain_default,
             inputs=[state, evidence_text, top_k, system_prompt],
             outputs=[output_default, status],
         )
 
         run_custom.click(
-            _run_d1_custom,
+            _run_domain_custom,
             inputs=[state, evidence_text, top_k, system_prompt],
             outputs=[output_custom, status],
         )
@@ -682,9 +794,33 @@ def build_app() -> gr.Blocks:
     return demo
 
 
-def main() -> None:
-    app = build_app()
+def main_d1() -> None:
+    app = build_app("D1")
     app.launch()
+
+
+def main_d2() -> None:
+    app = build_app("D2")
+    app.launch()
+
+
+def main_d3() -> None:
+    app = build_app("D3")
+    app.launch()
+
+
+def main_d4() -> None:
+    app = build_app("D4")
+    app.launch()
+
+
+def main_d5() -> None:
+    app = build_app("D5")
+    app.launch()
+
+
+def main() -> None:
+    main_d1()
 
 
 if __name__ == "__main__":
