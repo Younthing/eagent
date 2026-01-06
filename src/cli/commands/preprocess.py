@@ -143,6 +143,16 @@ def show_preprocess(
         "--max-section-chars",
         help="单段文本最大字符数（0 表示不截断）",
     ),
+    drop_references: bool = typer.Option(
+        True,
+        "--drop-references/--keep-references",
+        help="丢弃参考文献段落",
+    ),
+    reference_titles: str | None = typer.Option(
+        None,
+        "--reference-titles",
+        help="参考文献标题匹配（逗号分隔）",
+    ),
     output: Path | None = typer.Option(
         None,
         "--output",
@@ -150,7 +160,11 @@ def show_preprocess(
     ),
     json_out: bool = typer.Option(False, "--json", help="输出 JSON"),
 ) -> None:
-    doc_structure = load_doc_structure(pdf_path)
+    doc_structure = load_doc_structure(
+        pdf_path,
+        drop_references=drop_references,
+        reference_titles=reference_titles,
+    )
     payload, stats = _trim_doc_structure(
         doc_structure,
         include_body=include_body,

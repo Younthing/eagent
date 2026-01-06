@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     docling_chunker_max_tokens: int | None = Field(
         default=None, validation_alias="DOCLING_CHUNKER_MAX_TOKENS"
     )
+    preprocess_drop_references: bool = Field(
+        default=True, validation_alias="PREPROCESS_DROP_REFERENCES"
+    )
+    preprocess_reference_titles: str | None = Field(
+        default=None, validation_alias="PREPROCESS_REFERENCE_TITLES"
+    )
 
     query_planner_model: str | None = Field(
         default=None, validation_alias="QUERY_PLANNER_MODEL"

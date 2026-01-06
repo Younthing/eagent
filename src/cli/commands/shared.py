@@ -9,7 +9,7 @@ from typing import Any, Iterable
 import typer
 
 from core.config import get_settings
-from pipelines.graphs.nodes.preprocess import parse_docling_pdf
+from pipelines.graphs.nodes.preprocess import parse_docling_pdf, filter_reference_sections
 from retrieval.engines.splade import DEFAULT_SPLADE_MODEL_ID
 from rob2.question_bank import DEFAULT_QUESTION_BANK, load_question_bank
 from schemas.internal.documents import DocStructure
@@ -20,10 +20,25 @@ from schemas.internal.rob2 import QuestionSet
 DEFAULT_LOCAL_SPLADE = Path(__file__).resolve().parents[3] / "models" / "splade_distil_CoCodenser_large"
 
 
-def load_doc_structure(pdf_path: Path) -> DocStructure:
+def load_doc_structure(
+    pdf_path: Path,
+    *,
+    drop_references: bool | None = None,
+    reference_titles: list[str] | str | None = None,
+) -> DocStructure:
     if not pdf_path.exists():
         raise typer.BadParameter(f"PDF not found: {pdf_path}")
-    return parse_docling_pdf(pdf_path)
+    settings = get_settings()
+    doc_structure = parse_docling_pdf(pdf_path)
+    if drop_references is None:
+        drop_references = settings.preprocess_drop_references
+    if drop_references:
+        if reference_titles is None:
+            reference_titles = settings.preprocess_reference_titles
+        doc_structure = filter_reference_sections(
+            doc_structure, reference_titles=reference_titles
+        )
+    return doc_structure
 
 
 def load_question_set(path: Path | None = None) -> QuestionSet:
@@ -72,4 +87,3 @@ def print_candidates(
             f"{idx:>2}. score={score_label} pid={candidate.paragraph_id} page={page} title={title}"
         )
         typer.echo(f"    text: {preview(candidate.text)}")
-

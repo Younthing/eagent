@@ -51,6 +51,8 @@ class Rob2GraphState(TypedDict, total=False):
     docling_artifacts_path: str
     docling_chunker_model: str
     docling_chunker_max_tokens: int
+    preprocess_drop_references: bool
+    preprocess_reference_titles: list[str] | str | None
 
     top_k: int
     per_query_top_n: int

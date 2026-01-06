@@ -29,6 +29,8 @@ class Rob2RunOptions(BaseModel):
     docling_artifacts_path: str | None = None
     docling_chunker_model: str | None = None
     docling_chunker_max_tokens: int | None = Field(default=None, ge=1)
+    preprocess_drop_references: bool | None = None
+    preprocess_reference_titles: list[str] | str | None = None
 
     # Retrieval + fusion
     top_k: int | None = Field(default=None, ge=1)

@@ -136,6 +136,14 @@ def _options_catalog() -> list[dict[str, Any]]:
                     "key": "docling_chunker_max_tokens",
                     "desc": "Chunker 最大 token 数",
                 },
+                {
+                    "key": "preprocess_drop_references",
+                    "desc": "预处理过滤参考文献",
+                },
+                {
+                    "key": "preprocess_reference_titles",
+                    "desc": "参考文献标题匹配列表",
+                },
             ],
         },
         {

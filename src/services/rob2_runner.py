@@ -121,6 +121,10 @@ def _build_run_state(
             splade_model_id = DEFAULT_SPLADE_MODEL_ID
             warnings.append("Using default SPLADE model id; set SPLADE_MODEL_ID to override.")
 
+    reference_titles = options.preprocess_reference_titles
+    if reference_titles is None:
+        reference_titles = settings.preprocess_reference_titles
+
     return {
         "pdf_path": pdf_path,
         "docling_layout_model": _resolve_str(options.docling_layout_model)
@@ -132,6 +136,10 @@ def _build_run_state(
         "docling_chunker_max_tokens": _resolve_optional_int(
             options.docling_chunker_max_tokens, settings.docling_chunker_max_tokens
         ),
+        "preprocess_drop_references": _resolve_bool(
+            options.preprocess_drop_references, settings.preprocess_drop_references
+        ),
+        "preprocess_reference_titles": reference_titles,
         "top_k": top_k,
         "per_query_top_n": per_query_top_n,
         "rrf_k": rrf_k,

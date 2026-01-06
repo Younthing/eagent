@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
+import re
 from hashlib import sha1
 from urllib.parse import urlparse
 from pathlib import Path
-from typing import Any, Iterable, List, Optional, TYPE_CHECKING, cast
+from typing import Any, Iterable, List, Optional, Sequence, TYPE_CHECKING, cast
 
 from core.config import get_settings
 from langchain_docling.loader import DoclingLoader
@@ -23,6 +24,15 @@ if TYPE_CHECKING:
 
 _CONVERTER_CACHE: tuple[Optional["DocumentConverter"], dict[str, object]] | None = None
 _CHUNKER_CACHE: tuple[Optional["BaseChunker"], dict[str, object]] | None = None
+_REFERENCE_TITLE_DEFAULTS = (
+    "references",
+    "reference",
+    "bibliography",
+    "参考文献",
+    "参考資料",
+    "参考文獻",
+)
+_REFERENCE_SPLIT_RE = re.compile(r"[>/|]+")
 
 
 def preprocess_node(state: dict) -> dict:
@@ -33,6 +43,11 @@ def preprocess_node(state: dict) -> dict:
 
     overrides = _read_docling_overrides(state)
     doc_structure = parse_docling_pdf(pdf_path, overrides=overrides)
+    if _resolve_bool(state.get("preprocess_drop_references"), True):
+        doc_structure = filter_reference_sections(
+            doc_structure,
+            reference_titles=state.get("preprocess_reference_titles"),
+        )
     return {"doc_structure": doc_structure.model_dump()}
 
 
@@ -58,6 +73,87 @@ def parse_docling_pdf(
     if docling_config:
         payload["docling_config"] = docling_config
     return DocStructure.model_validate(payload)
+
+
+def filter_reference_sections(
+    doc_structure: DocStructure,
+    *,
+    reference_titles: Sequence[str] | str | None = None,
+) -> DocStructure:
+    normalized_titles = _normalize_reference_titles(reference_titles)
+    if not normalized_titles:
+        return doc_structure
+    title_set = set(normalized_titles)
+    kept = [
+        span
+        for span in doc_structure.sections
+        if not _is_reference_title(span.title or "", title_set)
+    ]
+    if len(kept) == len(doc_structure.sections):
+        return doc_structure
+    body = normalize_block("\n\n".join(span.text for span in kept))
+    payload = doc_structure.model_dump()
+    payload["sections"] = kept
+    payload["body"] = body
+    if "spans" in payload:
+        payload["spans"] = kept
+    for key in list(payload.keys()):
+        if key in {"body", "sections", "docling_config", "spans"}:
+            continue
+        if _is_reference_title(str(key), title_set):
+            payload.pop(key, None)
+    return DocStructure.model_validate(payload)
+
+
+def _normalize_reference_titles(
+    reference_titles: Sequence[str] | str | None,
+) -> list[str]:
+    if reference_titles is None:
+        titles: list[str] = list(_REFERENCE_TITLE_DEFAULTS)
+    elif isinstance(reference_titles, str):
+        titles = _split_reference_titles(reference_titles)
+    else:
+        titles = []
+        for item in reference_titles:
+            if item is None:
+                continue
+            titles.extend(_split_reference_titles(str(item)))
+    normalized: list[str] = []
+    for title in titles:
+        normalized_title = _normalize_title(title)
+        if normalized_title:
+            normalized.append(normalized_title)
+    return normalized
+
+
+def _split_reference_titles(text: str) -> list[str]:
+    return [item.strip() for item in re.split(r"[;,]", text) if item.strip()]
+
+
+def _normalize_title(text: str) -> str:
+    collapsed = " ".join(text.strip().split())
+    return collapsed.strip(":：").lower()
+
+
+def _is_reference_title(title: str, reference_titles: set[str]) -> bool:
+    if not title:
+        return False
+    normalized = _normalize_title(title)
+    if normalized in reference_titles:
+        return True
+    for segment in _REFERENCE_SPLIT_RE.split(title):
+        normalized_segment = _normalize_title(segment)
+        if normalized_segment in reference_titles:
+            return True
+    return False
+
+
+def _resolve_bool(value: Any, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def _load_with_docling(
