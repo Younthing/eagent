@@ -36,6 +36,10 @@ class DocStructure(BaseModel):
 
     body: str
     sections: List[SectionSpan]
+    docling_config: Optional[dict[str, object]] = Field(
+        default=None,
+        description="Docling preprocessing configuration metadata.",
+    )
 
     model_config = ConfigDict(extra="allow")
 

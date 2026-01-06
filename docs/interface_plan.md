@@ -138,6 +138,7 @@ def run_rob2(input: Rob2Input, options: Rob2RunOptions) -> Rob2RunResult
 **命令树（建议最终形态）**
 ```
 rob2 run <pdf_path> [options]                # 一键全流程
+rob2 preprocess show <pdf_path>              # 预处理输出调试
 rob2 audit run <pdf_path>                    # 独立审核流程（调试）
 rob2 validate <pdf_path> [--scope ...]       # 验证/一致性/完整性单跑
 rob2 retrieval bm25|splade <pdf_path>        # 检索型定位（BM25/SPLADE）

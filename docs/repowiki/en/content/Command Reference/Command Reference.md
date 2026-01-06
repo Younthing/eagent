@@ -13,6 +13,7 @@
 - [audit.py](file://src/cli/commands/audit.py)
 - [cache.py](file://src/cli/commands/cache.py)
 - [playground.py](file://src/cli/commands/playground.py)
+- [preprocess.py](file://src/cli/commands/preprocess.py)
 - [common.py](file://src/cli/common.py)
 - [shared.py](file://src/cli/commands/shared.py)
 </cite>
@@ -51,6 +52,7 @@ The architecture separates concerns into distinct command groups:
 - Evidence location (`locator`)
 - Domain audit (`audit`)
 - Cache management (`cache`)
+- Preprocessing debug (`preprocess`)
 - Interactive tools (`playground`)
 
 The shared functionality between commands is abstracted into the `common.py` and `shared.py` modules, which provide utilities for JSON handling, option parsing, and data loading. This modular design enables independent development and testing of command components while maintaining a consistent user interface.
@@ -66,6 +68,7 @@ Main --> Fusion[fusion.py]
 Main --> Locator[locator.py]
 Main --> Audit[audit.py]
 Main --> Cache[cache.py]
+Main --> Preprocess[preprocess.py]
 Main --> Playground[playground.py]
 Common[common.py] --> Main
 Shared[shared.py] --> AllCommands

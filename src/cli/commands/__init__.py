@@ -8,10 +8,22 @@ __all__ = [
     "graph",
     "locator",
     "playground",
+    "preprocess",
     "questions",
     "retrieval",
     "validate",
 ]
 
-from . import audit, cache, config, fusion, graph, locator, playground, questions, retrieval, validate
-
+from . import (
+    audit,
+    cache,
+    config,
+    fusion,
+    graph,
+    locator,
+    playground,
+    preprocess,
+    questions,
+    retrieval,
+    validate,
+)

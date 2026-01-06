@@ -21,6 +21,7 @@ from cli.commands import (
     graph as graph_command,
     locator as locator_command,
     playground as playground_command,
+    preprocess as preprocess_command,
     questions as questions_command,
     retrieval as retrieval_command,
     validate as validate_command,
@@ -48,6 +49,7 @@ app.add_typer(fusion_command.app, name="fusion")
 app.add_typer(locator_command.app, name="locator")
 app.add_typer(audit_command.app, name="audit")
 app.add_typer(cache_command.app, name="cache")
+app.add_typer(preprocess_command.app, name="preprocess")
 app.add_typer(playground_command.app, name="playground")
 
 
