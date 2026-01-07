@@ -1,0 +1,16 @@
+services:
+  rob2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: eagent:latest
+    working_dir: /app
+    env_file:
+      - .env
+    volumes:
+      - ./models:/app/models:ro
+      - ./example:/data:ro
+      - ./outputs:/outputs
+    entrypoint: ["rob2"]
+    command: ["-h"]
+    tty: true

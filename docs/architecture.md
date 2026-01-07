@@ -225,6 +225,8 @@ eagent/
 │       └── expected_outputs/       # 人工标注/金标准（建议）
 │
 ├── pyproject.toml
+├── Dockerfile
+├── .dockerignore
 ├── docker-compose.yml
 ├── Makefile
 └── README.md
