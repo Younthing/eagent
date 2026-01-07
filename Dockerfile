@@ -1,35 +1,31 @@
 # syntax=docker/dockerfile:1.6
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm AS builder
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm
 
-WORKDIR /app
+WORKDIR /workspace
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
+    PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 
-COPY pyproject.toml uv.lock README.md ./
-RUN uv sync --frozen --no-dev --no-install-project
-
-COPY src ./src
-RUN uv sync --frozen --no-dev
-
-FROM python:3.13-slim-bookworm AS runtime
-
-WORKDIR /app
-ENV PATH="/opt/venv/bin:$PATH" \
-    PYTHONUNBUFFERED=1
-
+# 安装运行时依赖
+# libgomp1: OpenMP支持
+# poppler-utils: PDF解析工具
+# libgl1: OpenGL库(Docling可能需要)
+# libglib2.0-0: GLib库
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgomp1 \
+    && apt-get install -y --no-install-recommends \
+        libgomp1 \
+        poppler-utils \
+        libgl1 \
+        libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /opt/venv /opt/venv
-COPY src ./src
-COPY README.md ./README.md
+# 复制所有源码和项目文件
+COPY . .
 
-RUN useradd --create-home --uid 10001 app \
-    && chown -R app:app /app /opt/venv
-USER app
+# 安装依赖
+RUN uv sync --frozen --no-dev
 
 ENTRYPOINT ["rob2"]
 CMD ["-h"]
