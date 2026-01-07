@@ -40,7 +40,11 @@ from pipelines.graphs.nodes.validators.completeness import completeness_validato
 from pipelines.graphs.nodes.validators.consistency import consistency_validator_node
 from pipelines.graphs.nodes.validators.existence import existence_validator_node
 from pipelines.graphs.nodes.validators.relevance import relevance_validator_node
-from pipelines.graphs.routing import domain_audit_should_run_final, validation_should_retry
+from pipelines.graphs.routing import (
+    domain_audit_should_run,
+    domain_audit_should_run_final,
+    validation_should_retry,
+)
 
 
 class Rob2GraphState(TypedDict, total=False):
@@ -402,15 +406,35 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
         {"retry": "prepare_retry", "proceed": "d1_randomization"},
     )
     builder.add_edge("prepare_retry", "rule_based_locator")
-    builder.add_edge("d1_randomization", "d1_audit")
+    builder.add_conditional_edges(
+        "d1_randomization",
+        domain_audit_should_run,
+        {"audit": "d1_audit", "skip": "d2_deviations"},
+    )
     builder.add_edge("d1_audit", "d2_deviations")
-    builder.add_edge("d2_deviations", "d2_audit")
+    builder.add_conditional_edges(
+        "d2_deviations",
+        domain_audit_should_run,
+        {"audit": "d2_audit", "skip": "d3_missing_data"},
+    )
     builder.add_edge("d2_audit", "d3_missing_data")
-    builder.add_edge("d3_missing_data", "d3_audit")
+    builder.add_conditional_edges(
+        "d3_missing_data",
+        domain_audit_should_run,
+        {"audit": "d3_audit", "skip": "d4_measurement"},
+    )
     builder.add_edge("d3_audit", "d4_measurement")
-    builder.add_edge("d4_measurement", "d4_audit")
+    builder.add_conditional_edges(
+        "d4_measurement",
+        domain_audit_should_run,
+        {"audit": "d4_audit", "skip": "d5_reporting"},
+    )
     builder.add_edge("d4_audit", "d5_reporting")
-    builder.add_edge("d5_reporting", "d5_audit")
+    builder.add_conditional_edges(
+        "d5_reporting",
+        domain_audit_should_run,
+        {"audit": "d5_audit", "skip": "aggregate"},
+    )
     builder.add_conditional_edges(
         "d5_audit",
         domain_audit_should_run_final,

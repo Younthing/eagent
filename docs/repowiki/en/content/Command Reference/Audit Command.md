@@ -243,7 +243,7 @@ Additional execution options include:
 - `domain_audit_mode`: Whether to enable auditing ("llm" or "none")
 - `domain_audit_model`: LLM model to use for auditing (defaults to D1 model if not specified)
 - `domain_audit_model_provider`: Provider for the audit model
-- `domain_audit_rerun_domains`: Whether to re-run domain agents after applying evidence patches (default: True)
+- `domain_audit_rerun_domains`: Whether to re-run domain agents after applying evidence patches (default: False)
 - `domain_audit_final`: Whether to run a final all-domain audit after individual domain audits (default: False)
 
 These options provide fine-grained control over the audit workflow, allowing users to customize the process for different use cases.

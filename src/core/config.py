@@ -189,7 +189,7 @@ class Settings(BaseSettings):
         default=3, validation_alias="DOMAIN_AUDIT_MAX_PATCHES_PER_QUESTION"
     )
     domain_audit_rerun_domains: bool = Field(
-        default=True, validation_alias="DOMAIN_AUDIT_RERUN_DOMAINS"
+        default=False, validation_alias="DOMAIN_AUDIT_RERUN_DOMAINS"
     )
     domain_audit_final: bool = Field(
         default=False, validation_alias="DOMAIN_AUDIT_FINAL"

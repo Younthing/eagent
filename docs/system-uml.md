@@ -72,17 +72,22 @@ flowchart TD
 
   subgraph Reasoning
     CM --> D1[d1_randomization_node<br/>LLM decision<br/>M8]
-    D1 --> A1[d1_audit_node<br/>full-text audit + patch + rerun D1<br/>M9]
-    A1 --> D2[d2_deviations_node<br/>LLM decision<br/>M8]
-    D2 --> A2[d2_audit_node<br/>full-text audit + patch + rerun D2<br/>M9]
-    A2 --> D3[d3_missing_data_node<br/>LLM decision<br/>M8]
-    D3 --> A3[d3_audit_node<br/>full-text audit + patch + rerun D3<br/>M9]
-    A3 --> D4[d4_measurement_node<br/>LLM decision<br/>M8]
-    D4 --> A4[d4_audit_node<br/>full-text audit + patch + rerun D4<br/>M9]
-    A4 --> D5[d5_reporting_node<br/>LLM decision<br/>M8]
-    D5 --> A5[d5_audit_node<br/>full-text audit + patch + rerun D5<br/>M9]
+    D1 --> D2[d2_deviations_node<br/>LLM decision<br/>M8]
+    D1 -. audit_mode=llm .-> A1[d1_audit_node<br/>full-text audit + patch + rerun D1<br/>M9]
+    A1 --> D2
+    D2 --> D3[d3_missing_data_node<br/>LLM decision<br/>M8]
+    D2 -. audit_mode=llm .-> A2[d2_audit_node<br/>full-text audit + patch + rerun D2<br/>M9]
+    A2 --> D3
+    D3 --> D4[d4_measurement_node<br/>LLM decision<br/>M8]
+    D3 -. audit_mode=llm .-> A3[d3_audit_node<br/>full-text audit + patch + rerun D3<br/>M9]
+    A3 --> D4
+    D4 --> D5[d5_reporting_node<br/>LLM decision<br/>M8]
+    D4 -. audit_mode=llm .-> A4[d4_audit_node<br/>full-text audit + patch + rerun D4<br/>M9]
+    A4 --> D5
+    D5 --> AGG[aggregate_node<br/>final output + citations<br/>M10]
+    D5 -. audit_mode=llm .-> A5[d5_audit_node<br/>full-text audit + patch + rerun D5<br/>M9]
     A5 -. optional .-> AFinal[final_domain_audit_node<br/>all-domain audit report<br/>M9]
-    A5 --> AGG[aggregate_node<br/>final output + citations<br/>M10]
+    A5 --> AGG
     AFinal --> AGG
     P1[src/llm/prompts/domains/d1_system.md] --> D1
     P2[src/llm/prompts/domains/d2_system.md] --> D2
@@ -114,7 +119,7 @@ Notes:
 - Validation failures can trigger a retry that rolls back to the evidence location layer (Milestone 7).
 - Domain reasoning loads system prompts from `src/llm/prompts/domains/{domain}_system.md`, with a fallback to `rob2_domain_system.md`.
 - Domain reasoning normalizes answers and applies decision-tree rules (`src/rob2/decision_rules.py`) to set domain risk when defined.
-- Per-domain `*_audit_node` steps (Milestone 9) read the full document, propose citations, patch `validated_candidates`, and immediately re-run the corresponding domain.
-- `final_domain_audit_node` is optional and emits an all-domain audit report (no rerun).
+- Per-domain `*_audit_node` steps (Milestone 9) read the full document, propose citations, patch `validated_candidates`, and re-run the corresponding domain only when `domain_audit_mode=llm` and `domain_audit_rerun_domains=true` (default: false).
+- `final_domain_audit_node` is optional and emits an all-domain audit report (no rerun) when `domain_audit_mode=llm` and `domain_audit_final=true`.
 - `aggregate_node` produces `rob2_result` (JSON) + `rob2_table_markdown` (human-readable).
 - Dense/fulltext locators and cross-domain validation are not implemented yet.

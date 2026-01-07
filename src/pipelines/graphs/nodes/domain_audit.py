@@ -395,7 +395,7 @@ def _read_patch_config(state: Mapping[str, Any]) -> tuple[int, int]:
 
 def _read_rerun_enabled(state: Mapping[str, Any]) -> bool:
     if state.get("domain_audit_rerun_domains") is None:
-        return True
+        return False
     return bool(state.get("domain_audit_rerun_domains"))
 
 

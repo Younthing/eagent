@@ -82,7 +82,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--audit-rerun",
         action=argparse.BooleanOptionalAction,
-        default=True,
+        default=False,
         help="Re-run affected domain agents after applying audit patches.",
     )
     parser.add_argument(
