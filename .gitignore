@@ -10,7 +10,7 @@ wheels/
 .venv
 .env
 example
-
+.gradio/
 # Local model artifacts
 models/
 .qoder

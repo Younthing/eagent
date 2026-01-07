@@ -23,7 +23,10 @@ from pipelines.graphs.nodes.locators.retrieval_splade import (
     splade_retrieval_locator_node,
 )
 from pipelines.graphs.nodes.locators.rule_based import rule_based_locator_node
-from pipelines.graphs.nodes.preprocess import parse_docling_pdf
+from pipelines.graphs.nodes.preprocess import (
+    filter_reference_sections,
+    parse_docling_pdf,
+)
 from pipelines.graphs.nodes.validators.completeness import completeness_validator_node
 from pipelines.graphs.nodes.validators.existence import existence_validator_node
 from pipelines.graphs.nodes.validators.relevance import relevance_validator_node
@@ -350,6 +353,11 @@ def _pipeline_run(
 ) -> Dict[str, Any]:
     settings = get_settings()
     doc = parse_docling_pdf(file_path)
+    if settings.preprocess_drop_references:
+        doc = filter_reference_sections(
+            doc,
+            reference_titles=settings.preprocess_reference_titles,
+        )
     question_set = load_question_bank()
     base_state = {
         "doc_structure": doc.model_dump(),
@@ -660,7 +668,9 @@ def build_app(domain: str = "D1") -> gr.Blocks:
                     )
                     question_dropdown = gr.Dropdown(choices=[], label=f"{label} 问题")
                 image_output = gr.Image(label="证据高亮", type="pil")
-                evidence_text = gr.Textbox(label=f"{label} 证据（可编辑 JSON）", lines=18)
+                evidence_text = gr.Textbox(
+                    label=f"{label} 证据（可编辑 JSON）", lines=18
+                )
                 apply_evidence = gr.Button("应用证据")
                 status = gr.Textbox(label="状态", interactive=False)
                 with gr.Accordion("定位侧说明（可展开）", open=False):
@@ -686,8 +696,12 @@ def build_app(domain: str = "D1") -> gr.Blocks:
                     refresh_prompts = gr.Button("刷新提示词")
                     run_default = gr.Button(f"运行 {label}（默认提示词）")
                     run_custom = gr.Button(f"运行 {label}（自定义提示词）")
-                output_default = gr.Textbox(label=f"{label} 输出（默认提示词）", lines=18)
-                output_custom = gr.Textbox(label=f"{label} 输出（自定义提示词）", lines=18)
+                output_default = gr.Textbox(
+                    label=f"{label} 输出（默认提示词）", lines=18
+                )
+                output_custom = gr.Textbox(
+                    label=f"{label} 输出（自定义提示词）", lines=18
+                )
                 with gr.Accordion("提示词侧说明（可展开）", open=False):
                     gr.Markdown(
                         "\n".join(
@@ -796,27 +810,27 @@ def build_app(domain: str = "D1") -> gr.Blocks:
 
 def main_d1() -> None:
     app = build_app("D1")
-    app.launch()
+    app.launch(share=True)
 
 
 def main_d2() -> None:
     app = build_app("D2")
-    app.launch()
+    app.launch(share=True)
 
 
 def main_d3() -> None:
     app = build_app("D3")
-    app.launch()
+    app.launch(share=True)
 
 
 def main_d4() -> None:
     app = build_app("D4")
-    app.launch()
+    app.launch(share=True)
 
 
 def main_d5() -> None:
     app = build_app("D5")
-    app.launch()
+    app.launch(share=True)
 
 
 def main() -> None:
