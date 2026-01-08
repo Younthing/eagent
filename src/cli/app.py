@@ -23,6 +23,7 @@ from cli.commands import (
     playground as playground_command,
     preprocess as preprocess_command,
     questions as questions_command,
+    report as report_command,
     retrieval as retrieval_command,
     validate as validate_command,
 )
@@ -51,6 +52,7 @@ app.add_typer(audit_command.app, name="audit")
 app.add_typer(cache_command.app, name="cache")
 app.add_typer(preprocess_command.app, name="preprocess")
 app.add_typer(playground_command.app, name="playground")
+app.add_typer(report_command.app, name="report")
 
 
 @app.callback()
@@ -93,12 +95,12 @@ def run(
     set_values: list[str] = typer.Option(
         None,
         "--set",
-        help="使用 key=value 覆盖单个选项，可重复传入",
+        help="使用 key=value 覆盖单个选项,可重复传入",
     ),
     debug: str = typer.Option(
         "none",
         "--debug",
-        help="调试级别：none|min|full",
+        help="调试级别:none|min|full",
     ),
     include_reports: bool | None = typer.Option(
         None,
@@ -113,7 +115,7 @@ def run(
     include: list[str] = typer.Option(
         None,
         "--include",
-        help="额外输出项：reports|audit_reports|debug|debug_full|table",
+        help="额外输出项:reports|audit_reports|debug|debug_full|table",
     ),
     json_out: bool = typer.Option(
         False,
@@ -128,7 +130,48 @@ def run(
     output_dir: Path | None = typer.Option(
         None,
         "--output-dir",
-        help="输出目录（写入 result.json/table.md 等）",
+        help="输出目录(写入 result.json/table.md 等)",
+    ),
+    # Report generation options
+    report_output_dir: Path | None = typer.Option(
+        None,
+        "--report-output-dir",
+        help="报告输出目录",
+    ),
+    report_formats: str | None = typer.Option(
+        None,
+        "--report-formats",
+        help="报告格式,逗号分隔:html,pdf,docx 或 all",
+    ),
+    report_title: str | None = typer.Option(
+        None,
+        "--report-title",
+        help="自定义报告标题",
+    ),
+    report_template: str | None = typer.Option(
+        None,
+        "--report-template",
+        help="报告模板名称",
+    ),
+    no_evidence_text: bool = typer.Option(
+        False,
+        "--no-evidence-text",
+        help="不包含完整证据文本(精简版)",
+    ),
+    no_confidence_scores: bool = typer.Option(
+        False,
+        "--no-confidence-scores",
+        help="不包含置信度分数",
+    ),
+    report_include_validation: bool = typer.Option(
+        False,
+        "--report-include-validation",
+        help="在报告中包含验证报告",
+    ),
+    report_include_audit: bool = typer.Option(
+        False,
+        "--report-include-audit",
+        help="在报告中包含审核报告",
     ),
 ) -> None:
     payload = load_options_payload(options, options_file, set_values)
@@ -150,6 +193,37 @@ def run(
         if "table" in include_set:
             table = True
 
+    # Handle report generation options
+    if report_output_dir is not None:
+        payload["generate_reports"] = True
+        payload["report_output_dir"] = str(report_output_dir)
+        
+        if report_formats is not None:
+            if report_formats.lower() == "all":
+                payload["report_formats"] = ["html", "pdf", "docx"]
+            else:
+                payload["report_formats"] = [
+                    fmt.strip() for fmt in report_formats.split(",") if fmt.strip()
+                ]
+        
+        if report_title is not None:
+            payload["report_title"] = report_title
+        
+        if report_template is not None:
+            payload["report_template"] = report_template
+        
+        if no_evidence_text:
+            payload["report_include_evidence_text"] = False
+        
+        if no_confidence_scores:
+            payload["report_include_confidence_scores"] = False
+        
+        if report_include_validation:
+            payload["report_include_validation"] = True
+        
+        if report_include_audit:
+            payload["report_include_audit"] = True
+
     options_obj = build_options(payload)
     result = run_rob2(Rob2Input(pdf_path=str(pdf_path)), options_obj)
     _emit_result(result, json_out=json_out, table=table)
@@ -163,6 +237,21 @@ def _emit_result(result: Rob2RunResult, *, json_out: bool, table: bool) -> None:
 
     if table and getattr(result, "table_markdown", ""):
         typer.echo(result.table_markdown)
+    
+    # Display report generation results
+    if result.report_bundle:
+        typer.echo("\n✔ 报告生成成功:")
+        if result.report_bundle.html_path:
+            typer.echo(f"  - HTML: {result.report_bundle.html_path}")
+        if result.report_bundle.docx_path:
+            typer.echo(f"  - DOCX: {result.report_bundle.docx_path}")
+        if result.report_bundle.pdf_path:
+            typer.echo(f"  - PDF:  {result.report_bundle.pdf_path}")
+        
+        if result.report_bundle.format_errors:
+            typer.echo("\n⚠ 部分格式生成失败:")
+            for fmt, error in result.report_bundle.format_errors.items():
+                typer.echo(f"  - {fmt}: {error}")
 
 
 def _normalize_include(values: list[str] | None) -> set[str]:

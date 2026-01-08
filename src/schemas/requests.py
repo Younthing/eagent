@@ -171,6 +171,17 @@ class Rob2RunOptions(BaseModel):
     include_reports: bool | None = None
     include_audit_reports: bool | None = None
 
+    # Report generation
+    generate_reports: bool | None = None
+    report_output_dir: str | None = None
+    report_formats: list[str] | None = None
+    report_title: str | None = None
+    report_template: str | None = None
+    report_include_evidence_text: bool | None = None
+    report_include_confidence_scores: bool | None = None
+    report_include_validation: bool | None = None
+    report_include_audit: bool | None = None
+
     model_config = ConfigDict(extra="forbid")
 
 

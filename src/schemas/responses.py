@@ -6,6 +6,7 @@ from typing import Any, List
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from reporting.schemas import ReportBundle
 from schemas.internal.results import Rob2FinalOutput
 
 
@@ -17,6 +18,7 @@ class Rob2RunResult(BaseModel):
     debug: dict[str, Any] | None = None
     runtime_ms: int | None = None
     warnings: List[str] = Field(default_factory=list)
+    report_bundle: ReportBundle | None = None
 
     model_config = ConfigDict(extra="forbid")
 

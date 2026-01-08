@@ -23,6 +23,7 @@ dependencies = [
     "langchain-community>=0.4.1",
     "docling>=2.63.0",
     "pyyaml>=6.0",
+    "jinja2>=3.0.0",
     "faiss-cpu>=1.13.1",
     "pkuseg>=0.0.25",
     "jieba>=0.42.1",

@@ -359,6 +359,51 @@ def _build_result(
     reports = _collect_reports(final_state) if include_reports else None
     audit_reports = final_state.get("domain_audit_reports") if include_audit else None
 
+    # Generate report bundle if requested
+    report_bundle = None
+    if options.generate_reports and options.report_output_dir:
+        try:
+            from pathlib import Path
+            from reporting.generator import ReportGenerator
+            from reporting.schemas import ReportOptions
+
+            # Build ReportOptions from Rob2RunOptions
+            report_options = ReportOptions(
+                output_dir=Path(options.report_output_dir),
+                output_formats=options.report_formats or ["html", "docx", "pdf"],
+                report_title=options.report_title or "ROB2 Risk of Bias Assessment Report",
+                include_evidence_text=_resolve_bool(
+                    options.report_include_evidence_text, True
+                ),
+                include_confidence_scores=_resolve_bool(
+                    options.report_include_confidence_scores, True
+                ),
+                include_validation_reports=_resolve_bool(
+                    options.report_include_validation, False
+                ),
+                include_audit_reports=_resolve_bool(
+                    options.report_include_audit, False
+                ),
+                template_name=options.report_template or "default",
+            )
+
+            # Generate reports
+            generator = ReportGenerator(report_options)
+            report_bundle = generator.generate(
+                result,
+                table_markdown=table_markdown,
+                validation_reports=reports if report_options.include_validation_reports else None,
+                audit_reports=audit_reports if report_options.include_audit_reports else None,
+            )
+
+            # Add warning if any formats failed
+            if report_bundle.format_errors:
+                for fmt, error in report_bundle.format_errors.items():
+                    warnings.append(f"Report generation failed for {fmt}: {error}")
+
+        except Exception as e:
+            warnings.append(f"Report generation error: {e}")
+
     return Rob2RunResult(
         result=result,
         table_markdown=table_markdown,
@@ -367,6 +412,7 @@ def _build_result(
         debug=debug_payload,
         runtime_ms=runtime_ms,
         warnings=warnings,
+        report_bundle=report_bundle,
     )
 
 

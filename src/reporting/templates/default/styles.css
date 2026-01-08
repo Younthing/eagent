@@ -1,0 +1,282 @@
+/* ROB2 Report Styles */
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background-color: #f5f5f5;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background-color: white;
+    padding: 40px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Header */
+.report-header {
+    border-bottom: 3px solid #007bff;
+    padding-bottom: 20px;
+    margin-bottom: 30px;
+}
+
+.report-header h1 {
+    color: #007bff;
+    margin-bottom: 15px;
+}
+
+.metadata p {
+    margin: 5px 0;
+    color: #666;
+}
+
+/* Table of Contents */
+.toc {
+    background-color: #f8f9fa;
+    padding: 20px;
+    margin-bottom: 30px;
+    border-left: 4px solid #007bff;
+}
+
+.toc h2 {
+    margin-bottom: 15px;
+    font-size: 1.3em;
+}
+
+.toc ul {
+    list-style: none;
+}
+
+.toc li {
+    margin: 8px 0;
+}
+
+.toc a {
+    color: #007bff;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.toc a:hover {
+    color: #0056b3;
+    text-decoration: underline;
+}
+
+/* Risk Badge */
+.risk-badge {
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 4px;
+    color: white;
+    font-weight: bold;
+    margin: 10px 0;
+    text-transform: uppercase;
+    font-size: 0.9em;
+}
+
+/* Sections */
+section {
+    margin-bottom: 40px;
+    padding-bottom: 30px;
+    border-bottom: 1px solid #eee;
+}
+
+section:last-child {
+    border-bottom: none;
+}
+
+section h2 {
+    color: #007bff;
+    margin-bottom: 20px;
+    font-size: 1.8em;
+}
+
+section h3 {
+    color: #333;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    font-size: 1.3em;
+}
+
+section h4 {
+    color: #555;
+    margin-top: 15px;
+    margin-bottom: 8px;
+    font-size: 1.1em;
+}
+
+/* Domain Section */
+.domain-section {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+}
+
+.domain-rationale, .rationale, .interpretation {
+    margin: 15px 0;
+    padding: 15px;
+    background-color: white;
+    border-left: 3px solid #007bff;
+}
+
+.domain-stats {
+    margin: 10px 0;
+    font-size: 0.95em;
+    color: #666;
+}
+
+/* Questions */
+.questions {
+    margin-top: 20px;
+}
+
+.question {
+    background-color: white;
+    padding: 15px;
+    margin: 15px 0;
+    border-left: 3px solid #28a745;
+    border-radius: 4px;
+}
+
+.question .answer {
+    font-weight: bold;
+    color: #007bff;
+}
+
+/* Evidence References */
+.evidence-refs {
+    margin-top: 10px;
+    padding-left: 20px;
+}
+
+.evidence-refs ul {
+    margin-top: 5px;
+}
+
+.evidence-refs li {
+    margin: 5px 0;
+}
+
+.evidence-refs blockquote {
+    margin: 8px 0;
+    padding: 8px 12px;
+    background-color: #f8f9fa;
+    border-left: 3px solid #6c757d;
+    font-style: italic;
+    color: #555;
+}
+
+/* Missing Questions */
+.missing-questions {
+    margin-top: 15px;
+    padding: 15px;
+    background-color: #fff3cd;
+    border-left: 3px solid #ffc107;
+}
+
+.missing-questions ul {
+    padding-left: 25px;
+}
+
+.missing-questions li {
+    margin: 5px 0;
+}
+
+/* Citations */
+.citations-section {
+    margin-top: 40px;
+}
+
+.citations-list {
+    margin-top: 20px;
+}
+
+.citation {
+    background-color: #f8f9fa;
+    padding: 15px;
+    margin: 15px 0;
+    border-radius: 4px;
+    border-left: 3px solid #6c757d;
+}
+
+.citation h4 {
+    color: #007bff;
+    margin-bottom: 10px;
+}
+
+.citation-text {
+    margin: 10px 0;
+    padding: 10px;
+    background-color: white;
+    border-radius: 4px;
+}
+
+.citation-uses {
+    margin-top: 10px;
+    font-size: 0.9em;
+}
+
+.citation-uses ul {
+    padding-left: 25px;
+    margin-top: 5px;
+}
+
+/* Links */
+a {
+    color: #007bff;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* Print Styles */
+@media print {
+    body {
+        background-color: white;
+        padding: 0;
+    }
+    
+    .container {
+        box-shadow: none;
+        padding: 20px;
+    }
+    
+    section {
+        page-break-inside: avoid;
+    }
+    
+    .toc {
+        page-break-after: always;
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    body {
+        padding: 10px;
+    }
+    
+    .container {
+        padding: 20px;
+    }
+    
+    .report-header h1 {
+        font-size: 1.5em;
+    }
+    
+    section h2 {
+        font-size: 1.4em;
+    }
+}

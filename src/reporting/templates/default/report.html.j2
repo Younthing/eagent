@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ data.metadata.title }}</title>
+    {% if inline_css %}
+    <style>
+        {{ inline_css }}
+    </style>
+    {% else %}
+    <link rel="stylesheet" href="styles.css">
+    {% endif %}
+</head>
+<body>
+    <div class="container">
+        <header class="report-header">
+            <h1>{{ data.metadata.title }}</h1>
+            <div class="metadata">
+                <p><strong>Variant:</strong> {{ data.metadata.variant }}</p>
+                <p><strong>Question Set Version:</strong> {{ data.metadata.question_set_version }}</p>
+                <p><strong>Generated:</strong> {{ data.metadata.generated_at|format_timestamp }}</p>
+                <p><strong>System Version:</strong> {{ data.metadata.system_version }}</p>
+                {% if data.metadata.source_pdf_name %}
+                <p><strong>Source:</strong> {{ data.metadata.source_pdf_name }}</p>
+                {% endif %}
+            </div>
+        </header>
+
+        <nav class="toc">
+            <h2>Table of Contents</h2>
+            <ul>
+                <li><a href="#overall">Overall Risk Assessment</a></li>
+                {% for domain in data.domains %}
+                <li><a href="#{{ domain.domain_id }}">{{ domain.domain_id }}: {{ domain.domain_name }}</a></li>
+                {% endfor %}
+                <li><a href="#citations">Citations</a></li>
+            </ul>
+        </nav>
+
+        <section id="overall" class="overall-section">
+            <h2>Overall Risk Assessment</h2>
+            <div class="risk-badge" style="background-color: {{ data.overall.risk|risk_color }};">
+                {{ data.overall.risk_label }}
+            </div>
+            <div class="rationale">
+                <h3>Rationale</h3>
+                <p>{{ data.overall.rationale }}</p>
+            </div>
+            <div class="interpretation">
+                <h3>Interpretation</h3>
+                <p>{{ data.overall.interpretation }}</p>
+            </div>
+        </section>
+
+        {% for domain in data.domains %}
+        <section id="{{ domain.domain_id }}" class="domain-section" data-risk="{{ domain.risk }}">
+            <h2>{{ domain.domain_id }}: {{ domain.domain_name }}</h2>
+            <div class="risk-badge" style="background-color: {{ domain.risk|risk_color }};">
+                {{ domain.risk_label }}
+            </div>
+            
+            {% if domain.effect_type %}
+            <p><strong>Effect Type:</strong> {{ domain.effect_type }}</p>
+            {% endif %}
+
+            <div class="domain-rationale">
+                <h3>Domain Risk Rationale</h3>
+                <p>{{ domain.risk_rationale }}</p>
+            </div>
+
+            <div class="domain-stats">
+                <p><strong>Questions Answered:</strong> {{ domain.answered_questions }} / {{ domain.total_questions }}</p>
+            </div>
+
+            <div class="questions">
+                <h3>Signaling Questions</h3>
+                {% for answer in domain.answers %}
+                <div class="question">
+                    <h4>{{ answer.rob2_id }}: {{ answer.question_text }}</h4>
+                    <p><strong>Answer:</strong> <span class="answer">{{ answer.answer_label }}</span></p>
+                    <p><strong>Rationale:</strong> {{ answer.rationale }}</p>
+                    {% if answer.confidence %}
+                    <p><strong>Confidence:</strong> {{ "%.2f"|format(answer.confidence) }}</p>
+                    {% endif %}
+                    {% if answer.evidence_refs %}
+                    <div class="evidence-refs">
+                        <strong>Evidence:</strong>
+                        <ul>
+                            {% for ref in answer.evidence_refs %}
+                            <li>
+                                <a href="#cite-{{ ref.paragraph_id }}">{{ ref.paragraph_id }}</a>
+                                {% if ref.page %}(Page {{ ref.page }}){% endif %}
+                                {% if ref.quote %}
+                                <blockquote>{{ ref.quote }}</blockquote>
+                                {% endif %}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+
+            {% if domain.missing_questions %}
+            <div class="missing-questions">
+                <h3>Missing Information</h3>
+                <ul>
+                    {% for q in domain.missing_questions %}
+                    <li>{{ q }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </section>
+        {% endfor %}
+
+        <section id="citations" class="citations-section">
+            <h2>Citations</h2>
+            <p><strong>Total Citations:</strong> {{ data.citations.total_citations }}</p>
+            <div class="citations-list">
+                {% for citation in data.citations.citations %}
+                <div id="cite-{{ citation.paragraph_id }}" class="citation">
+                    <h4>{{ citation.paragraph_id }}</h4>
+                    {% if citation.page %}
+                    <p><strong>Page:</strong> {{ citation.page }}</p>
+                    {% endif %}
+                    {% if citation.title %}
+                    <p><strong>Section:</strong> {{ citation.title }}</p>
+                    {% endif %}
+                    <div class="citation-text">
+                        <p>{{ citation.text }}</p>
+                    </div>
+                    <div class="citation-uses">
+                        <strong>Used in:</strong>
+                        <ul>
+                            {% for use in citation.uses %}
+                            <li>{{ use.domain_id }} - {{ use.question_id }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+
+    {% if inline_js %}
+    <script>
+        {{ inline_js }}
+    </script>
+    {% else %}
+    <script src="interactive.js"></script>
+    {% endif %}
+</body>
+</html>

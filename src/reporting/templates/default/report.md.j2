@@ -1,0 +1,106 @@
+# {{ data.metadata.title }}
+
+## Report Metadata
+
+- **Variant:** {{ data.metadata.variant }}
+- **Question Set Version:** {{ data.metadata.question_set_version }}
+- **Generated:** {{ data.metadata.generated_at|format_timestamp }}
+- **System Version:** {{ data.metadata.system_version }}
+{% if data.metadata.source_pdf_name -%}
+- **Source:** {{ data.metadata.source_pdf_name }}
+{% endif %}
+
+---
+
+## Overall Risk Assessment
+
+**Risk Level:** {{ data.overall.risk_label }}
+
+### Rationale
+
+{{ data.overall.rationale }}
+
+### Interpretation
+
+{{ data.overall.interpretation }}
+
+---
+
+{% for domain in data.domains %}
+## {{ domain.domain_id }}: {{ domain.domain_name }}
+
+**Risk Level:** {{ domain.risk_label }}
+
+{% if domain.effect_type -%}
+**Effect Type:** {{ domain.effect_type }}
+{% endif %}
+
+### Domain Risk Rationale
+
+{{ domain.risk_rationale }}
+
+**Questions Answered:** {{ domain.answered_questions }} / {{ domain.total_questions }}
+
+### Signaling Questions
+
+{% for answer in domain.answers %}
+#### {{ answer.rob2_id }}: {{ answer.question_text }}
+
+- **Answer:** {{ answer.answer_label }}
+- **Rationale:** {{ answer.rationale }}
+{% if answer.confidence -%}
+- **Confidence:** {{ "%.2f"|format(answer.confidence) }}
+{% endif %}
+
+{% if answer.evidence_refs -%}
+**Evidence References:**
+
+{% for ref in answer.evidence_refs -%}
+- [{{ ref.paragraph_id }}](#{{ ref.paragraph_id }}){% if ref.page %} (Page {{ ref.page }}){% endif %}
+{% if ref.quote %}
+  > {{ ref.quote }}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{% endfor %}
+
+{% if domain.missing_questions -%}
+### Missing Information
+
+The following questions could not be answered due to insufficient evidence:
+
+{% for q in domain.missing_questions -%}
+- {{ q }}
+{% endfor %}
+{% endif %}
+
+---
+
+{% endfor %}
+
+## Citations
+
+**Total Citations:** {{ data.citations.total_citations }}
+
+{% for citation in data.citations.citations %}
+### {{ citation.paragraph_id }}
+
+{% if citation.page -%}
+**Page:** {{ citation.page }}
+{% endif %}
+{% if citation.title -%}
+**Section:** {{ citation.title }}
+{% endif %}
+
+{{ citation.text }}
+
+**Used in:**
+
+{% for use in citation.uses -%}
+- {{ use.domain_id }} - {{ use.question_id }}
+{% endfor %}
+
+---
+
+{% endfor %}
