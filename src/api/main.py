@@ -3,7 +3,7 @@ from importlib.metadata import version
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.actions import config, health, preprocess
+from api.actions import config, graph, health, preprocess
 
 try:
     app_version = version("eagent")
@@ -29,6 +29,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(config.router)
 app.include_router(preprocess.router)
+app.include_router(graph.router, prefix="/graph")
 
 if __name__ == "__main__":
     import uvicorn

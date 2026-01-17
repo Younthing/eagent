@@ -5,11 +5,11 @@ from schemas.internal.documents import DocStructure
 
 client = TestClient(app)
 
-@patch("api.actions.preprocess.load_doc_structure")
-def test_preprocess(mock_load):
+@patch("api.actions.preprocess.parse_docling_pdf")
+def test_preprocess(mock_parse):
     # Mock return value
     mock_doc = DocStructure(body="test content", sections=[])
-    mock_load.return_value = mock_doc
+    mock_parse.return_value = mock_doc
     
     # Create a dummy file
     # PDF signature usually required but for mock it doesn't matter what the content is, 
@@ -20,4 +20,4 @@ def test_preprocess(mock_load):
     
     assert response.status_code == 200
     assert response.json()["body"] == "test content"
-    mock_load.assert_called_once()
+    mock_parse.assert_called_once()

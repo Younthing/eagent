@@ -4,9 +4,11 @@ import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, File, UploadFile, HTTPException, Query
+from fastapi.concurrency import run_in_threadpool
 from starlette.background import BackgroundTasks
 
-from cli.commands.shared import load_doc_structure
+from core.config import get_settings
+from pipelines.graphs.nodes.preprocess import parse_docling_pdf, filter_reference_sections
 from schemas.internal.documents import DocStructure
 
 router = APIRouter()
@@ -14,6 +16,22 @@ router = APIRouter()
 def cleanup_file(path: Path):
     if path.exists():
         os.remove(path)
+
+def _process_pdf(
+    pdf_path: Path,
+    drop_references: bool,
+    reference_titles: str | None,
+) -> DocStructure:
+    settings = get_settings()
+    doc_structure = parse_docling_pdf(pdf_path)
+    
+    if drop_references:
+        if reference_titles is None:
+            reference_titles = settings.preprocess_reference_titles
+        doc_structure = filter_reference_sections(
+            doc_structure, reference_titles=reference_titles
+        )
+    return doc_structure
 
 @router.post("/preprocess", response_model=DocStructure, tags=["Pipeline"])
 async def preprocess_document(
@@ -49,27 +67,8 @@ async def preprocess_document(
     background_tasks.add_task(cleanup_file, tmp_path)
 
     try:
-        # We need to run this potentially heavy sync operation. 
-        # In a real production app, this should be offloaded to a worker or run_in_executor.
-        # For this example, we'll run it directly (FastAPI runs async defs in event loop, 
-        # so this might block if not careful, but load_doc_structure is sync).
-        # To avoid blocking the event loop, we should use run_in_executor or define this as `def` instead of `async def`.
-        # However, FastAPI runs `def` routes in a threadpool. `async def` runs in main loop.
-        # Since I used `async def` above (for file I/O which is async-ish in FastAPI), 
-        # I should probably just change the route to `def` OR use run_in_executor.
-        # But wait, `file.read()` is async. `shutil.copyfileobj` is sync.
-        # `file.file` is a standard python file object (SpooledTemporaryFile).
-        
-        # Let's change the function to `def` to let FastAPI run it in a threadpool, 
-        # BUT `UploadFile` methods are async. 
-        # Actually `file.file` is synchronous file-like object.
-        # `file.read()` is async.
-        
-        # Best practice: keep `async def` and use `run_in_threadpool` or just `to_thread`.
-        from fastapi.concurrency import run_in_threadpool
-        
         doc_structure = await run_in_threadpool(
-            load_doc_structure,
+            _process_pdf,
             tmp_path,
             drop_references=drop_references,
             reference_titles=reference_titles
@@ -78,10 +77,5 @@ async def preprocess_document(
         return doc_structure
 
     except Exception as e:
-        # cleanup if we crash before background task
-        # actually background tasks run after response.
-        # if we raise here, background tasks might not run? 
-        # FastAPI background tasks run even if exception? No, only on success response usually.
-        # So I should cleanup here if exception.
         cleanup_file(tmp_path)
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
