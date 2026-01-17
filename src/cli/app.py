@@ -12,6 +12,7 @@ from cli.i18n import apply_cli_localization
 from schemas.requests import Rob2Input
 from schemas.responses import Rob2RunResult
 from services.rob2_runner import run_rob2
+from services.reports import generate_docx_report, generate_html_report, generate_pdf_report
 from cli.common import build_options, emit_json, load_options_payload
 from cli.commands import (
     audit as audit_command,
@@ -130,7 +131,26 @@ def run(
         "--output-dir",
         help="输出目录（写入 result.json/table.md 等）",
     ),
+    html: bool = typer.Option(
+        False,
+        "--html",
+        help="生成交互式 HTML 报告 (需要 --output-dir)",
+    ),
+    docx: bool = typer.Option(
+        False,
+        "--docx",
+        help="生成 Word 报告 (需要 --output-dir)",
+    ),
+    pdf: bool = typer.Option(
+        False,
+        "--pdf",
+        help="生成 PDF 报告 (需要 --output-dir)",
+    ),
 ) -> None:
+    if (html or docx or pdf) and output_dir is None:
+        typer.echo("Error: --output-dir is required when generating reports.")
+        raise typer.Exit(code=1)
+
     payload = load_options_payload(options, options_file, set_values)
     payload.setdefault("debug_level", debug)
     if include_reports is not None:
@@ -154,7 +174,15 @@ def run(
     result = run_rob2(Rob2Input(pdf_path=str(pdf_path)), options_obj)
     _emit_result(result, json_out=json_out, table=table)
     if output_dir is not None:
-        _write_output_dir(result, output_dir, include_table=table)
+        _write_output_dir(
+            result,
+            output_dir,
+            include_table=table,
+            html=html,
+            docx=docx,
+            pdf=pdf,
+            pdf_name=pdf_path.name,
+        )
 
 
 def _emit_result(result: Rob2RunResult, *, json_out: bool, table: bool) -> None:
@@ -177,7 +205,14 @@ def _normalize_include(values: list[str] | None) -> set[str]:
 
 
 def _write_output_dir(
-    result: Rob2RunResult, output_dir: Path, *, include_table: bool
+    result: Rob2RunResult,
+    output_dir: Path,
+    *,
+    include_table: bool,
+    html: bool = False,
+    docx: bool = False,
+    pdf: bool = False,
+    pdf_name: str = "Unknown",
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     result_path = output_dir / "result.json"
@@ -204,6 +239,13 @@ def _write_output_dir(
             json.dumps(result.debug, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+
+    if html:
+        generate_html_report(result, output_dir / "report.html", pdf_name)
+    if docx:
+        generate_docx_report(result, output_dir / "report.docx", pdf_name)
+    if pdf:
+        generate_pdf_report(result, output_dir / "report.pdf", pdf_name)
 
 
 def main() -> None:
