@@ -4,10 +4,20 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Protocol,
+    Sequence,
+    Tuple,
+    cast,
+)
 
 import pymupdf as fitz  # PyMuPDF
-import gradio as gr
 from PIL import Image, ImageDraw
 
 from core.config import get_settings
@@ -34,6 +44,27 @@ from retrieval.engines.splade import DEFAULT_SPLADE_MODEL_ID
 from rob2.question_bank import load_question_bank
 from schemas.internal.locator import DomainId
 from schemas.internal.rob2 import QuestionSet
+
+if TYPE_CHECKING:
+    class _GradioModule(Protocol):
+        Blocks: Any
+        Markdown: Any
+        State: Any
+        Row: Any
+        Column: Any
+        File: Any
+        Button: Any
+        Dropdown: Any
+        Slider: Any
+        Checkbox: Any
+        Image: Any
+        Textbox: Any
+        Accordion: Any
+        update: Any
+
+    gr = cast(_GradioModule, None)
+else:
+    import gradio as gr
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_LOCAL_SPLADE = PROJECT_ROOT / "models" / "splade_distil_CoCodenser_large"

@@ -142,7 +142,7 @@ def _tokenize_pkuseg(text: str, *, model_name: str | None) -> list[str] | None:
 
 def _tokenize_jieba(text: str) -> list[str] | None:
     try:
-        import jieba  # type: ignore
+        import jieba
     except Exception:
         return None
     try:

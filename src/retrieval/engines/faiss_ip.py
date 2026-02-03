@@ -14,7 +14,7 @@ def build_ip_index(vectors: np.ndarray):
     try:
         if sys.platform == "darwin":
             os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
-        import faiss  # type: ignore
+        import faiss
     except Exception as exc:  # pragma: no cover
         raise RuntimeError(
             "faiss is required for FAISS indexing. Install faiss-cpu."

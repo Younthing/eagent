@@ -71,7 +71,9 @@ def test_apply_reranker_reorders_and_adds_scores() -> None:
 def test_bm25_locator_can_apply_optional_reranker(monkeypatch) -> None:
     from pipelines.graphs.nodes.locators import retrieval_bm25
 
-    def _fake_get_cross_encoder_reranker(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+    def _fake_get_cross_encoder_reranker(
+        *_args: object, **_kwargs: object
+    ) -> _DummyReranker:
         return _DummyReranker()
 
     monkeypatch.setattr(

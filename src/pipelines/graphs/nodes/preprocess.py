@@ -235,7 +235,7 @@ def _build_docling_converter(
         config["layout_repo_id"] = getattr(layout_spec, "repo_id", None)
 
     try:
-        import docling  # type: ignore
+        import docling
 
         config["docling_version"] = getattr(docling, "__version__", "unknown")
     except Exception:
@@ -278,8 +278,9 @@ def _build_docling_chunker(
     if overrides:
         if overrides.get("docling_chunker_model") is not None:
             model_id = str(overrides["docling_chunker_model"])
-        if overrides.get("docling_chunker_max_tokens") is not None:
-            max_tokens = int(overrides["docling_chunker_max_tokens"])
+        raw_max_tokens = overrides.get("docling_chunker_max_tokens")
+        if isinstance(raw_max_tokens, (int, float, str)):
+            max_tokens = int(raw_max_tokens)
 
     raw_tokenizer = AutoTokenizer.from_pretrained(model_id)
     if max_tokens is None:

@@ -16,7 +16,8 @@ async def run_pipeline(
     """
     Run the full ROB2 pipeline on a PDF document.
     """
-    if not file.filename.lower().endswith(".pdf"):
+    filename = file.filename
+    if not filename or not filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
     
     try:
@@ -26,7 +27,7 @@ async def run_pipeline(
     
     input_data = Rob2Input(
         pdf_bytes=content,
-        filename=file.filename
+        filename=filename
     )
     
     try:

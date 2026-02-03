@@ -1,6 +1,5 @@
 """Unit tests for the existence validator module."""
 
-import pytest
 from evidence.validators.existence import annotate_existence, ExistenceValidatorConfig
 from schemas.internal.evidence import FusedEvidenceCandidate
 from schemas.internal.documents import DocStructure, SectionSpan

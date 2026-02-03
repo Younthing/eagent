@@ -50,11 +50,12 @@ async def preprocess_document(
     4. Returns the structured content (body, sections, etc.).
     """
     
-    if not file.filename.lower().endswith(".pdf"):
+    filename = file.filename
+    if not filename or not filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
     # Create temp file
-    suffix = Path(file.filename).suffix
+    suffix = Path(filename).suffix
     try:
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
         tmp_path = Path(tmp.name)

@@ -1,6 +1,5 @@
 """Unit tests for the retrieval BM25 node module."""
 
-import pytest
 from pipelines.graphs.nodes.locators.retrieval_bm25 import bm25_retrieval_locator_node
 from schemas.internal.rob2 import QuestionSet, Rob2Question
 

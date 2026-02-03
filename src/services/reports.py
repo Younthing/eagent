@@ -139,4 +139,4 @@ def generate_docx_report(result: Rob2RunResult, output_path: Path, pdf_name: str
 
         doc.add_page_break()
 
-    doc.save(output_path)
+    doc.save(str(output_path))

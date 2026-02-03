@@ -1,9 +1,7 @@
 """Unit tests for the BM25 retrieval module."""
 
-import pytest
 from retrieval.engines.bm25 import BM25Index, BM25Hit
 from retrieval.tokenization import TokenizerConfig
-from schemas.internal.documents import SectionSpan
 
 
 def test_bm25_index_creation():
