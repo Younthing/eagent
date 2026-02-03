@@ -33,7 +33,7 @@ def test_validation_should_retry_routes_to_retry_when_failed_and_budget_left() -
     )
 
 
-def test_validation_should_retry_routes_to_end_when_failed_and_budget_exhausted() -> None:
+def test_validation_should_retry_routes_to_fallback_when_failed_and_budget_exhausted() -> None:
     assert (
         validation_should_retry(
             {
@@ -44,7 +44,7 @@ def test_validation_should_retry_routes_to_end_when_failed_and_budget_exhausted(
                 "validation_fail_on_consistency": True,
             }
         )
-        == "proceed"
+        == "fallback"
     )
 
 

@@ -104,6 +104,8 @@ flowchart TD
 
   %% Milestone 7 rollback/retry: failed validation routes back to EvidenceLocation
   CM -. validation_failed / retry .-> J
+  CM -. validation_failed / fallback .-> FB[enable_fulltext_fallback_node]
+  FB --> D1
 ```
 
 Notes:
@@ -116,7 +118,7 @@ Notes:
 - `existence_validator_node` verifies paragraph_id/text/quote grounding against `doc_structure` (Milestone 7).
 - `consistency_validator_node` optionally checks multi-evidence contradictions per question (Milestone 7).
 - `completeness_validator_node` selects `validated_evidence` from candidates that passed validations (Milestone 7).
-- Validation failures can trigger a retry that rolls back to the evidence location layer (Milestone 7).
+- Validation failures trigger retry scoped to failed questions; if retries exhaust, a full-text audit fallback is enabled (Milestone 7/9).
 - Domain reasoning loads system prompts from `src/llm/prompts/domains/{domain}_system.md`, with a fallback to `rob2_domain_system.md`.
 - Domain reasoning normalizes answers and applies decision-tree rules (`src/rob2/decision_rules.py`) to set domain risk when defined.
 - Per-domain `*_audit_node` steps (Milestone 9) read the full document, propose citations, patch `validated_candidates`, and re-run the corresponding domain only when `domain_audit_mode=llm` and `domain_audit_rerun_domains=true` (default: false).

@@ -11,6 +11,12 @@ from typing import Any, Dict, Iterable, List, Mapping
 from evidence.fusion import fuse_candidates_for_question
 from schemas.internal.evidence import EvidenceCandidate, FusedEvidenceBundle
 from schemas.internal.rob2 import QuestionSet
+from pipelines.graphs.nodes.retry_utils import (
+    filter_question_set,
+    merge_bundles,
+    merge_by_question,
+    read_retry_question_ids,
+)
 
 
 def fusion_node(state: dict) -> dict:
@@ -46,7 +52,21 @@ def fusion_node(state: dict) -> dict:
             raise ValueError("fusion_engine_weights must be a mapping")
         weights = {str(k): float(v) for k, v in engine_weights.items()}
 
+    retry_ids = read_retry_question_ids(state)
     question_ids = _ordered_question_ids(state, engines_present.values())
+    raw_questions = state.get("question_set")
+    if retry_ids:
+        if raw_questions is not None:
+            try:
+                question_set = QuestionSet.model_validate(raw_questions)
+                filtered = filter_question_set(question_set, retry_ids)
+                question_ids = [q.question_id for q in filtered.questions]
+                missing = sorted(retry_ids - set(question_ids))
+                question_ids.extend(missing)
+            except Exception:
+                question_ids = [qid for qid in question_ids if qid in retry_ids]
+        else:
+            question_ids = [qid for qid in question_ids if qid in retry_ids]
 
     fused_candidates: Dict[str, List[dict]] = {}
     bundles: List[dict] = []
@@ -70,6 +90,17 @@ def fusion_node(state: dict) -> dict:
         bundles.append(
             FusedEvidenceBundle(question_id=question_id, items=fused[:top_k]).model_dump()
         )
+
+    if retry_ids:
+        fused_candidates = merge_by_question(
+            state.get("fusion_candidates"), fused_candidates, retry_ids
+        )
+        if raw_questions is not None:
+            try:
+                question_set = QuestionSet.model_validate(raw_questions)
+                bundles = merge_bundles(state.get("fusion_evidence"), bundles, question_set)
+            except Exception:
+                pass
 
     return {
         "fusion_candidates": fused_candidates,
@@ -109,4 +140,3 @@ def _ordered_question_ids(
 
 
 __all__ = ["fusion_node"]
-

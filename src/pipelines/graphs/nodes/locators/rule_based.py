@@ -11,6 +11,12 @@ from schemas.internal.documents import DocStructure, SectionSpan
 from schemas.internal.evidence import EvidenceBundle, EvidenceCandidate
 from schemas.internal.locator import LocatorRules
 from schemas.internal.rob2 import QuestionSet, Rob2Question
+from pipelines.graphs.nodes.retry_utils import (
+    filter_question_set,
+    merge_bundles,
+    merge_by_question,
+    read_retry_question_ids,
+)
 
 
 def rule_based_locator_node(state: dict) -> dict:
@@ -24,22 +30,39 @@ def rule_based_locator_node(state: dict) -> dict:
 
     doc_structure = DocStructure.model_validate(raw_doc)
     question_set = QuestionSet.model_validate(raw_questions)
+    retry_ids = read_retry_question_ids(state)
+    target_questions = filter_question_set(question_set, retry_ids)
     rules = get_locator_rules()
 
     top_k = state.get("top_k") or rules.defaults.top_k
     candidates_by_q, bundles = rule_based_locate(
         doc_structure,
-        question_set,
+        target_questions,
         rules,
         top_k=top_k,
     )
 
+    candidates_payload = {
+        question_id: [candidate.model_dump() for candidate in candidates]
+        for question_id, candidates in candidates_by_q.items()
+    }
+    bundles_payload = [bundle.model_dump() for bundle in bundles]
+
+    if retry_ids:
+        candidates_payload = merge_by_question(
+            state.get("rule_based_candidates"),
+            candidates_payload,
+            retry_ids,
+        )
+        bundles_payload = merge_bundles(
+            state.get("rule_based_evidence"),
+            bundles_payload,
+            question_set,
+        )
+
     return {
-        "rule_based_candidates": {
-            question_id: [candidate.model_dump() for candidate in candidates]
-            for question_id, candidates in candidates_by_q.items()
-        },
-        "rule_based_evidence": [bundle.model_dump() for bundle in bundles],
+        "rule_based_candidates": candidates_payload,
+        "rule_based_evidence": bundles_payload,
         "rule_based_rules_version": rules.version,
     }
 

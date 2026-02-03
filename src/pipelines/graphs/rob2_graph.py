@@ -216,6 +216,8 @@ class Rob2GraphState(TypedDict, total=False):
     validation_fail_on_consistency: bool
     validation_relax_on_retry: bool
     validation_retry_log: Annotated[list[dict], operator.add]
+    retry_question_ids: list[str]
+    fulltext_fallback_used: bool
 
 
 NodeFn = object
@@ -230,7 +232,7 @@ def _init_validation_state_node(state: Rob2GraphState) -> dict:
     relevance_mode = state.get("relevance_mode")
     return {
         "validation_attempt": 0 if attempt is None else int(attempt),
-        "validation_max_retries": 1 if max_retries is None else int(max_retries),
+        "validation_max_retries": 3 if max_retries is None else int(max_retries),
         "validation_fail_on_consistency": True
         if fail_on_consistency is None
         else bool(fail_on_consistency),
@@ -258,6 +260,7 @@ def _prepare_validation_retry_node(state: Rob2GraphState) -> dict:
     max_retries = int(state.get("validation_max_retries") or 0)
     failed_questions = state.get("completeness_failed_questions") or []
     consistency_failed = state.get("consistency_failed_questions") or []
+    fail_on_consistency = bool(state.get("validation_fail_on_consistency", True))
     relax_on_retry = bool(state.get("validation_relax_on_retry", True))
 
     per_query_top_n = int(state.get("per_query_top_n") or 50)
@@ -278,8 +281,18 @@ def _prepare_validation_retry_node(state: Rob2GraphState) -> dict:
             updates.setdefault("existence_require_text_match", False)
             updates.setdefault("existence_require_quote_in_source", False)
 
+    retry_ids: set[str] = set()
+    for item in failed_questions:
+        if isinstance(item, str) and item.strip():
+            retry_ids.add(item.strip())
+    if fail_on_consistency:
+        for item in consistency_failed:
+            if isinstance(item, str) and item.strip():
+                retry_ids.add(item.strip())
+
     return {
         "validation_attempt": attempt,
+        "retry_question_ids": sorted(retry_ids),
         "validation_retry_log": [
             {
                 "attempt": attempt,
@@ -287,6 +300,32 @@ def _prepare_validation_retry_node(state: Rob2GraphState) -> dict:
                 "completeness_failed_questions": failed_questions,
                 "consistency_failed_questions": consistency_failed,
                 "updates": updates,
+            }
+        ],
+        **updates,
+    }
+
+
+def _enable_fulltext_fallback_node(state: Rob2GraphState) -> dict:
+    """Enable full-text audit fallback when validation retries are exhausted."""
+    updates: Dict[str, Any] = {
+        "domain_audit_mode": "llm",
+        "domain_audit_rerun_domains": True,
+        "fulltext_fallback_used": True,
+    }
+    if state.get("domain_audit_llm") is None and state.get("d1_llm") is not None:
+        updates["domain_audit_llm"] = state.get("d1_llm")
+
+    attempt = int(state.get("validation_attempt") or 0)
+    max_retries = int(state.get("validation_max_retries") or 0)
+    return {
+        "validation_retry_log": [
+            {
+                "event": "fulltext_fallback",
+                "attempt": attempt,
+                "max_retries": max_retries,
+                "completeness_failed_questions": state.get("completeness_failed_questions") or [],
+                "consistency_failed_questions": state.get("consistency_failed_questions") or [],
             }
         ],
         **updates,
@@ -386,6 +425,9 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
     )
 
     builder.add_node("prepare_retry", cast(Any, _prepare_validation_retry_node))
+    builder.add_node(
+        "enable_fulltext_fallback", cast(Any, _enable_fulltext_fallback_node)
+    )
 
     builder.add_edge(START, "preprocess")
     builder.add_edge("preprocess", "planner")
@@ -403,9 +445,14 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
     builder.add_conditional_edges(
         "completeness_validator",
         validation_should_retry,
-        {"retry": "prepare_retry", "proceed": "d1_randomization"},
+        {
+            "retry": "prepare_retry",
+            "fallback": "enable_fulltext_fallback",
+            "proceed": "d1_randomization",
+        },
     )
     builder.add_edge("prepare_retry", "rule_based_locator")
+    builder.add_edge("enable_fulltext_fallback", "d1_randomization")
     builder.add_conditional_edges(
         "d1_randomization",
         domain_audit_should_run,

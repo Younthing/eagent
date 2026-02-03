@@ -19,6 +19,12 @@ from schemas.internal.evidence import (
     RelevanceVerdict,
 )
 from schemas.internal.rob2 import QuestionSet
+from pipelines.graphs.nodes.retry_utils import (
+    filter_question_set,
+    merge_bundles,
+    merge_by_question,
+    read_retry_question_ids,
+)
 
 
 def relevance_validator_node(state: dict) -> dict:
@@ -39,6 +45,7 @@ def relevance_validator_node(state: dict) -> dict:
         raise ValueError("fusion_candidates must be a mapping")
 
     question_set = QuestionSet.model_validate(raw_questions)
+    retry_ids = read_retry_question_ids(state)
     question_text_by_id = {
         question.question_id: question.text for question in question_set.questions
     }
@@ -104,6 +111,11 @@ def relevance_validator_node(state: dict) -> dict:
             )
 
     question_ids = _ordered_question_ids(question_set, raw_candidates)
+    if retry_ids:
+        filtered = filter_question_set(question_set, retry_ids)
+        question_ids = [question.question_id for question in filtered.questions]
+        missing = sorted(retry_ids - set(question_ids))
+        question_ids.extend(missing)
     candidates_by_q: Dict[str, List[dict]] = {}
     bundles: List[dict] = []
     debug: Dict[str, dict] = {}
@@ -111,6 +123,16 @@ def relevance_validator_node(state: dict) -> dict:
     for question_id in question_ids:
         raw_list = raw_candidates.get(question_id)
         if not isinstance(raw_list, list) or not raw_list:
+            candidates_by_q[question_id] = []
+            bundles.append(
+                FusedEvidenceBundle(question_id=question_id, items=[]).model_dump()
+            )
+            debug[question_id] = {
+                "validated": 0,
+                "skipped": 0,
+                "passed": 0,
+                "fallback_used": False,
+            }
             continue
 
         fused = [FusedEvidenceCandidate.model_validate(item) for item in raw_list]
@@ -170,6 +192,13 @@ def relevance_validator_node(state: dict) -> dict:
             "passed": len(passed),
             "fallback_used": fallback_used,
         }
+
+    if retry_ids:
+        candidates_by_q = merge_by_question(
+            state.get("relevance_candidates"), candidates_by_q, retry_ids
+        )
+        bundles = merge_bundles(state.get("relevance_evidence"), bundles, question_set)
+        debug = merge_by_question(state.get("relevance_debug"), debug, retry_ids)
 
     return {
         "relevance_candidates": candidates_by_q,

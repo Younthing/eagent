@@ -42,6 +42,22 @@ def _candidate(*, text: str) -> FusedEvidenceCandidate:
     )
 
 
+def _candidate_for(question_id: str, paragraph_id: str, text: str) -> FusedEvidenceCandidate:
+    return FusedEvidenceCandidate(
+        question_id=question_id,
+        paragraph_id=paragraph_id,
+        title="Methods",
+        page=2,
+        text=text,
+        fusion_score=0.03,
+        fusion_rank=1,
+        support_count=1,
+        supports=[
+            EvidenceSupport(engine="bm25", rank=1, score=1.0, query="random number table")
+        ],
+    )
+
+
 def test_annotate_relevance_parses_json_and_keeps_relevant_label() -> None:
     llm = _DummyLLM(
         content='{"label":"relevant","confidence":0.9,"supporting_quote":"random number table"}'
@@ -109,3 +125,52 @@ def test_relevance_validator_node_selects_passed_candidates_and_falls_back() -> 
     assert len(bundles) == 1
     assert bundles[0]["question_id"] == "q1_1"
     assert len(bundles[0]["items"]) == 1
+
+
+def test_relevance_validator_node_merges_retry_questions() -> None:
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q1_1",
+                rob2_id="q1_1",
+                domain="D1",
+                text="Question one",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            ),
+            Rob2Question(
+                question_id="q2_1",
+                rob2_id="q2_1",
+                domain="D1",
+                text="Question two",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=2,
+            ),
+        ],
+    )
+
+    prev_candidate = _candidate_for("q2_1", "p_prev", "Previous evidence.")
+    prev_bundle = {
+        "question_id": "q2_1",
+        "items": [prev_candidate.model_dump()],
+    }
+
+    state = {
+        "question_set": question_set.model_dump(),
+        "fusion_candidates": {
+            "q1_1": [_candidate_for("q1_1", "p1", "New evidence.").model_dump()]
+        },
+        "relevance_candidates": {"q2_1": [prev_candidate.model_dump()]},
+        "relevance_evidence": [prev_bundle],
+        "relevance_mode": "none",
+        "relevance_top_k": 1,
+        "relevance_top_n": 1,
+        "retry_question_ids": ["q1_1"],
+    }
+
+    out = relevance_validator_node(state)
+
+    assert out["relevance_candidates"]["q2_1"] == [prev_candidate.model_dump()]
+    assert any(bundle["question_id"] == "q2_1" for bundle in out["relevance_evidence"])

@@ -25,6 +25,12 @@ from rob2.locator_rules import get_locator_rules
 from schemas.internal.documents import DocStructure
 from schemas.internal.evidence import EvidenceBundle, EvidenceCandidate
 from schemas.internal.rob2 import QuestionSet
+from pipelines.graphs.nodes.retry_utils import (
+    filter_question_set,
+    merge_bundles,
+    merge_by_question,
+    read_retry_question_ids,
+)
 
 
 _DEFAULT_QUERY_PLANNER_TEMPERATURE = 0.0
@@ -57,13 +63,15 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
 
     doc_structure = DocStructure.model_validate(raw_doc)
     question_set = QuestionSet.model_validate(raw_questions)
+    retry_ids = read_retry_question_ids(state)
+    target_questions = filter_question_set(question_set, retry_ids)
 
     rules = get_locator_rules()
     planner_requested = str(state.get("query_planner") or "deterministic").strip().lower()
     if planner_requested not in {"deterministic", "llm"}:
         raise ValueError("query_planner must be 'deterministic' or 'llm'")
 
-    query_plan = generate_query_plan(question_set, rules, max_queries_per_question=5)
+    query_plan = generate_query_plan(target_questions, rules, max_queries_per_question=5)
     planner_used = planner_requested
     planner_error: str | None = None
     planner_model: str | None = None
@@ -119,7 +127,7 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
             )
             try:
                 query_plan = generate_query_plan_llm(
-                    question_set,
+                    target_questions,
                     rules,
                     config=config,
                     max_queries_per_question=5,
@@ -225,7 +233,7 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
     bundles: List[EvidenceBundle] = []
     structure_debug: Dict[str, dict] = {}
 
-    for question in question_set.questions:
+    for question in target_questions.questions:
         question_id = question.question_id
         queries = query_plan.get(question_id) or []
 
@@ -329,6 +337,44 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
                 "section_priors": selected.priors_used,
             }
 
+    rankings_payload = {
+        question_id: {
+            query: [
+                {
+                    "paragraph_id": spans[doc_index].paragraph_id,
+                    "score": score,
+                }
+                for doc_index, score in hits
+            ]
+            for query, hits in per_query.items()
+        }
+        for question_id, per_query in rankings.items()
+    }
+    candidates_payload = {
+        question_id: [candidate.model_dump() for candidate in candidates]
+        for question_id, candidates in candidates_by_q.items()
+    }
+    bundles_payload = [bundle.model_dump() for bundle in bundles]
+    structure_payload = structure_debug if use_structure else None
+
+    if retry_ids:
+        candidates_payload = merge_by_question(
+            state.get("bm25_candidates"), candidates_payload, retry_ids
+        )
+        rankings_payload = merge_by_question(
+            state.get("bm25_rankings"), rankings_payload, retry_ids
+        )
+        query_plan = merge_by_question(
+            state.get("bm25_queries"), query_plan, retry_ids
+        )
+        bundles_payload = merge_bundles(
+            state.get("bm25_evidence"), bundles_payload, question_set
+        )
+        if structure_payload is not None:
+            structure_payload = merge_by_question(
+                state.get("bm25_structure"), structure_payload, retry_ids
+            )
+
     return {
         "bm25_queries": query_plan,
         "bm25_query_planner": {
@@ -348,24 +394,9 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
             "batch_size": reranker_batch_size,
             "error": reranker_error,
         },
-        "bm25_rankings": {
-            question_id: {
-                query: [
-                    {
-                        "paragraph_id": spans[doc_index].paragraph_id,
-                        "score": score,
-                    }
-                    for doc_index, score in hits
-                ]
-                for query, hits in per_query.items()
-            }
-            for question_id, per_query in rankings.items()
-        },
-        "bm25_candidates": {
-            question_id: [candidate.model_dump() for candidate in candidates]
-            for question_id, candidates in candidates_by_q.items()
-        },
-        "bm25_evidence": [bundle.model_dump() for bundle in bundles],
+        "bm25_rankings": rankings_payload,
+        "bm25_candidates": candidates_payload,
+        "bm25_evidence": bundles_payload,
         "bm25_rules_version": rules.version,
         "bm25_config": {
             "top_k": top_k,
@@ -377,7 +408,7 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
             "tokenizer": tokenizer_config.mode,
             "char_ngram": tokenizer_config.char_ngram,
         },
-        "bm25_structure": structure_debug if use_structure else None,
+        "bm25_structure": structure_payload,
     }
 
 

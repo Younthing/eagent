@@ -22,6 +22,12 @@ from rob2.locator_rules import get_locator_rules
 from schemas.internal.documents import DocStructure
 from schemas.internal.evidence import EvidenceBundle, EvidenceCandidate
 from schemas.internal.rob2 import QuestionSet
+from pipelines.graphs.nodes.retry_utils import (
+    filter_question_set,
+    merge_bundles,
+    merge_by_question,
+    read_retry_question_ids,
+)
 
 
 _DEFAULT_QUERY_PLANNER_TEMPERATURE = 0.0
@@ -57,13 +63,15 @@ def splade_retrieval_locator_node(state: dict) -> dict:
 
     doc_structure = DocStructure.model_validate(raw_doc)
     question_set = QuestionSet.model_validate(raw_questions)
+    retry_ids = read_retry_question_ids(state)
+    target_questions = filter_question_set(question_set, retry_ids)
 
     rules = get_locator_rules()
     planner_requested = str(state.get("query_planner") or "deterministic").strip().lower()
     if planner_requested not in {"deterministic", "llm"}:
         raise ValueError("query_planner must be 'deterministic' or 'llm'")
 
-    query_plan = generate_query_plan(question_set, rules, max_queries_per_question=5)
+    query_plan = generate_query_plan(target_questions, rules, max_queries_per_question=5)
     planner_used = planner_requested
     planner_error: str | None = None
     planner_model: str | None = None
@@ -119,7 +127,7 @@ def splade_retrieval_locator_node(state: dict) -> dict:
             )
             try:
                 query_plan = generate_query_plan_llm(
-                    question_set,
+                    target_questions,
                     rules,
                     config=config,
                     max_queries_per_question=5,
@@ -203,6 +211,32 @@ def splade_retrieval_locator_node(state: dict) -> dict:
 
     spans = doc_structure.sections
     if not spans:
+        empty_candidates = {q.question_id: [] for q in target_questions.questions}
+        empty_rankings = {q.question_id: {} for q in target_questions.questions}
+        empty_bundles = [
+            EvidenceBundle(question_id=q.question_id, items=[]).model_dump()
+            for q in target_questions.questions
+        ]
+        structure_payload = {} if use_structure else None
+
+        if retry_ids:
+            empty_candidates = merge_by_question(
+                state.get("splade_candidates"), empty_candidates, retry_ids
+            )
+            empty_rankings = merge_by_question(
+                state.get("splade_rankings"), empty_rankings, retry_ids
+            )
+            query_plan = merge_by_question(
+                state.get("splade_queries"), query_plan, retry_ids
+            )
+            empty_bundles = merge_bundles(
+                state.get("splade_evidence"), empty_bundles, question_set
+            )
+            if structure_payload is not None:
+                structure_payload = merge_by_question(
+                    state.get("splade_structure"), structure_payload, retry_ids
+                )
+
         return {
             "splade_queries": query_plan,
             "splade_query_planner": {
@@ -222,9 +256,9 @@ def splade_retrieval_locator_node(state: dict) -> dict:
                 "batch_size": reranker_batch_size,
                 "error": reranker_error,
             },
-            "splade_rankings": {},
-            "splade_candidates": {},
-            "splade_evidence": [],
+            "splade_rankings": empty_rankings,
+            "splade_candidates": empty_candidates,
+            "splade_evidence": empty_bundles,
             "splade_rules_version": rules.version,
             "splade_config": {
                 "model_id": model_id,
@@ -239,7 +273,7 @@ def splade_retrieval_locator_node(state: dict) -> dict:
                 "batch_size": batch_size,
                 "index_size": 0,
             },
-            "splade_structure": {} if use_structure else None,
+            "splade_structure": structure_payload,
         }
 
     encoder = get_splade_encoder(model_id=model_id, device=device, hf_token=hf_token)
@@ -284,7 +318,7 @@ def splade_retrieval_locator_node(state: dict) -> dict:
     bundles: List[EvidenceBundle] = []
     structure_debug: Dict[str, dict] = {}
 
-    for question in question_set.questions:
+    for question in target_questions.questions:
         question_id = question.question_id
         queries = query_plan.get(question_id) or []
 
@@ -387,6 +421,44 @@ def splade_retrieval_locator_node(state: dict) -> dict:
                 "section_priors": selected.priors_used,
             }
 
+    rankings_payload = {
+        question_id: {
+            query: [
+                {
+                    "paragraph_id": spans[doc_index].paragraph_id,
+                    "score": score,
+                }
+                for doc_index, score in hits
+            ]
+            for query, hits in per_query.items()
+        }
+        for question_id, per_query in rankings.items()
+    }
+    candidates_payload = {
+        question_id: [candidate.model_dump() for candidate in candidates]
+        for question_id, candidates in candidates_by_q.items()
+    }
+    bundles_payload = [bundle.model_dump() for bundle in bundles]
+    structure_payload = structure_debug if use_structure else None
+
+    if retry_ids:
+        candidates_payload = merge_by_question(
+            state.get("splade_candidates"), candidates_payload, retry_ids
+        )
+        rankings_payload = merge_by_question(
+            state.get("splade_rankings"), rankings_payload, retry_ids
+        )
+        query_plan = merge_by_question(
+            state.get("splade_queries"), query_plan, retry_ids
+        )
+        bundles_payload = merge_bundles(
+            state.get("splade_evidence"), bundles_payload, question_set
+        )
+        if structure_payload is not None:
+            structure_payload = merge_by_question(
+                state.get("splade_structure"), structure_payload, retry_ids
+            )
+
     return {
         "splade_queries": query_plan,
         "splade_query_planner": {
@@ -406,24 +478,9 @@ def splade_retrieval_locator_node(state: dict) -> dict:
             "batch_size": reranker_batch_size,
             "error": reranker_error,
         },
-        "splade_rankings": {
-            question_id: {
-                query: [
-                    {
-                        "paragraph_id": spans[doc_index].paragraph_id,
-                        "score": score,
-                    }
-                    for doc_index, score in hits
-                ]
-                for query, hits in per_query.items()
-            }
-            for question_id, per_query in rankings.items()
-        },
-        "splade_candidates": {
-            question_id: [candidate.model_dump() for candidate in candidates]
-            for question_id, candidates in candidates_by_q.items()
-        },
-        "splade_evidence": [bundle.model_dump() for bundle in bundles],
+        "splade_rankings": rankings_payload,
+        "splade_candidates": candidates_payload,
+        "splade_evidence": bundles_payload,
         "splade_rules_version": rules.version,
         "splade_config": {
             "model_id": model_id,
@@ -439,7 +496,7 @@ def splade_retrieval_locator_node(state: dict) -> dict:
             "index_size": len(spans),
             "vector_dim": int(doc_vectors.shape[1]),
         },
-        "splade_structure": structure_debug if use_structure else None,
+        "splade_structure": structure_payload,
     }
 
 

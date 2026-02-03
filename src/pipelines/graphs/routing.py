@@ -25,21 +25,27 @@ def _truthy(value: object, default: bool = False) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-def validation_should_retry(state: Mapping[str, Any]) -> Literal["retry", "proceed"]:
-    """Route after Milestone 7 validation to retry evidence location or proceed."""
+def validation_should_retry(
+    state: Mapping[str, Any],
+) -> Literal["retry", "proceed", "fallback"]:
+    """Route after Milestone 7 validation to retry, fallback, or proceed."""
     attempt = _as_int(state.get("validation_attempt"), 0)
     max_retries = _as_int(state.get("validation_max_retries"), 0)
 
     completeness_passed = bool(state.get("completeness_passed"))
     fail_on_consistency = _truthy(state.get("validation_fail_on_consistency"), True)
     consistency_failed = state.get("consistency_failed_questions") or []
-    consistency_has_failures = isinstance(consistency_failed, list) and bool(consistency_failed)
+    consistency_has_failures = isinstance(consistency_failed, list) and bool(
+        consistency_failed
+    )
 
-    passed = completeness_passed and (not fail_on_consistency or not consistency_has_failures)
+    passed = completeness_passed and (
+        not fail_on_consistency or not consistency_has_failures
+    )
     if passed:
         return "proceed"
     if attempt >= max_retries:
-        return "proceed"
+        return "fallback"
     return "retry"
 
 

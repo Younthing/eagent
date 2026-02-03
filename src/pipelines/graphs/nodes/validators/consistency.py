@@ -12,6 +12,11 @@ from evidence.validators.consistency import (
 from evidence.validators.selectors import select_passed_candidates
 from schemas.internal.evidence import ConsistencyVerdict, FusedEvidenceCandidate
 from schemas.internal.rob2 import QuestionSet
+from pipelines.graphs.nodes.retry_utils import (
+    filter_question_set,
+    merge_by_question,
+    read_retry_question_ids,
+)
 
 
 def consistency_validator_node(state: dict) -> dict:
@@ -19,6 +24,7 @@ def consistency_validator_node(state: dict) -> dict:
     if raw_questions is None:
         raise ValueError("consistency_validator_node requires 'question_set'.")
     question_set = QuestionSet.model_validate(raw_questions)
+    retry_ids = read_retry_question_ids(state)
     question_text_by_id = {
         question.question_id: question.text for question in question_set.questions
     }
@@ -93,6 +99,11 @@ def consistency_validator_node(state: dict) -> dict:
     failed_questions: List[str] = []
 
     question_ids = _ordered_question_ids(question_set, raw_candidates)
+    if retry_ids:
+        filtered = filter_question_set(question_set, retry_ids)
+        question_ids = [question.question_id for question in filtered.questions]
+        missing = sorted(retry_ids - set(question_ids))
+        question_ids.extend(missing)
     for question_id in question_ids:
         raw_list = raw_candidates.get(question_id)
         if not isinstance(raw_list, list) or not raw_list:
@@ -124,6 +135,15 @@ def consistency_validator_node(state: dict) -> dict:
         reports[question_id] = verdict.model_dump()
         if verdict.label == "fail":
             failed_questions.append(question_id)
+
+    if retry_ids:
+        reports = merge_by_question(state.get("consistency_reports"), reports, retry_ids)
+
+    failed_questions = [
+        question_id
+        for question_id, report in reports.items()
+        if isinstance(report, dict) and report.get("label") == "fail"
+    ]
 
     return {
         "consistency_reports": reports,

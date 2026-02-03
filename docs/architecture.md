@@ -244,7 +244,7 @@ Notes:
 * **Domain Question Planner**：输出 Standard ROB2 的问题清单与 decision-tree 绑定。
 * **Evidence Location**：并行定位候选证据（FullText / Rule-Based / Retrieval）。
 * **Evidence Fusion**：合并、去重、排序，形成每题 Top-k 证据包。
-* **Evidence Validation**：存在性/相关性/一致性/完整性校验，失败则回到定位层。
+* **Evidence Validation**：存在性/相关性/一致性/完整性校验，失败仅重试失败问题，重试耗尽触发全文审计降级。
 * **Domain Reasoning (D1-D5)**：LLM 产出子问题答案，风险由规则树（`rob2/decision_rules.py`）判定。
 * **Full-Text Domain Audit（可选）**：全文审核信号答案，提供引用并补全证据后重跑受影响 domain。
 * **ROB2 Aggregator**：汇总五域与 overall risk（ROB2 Standard 规则），输出结构化结果。
@@ -283,7 +283,7 @@ Notes:
 1. PDF 解析产出 DocStructure。
 2. Planner 生成 QuestionSet。
 3. Evidence Location 并行产出 EvidenceCandidates。
-4. Fusion + Validation 形成 ValidatedEvidence。
+4. Fusion + Validation 形成 ValidatedEvidence；失败仅重试失败问题。
 5. D1-D5 推理产出 DomainDecision。
-6. Full-Text Domain Audit（可选）补全证据并重跑 domain。
+6. 重试耗尽时触发 Full-Text Domain Audit 降级，补全证据并重跑 domain。
 7. Aggregator 输出 Rob2FinalOutput。

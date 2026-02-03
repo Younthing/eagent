@@ -24,7 +24,7 @@ _DEFAULT_RELEVANCE_MIN_CONFIDENCE = 0.6
 _DEFAULT_CONSISTENCY_MIN_CONFIDENCE = 0.6
 _DEFAULT_CONSISTENCY_TOP_N = 3
 _DEFAULT_DOMAIN_EVIDENCE_TOP_K = 5
-_DEFAULT_MAX_RETRIES = 1
+_DEFAULT_MAX_RETRIES = 3
 _DEFAULT_DOMAIN_MAX_RETRIES = 2
 _DEFAULT_RERANKER_MAX_LENGTH = 512
 _DEFAULT_RERANKER_BATCH_SIZE = 8
@@ -395,6 +395,8 @@ def _build_debug_payload(state: Mapping[str, Any], level: str) -> dict[str, Any]
     keys = [
         "validation_attempt",
         "validation_retry_log",
+        "retry_question_ids",
+        "fulltext_fallback_used",
         "completeness_passed",
         "completeness_failed_questions",
         "consistency_failed_questions",

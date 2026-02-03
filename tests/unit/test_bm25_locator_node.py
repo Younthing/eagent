@@ -1,6 +1,7 @@
 """Unit tests for the retrieval BM25 node module."""
 
 from pipelines.graphs.nodes.locators.retrieval_bm25 import bm25_retrieval_locator_node
+from schemas.internal.evidence import EvidenceCandidate
 from schemas.internal.rob2 import QuestionSet, Rob2Question
 
 
@@ -222,6 +223,71 @@ def test_bm25_retrieval_locator_node_multiple_questions():
     assert "bm25_candidates" in result
     assert "q1" in result["bm25_candidates"]
     assert "q2" in result["bm25_candidates"]
+
+
+def test_bm25_retrieval_locator_node_merges_retry_questions() -> None:
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q1",
+                rob2_id="q1",
+                domain="D1",
+                text="First question",
+                options=["Y", "N"],
+                order=1,
+            ),
+            Rob2Question(
+                question_id="q2",
+                rob2_id="q2",
+                domain="D1",
+                text="Second question",
+                options=["Y", "N"],
+                order=2,
+            ),
+        ],
+    )
+
+    prev_candidate = EvidenceCandidate(
+        question_id="q2",
+        paragraph_id="p_prev",
+        title="Previous",
+        page=9,
+        text="Previous evidence.",
+        source="retrieval",
+        score=1.0,
+        engine="bm25",
+    )
+
+    state = {
+        "question_set": question_set.model_dump(),
+        "doc_structure": {
+            "body": "Content for q1.",
+            "sections": [
+                {
+                    "paragraph_id": "p1",
+                    "title": "Content",
+                    "page": 1,
+                    "text": "Content for q1.",
+                }
+            ],
+        },
+        "query_planner": "deterministic",
+        "top_k": 3,
+        "per_query_top_n": 10,
+        "rrf_k": 60,
+        "retry_question_ids": ["q1"],
+        "bm25_candidates": {"q2": [prev_candidate.model_dump()]},
+        "bm25_queries": {"q2": ["prev query"]},
+        "bm25_rankings": {"q2": {"prev query": [{"paragraph_id": "p_prev", "score": 0.1}]}},
+        "bm25_evidence": [{"question_id": "q2", "items": [prev_candidate.model_dump()]}],
+    }
+
+    result = bm25_retrieval_locator_node(state)
+
+    assert result["bm25_candidates"]["q2"] == [prev_candidate.model_dump()]
+    assert result["bm25_queries"]["q2"] == ["prev query"]
 
 
 def test_bm25_retrieval_locator_node_empty_state():
