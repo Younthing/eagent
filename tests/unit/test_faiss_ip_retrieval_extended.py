@@ -13,9 +13,9 @@ def test_faiss_build_ip_index_basic():
     index = build_ip_index(vectors)
 
     # Index should be built successfully
-    assert hasattr(index, 'ntotal')
+    assert hasattr(index, "ntotal")
     assert index.ntotal == 10
-    assert hasattr(index, 'd')
+    assert hasattr(index, "d")
     assert index.d == dimension
 
 
@@ -153,7 +153,9 @@ def test_faiss_search_ip_query_wrong_dimension():
 
     index = build_ip_index(vectors)
 
-    wrong_dimension_query = np.random.rand(dimension + 10).astype(np.float32)  # Wrong dimension
+    wrong_dimension_query = np.random.rand(dimension + 10).astype(
+        np.float32
+    )  # Wrong dimension
 
     with pytest.raises(ValueError, match="Query dim"):
         search_ip(index, wrong_dimension_query, top_n=5)

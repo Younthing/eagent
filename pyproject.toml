@@ -61,6 +61,7 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "pytest>=9.0.1",
+    "ty>=0.0.14",
 ]
 [tool.uv.extra-build-dependencies]
       pkuseg = ["numpy"]
