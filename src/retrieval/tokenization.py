@@ -155,7 +155,7 @@ def _tokenize_jieba(text: str) -> list[str] | None:
 
 @lru_cache(maxsize=2)
 def _get_pkuseg_segmenter(model_name: str | None):
-    import pkuseg  # type: ignore
+    import pkuseg
 
     if model_name:
         return pkuseg.pkuseg(model_name=model_name)

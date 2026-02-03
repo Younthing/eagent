@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, cast
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 import gradio as gr
 from PIL import Image, ImageDraw
 
