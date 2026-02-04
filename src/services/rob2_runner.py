@@ -152,6 +152,23 @@ def _build_run_state(
             options.preprocess_drop_references, settings.preprocess_drop_references
         ),
         "preprocess_reference_titles": reference_titles,
+        "doc_scope_mode": _resolve_choice(
+            options.doc_scope_mode, _resolve_choice(settings.doc_scope_mode, "auto")
+        ),
+        "doc_scope_include_paragraph_ids": options.doc_scope_include_paragraph_ids
+        if options.doc_scope_include_paragraph_ids is not None
+        else settings.doc_scope_include_paragraph_ids,
+        "doc_scope_page_range": _resolve_str(options.doc_scope_page_range)
+        or _resolve_str(settings.doc_scope_page_range),
+        "doc_scope_min_pages": _resolve_int(
+            options.doc_scope_min_pages, settings.doc_scope_min_pages
+        ),
+        "doc_scope_min_confidence": _resolve_float(
+            options.doc_scope_min_confidence, settings.doc_scope_min_confidence
+        ),
+        "doc_scope_abstract_gap_pages": _resolve_int(
+            options.doc_scope_abstract_gap_pages, settings.doc_scope_abstract_gap_pages
+        ),
         "top_k": top_k,
         "per_query_top_n": per_query_top_n,
         "rrf_k": rrf_k,
@@ -411,6 +428,7 @@ def _build_result(
 
 def _collect_reports(state: Mapping[str, Any]) -> dict[str, Any]:
     report_keys = [
+        "doc_scope_report",
         "llm_locator_debug",
         "relevance_validator",
         "relevance_config",
@@ -433,6 +451,7 @@ def _build_debug_payload(state: Mapping[str, Any], level: str) -> dict[str, Any]
     if level == "full":
         return {"state": dict(state)}
     keys = [
+        "doc_scope_report",
         "validation_attempt",
         "validation_retry_log",
         "retry_question_ids",

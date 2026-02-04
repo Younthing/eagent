@@ -111,7 +111,14 @@
 * 解析模型/管线配置可显式指定并记录
 * 默认 Docling chunker 模型：`malteos/PubMedNCL`（可通过 `DOCLING_CHUNKER_MODEL` 覆盖）
 
-### 6.2 设计约束
+### 6.2 Doc Scope Selector（混排 PDF 主文裁剪）
+
+* 识别同一 PDF 中混入的第二篇摘要/广告/附录等非主文内容，自动选出主文章段落范围并裁剪（保守策略）
+* 支持中英文信号（Abstract/摘要、Keywords/关键词、DOI、Methods/Results/Discussion/References 等）
+* 手动模式允许指定 `paragraph_id` 列表进行段落级裁剪；页面范围仅作为兜底
+* 输出 `doc_scope_report` 记录置信度与裁剪范围；低置信度时不裁剪，仅提示
+
+### 6.3 设计约束
 
 * 不允许丢失方法学关键段落
 * 段落 ID 必须稳定、可追溯

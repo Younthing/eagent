@@ -13,6 +13,7 @@ from core.config import get_settings
 from langchain_docling.loader import DoclingLoader
 from schemas.internal.documents import BoundingBox, DocStructure, SectionSpan
 from utils.text import normalize_block
+from preprocessing.doc_scope import apply_doc_scope, parse_paragraph_ids
 
 logger = logging.getLogger(__name__)
 
@@ -43,12 +44,15 @@ def preprocess_node(state: dict) -> dict:
 
     overrides = _read_docling_overrides(state)
     doc_structure = parse_docling_pdf(pdf_path, overrides=overrides)
+    doc_structure, scope_report = _apply_doc_scope_if_enabled(
+        doc_structure, state
+    )
     if _resolve_bool(state.get("preprocess_drop_references"), True):
         doc_structure = filter_reference_sections(
             doc_structure,
             reference_titles=state.get("preprocess_reference_titles"),
         )
-    return {"doc_structure": doc_structure.model_dump()}
+    return {"doc_structure": doc_structure.model_dump(), "doc_scope_report": scope_report}
 
 
 def parse_docling_pdf(
@@ -154,6 +158,31 @@ def _resolve_bool(value: Any, default: bool) -> bool:
     if isinstance(value, bool):
         return value
     return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _apply_doc_scope_if_enabled(
+    doc_structure: DocStructure,
+    state: dict,
+) -> tuple[DocStructure, dict]:
+    mode = str(state.get("doc_scope_mode") or "auto").strip().lower()
+    include_raw = state.get("doc_scope_include_paragraph_ids")
+    include_ids = None
+    if include_raw is not None:
+        include_ids = parse_paragraph_ids(include_raw)
+    page_range = state.get("doc_scope_page_range")
+    min_pages = int(state.get("doc_scope_min_pages") or 6)
+    min_confidence = float(state.get("doc_scope_min_confidence") or 0.75)
+    abstract_gap_pages = int(state.get("doc_scope_abstract_gap_pages") or 3)
+
+    return apply_doc_scope(
+        doc_structure,
+        mode=mode,
+        include_paragraph_ids=include_ids,
+        page_range=str(page_range) if page_range else None,
+        min_pages=min_pages,
+        min_confidence=min_confidence,
+        abstract_gap_pages=abstract_gap_pages,
+    )
 
 
 def _load_with_docling(

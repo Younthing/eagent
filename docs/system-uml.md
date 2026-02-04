@@ -3,8 +3,10 @@
 ```mermaid
 flowchart TD
   subgraph Preprocessing
-    A[DoclingLoader] --> B[preprocess_node]
-    B --> C[DocStructure]
+    A[DoclingLoader] --> B[preprocess_node<br/>Docling parse]
+    B --> DS[doc_scope_selector<br/>auto/manual]
+    DS --> FR[filter_reference_sections]
+    FR --> C[DocStructure]
   end
 
   subgraph Planning
@@ -118,6 +120,7 @@ Notes:
 - Evidence location includes rule-based, BM25, SPLADE, and LLM ReAct locators.
 - `llm_locator_node` runs an LLM ReAct loop over seeded candidates (rule-based/BM25/SPLADE), emits `paragraph_id + quote`, and merges into fusion via `fulltext_candidates`.
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support LLM query planning via LangChain `init_chat_model` (`query_planner=llm`), with deterministic fallback on errors.
+- Preprocessing applies `doc_scope_selector` to trim mixed-document PDFs (auto/manual) and produces `doc_scope_report` in debug/report outputs.
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support optional cross-encoder reranking (`reranker=cross_encoder`) after RRF.
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support optional structure-aware filtering/ranking (Milestone 5).
 - `relevance_validator_node` annotates fused candidates with an LLM relevance verdict (Milestone 7).

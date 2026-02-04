@@ -58,6 +58,13 @@ class Rob2GraphState(TypedDict, total=False):
     docling_chunker_max_tokens: int
     preprocess_drop_references: bool
     preprocess_reference_titles: list[str] | str | None
+    doc_scope_mode: Literal["auto", "manual", "none"]
+    doc_scope_include_paragraph_ids: list[str] | str | None
+    doc_scope_page_range: str
+    doc_scope_min_pages: int
+    doc_scope_min_confidence: float
+    doc_scope_abstract_gap_pages: int
+    doc_scope_report: dict
 
     top_k: int
     per_query_top_n: int

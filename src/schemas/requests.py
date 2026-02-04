@@ -31,6 +31,12 @@ class Rob2RunOptions(BaseModel):
     docling_chunker_max_tokens: int | None = Field(default=None, ge=1)
     preprocess_drop_references: bool | None = None
     preprocess_reference_titles: list[str] | str | None = None
+    doc_scope_mode: Literal["auto", "manual", "none"] | None = None
+    doc_scope_include_paragraph_ids: list[str] | str | None = None
+    doc_scope_page_range: str | None = None
+    doc_scope_min_pages: int | None = Field(default=None, ge=1)
+    doc_scope_min_confidence: float | None = Field(default=None, ge=0, le=1)
+    doc_scope_abstract_gap_pages: int | None = Field(default=None, ge=0)
 
     # Retrieval + fusion
     top_k: int | None = Field(default=None, ge=1)

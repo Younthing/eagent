@@ -29,6 +29,24 @@ class Settings(BaseSettings):
     preprocess_reference_titles: str | None = Field(
         default=None, validation_alias="PREPROCESS_REFERENCE_TITLES"
     )
+    doc_scope_mode: str = Field(
+        default="auto", validation_alias="DOC_SCOPE_MODE"
+    )
+    doc_scope_include_paragraph_ids: str | None = Field(
+        default=None, validation_alias="DOC_SCOPE_INCLUDE_PARAGRAPH_IDS"
+    )
+    doc_scope_page_range: str | None = Field(
+        default=None, validation_alias="DOC_SCOPE_PAGE_RANGE"
+    )
+    doc_scope_min_pages: int = Field(
+        default=6, validation_alias="DOC_SCOPE_MIN_PAGES"
+    )
+    doc_scope_min_confidence: float = Field(
+        default=0.75, validation_alias="DOC_SCOPE_MIN_CONFIDENCE"
+    )
+    doc_scope_abstract_gap_pages: int = Field(
+        default=3, validation_alias="DOC_SCOPE_ABSTRACT_GAP_PAGES"
+    )
     locator_tokenizer: str = Field(
         default="auto", validation_alias="LOCATOR_TOKENIZER"
     )

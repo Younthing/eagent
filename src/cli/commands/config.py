@@ -144,6 +144,31 @@ def _options_catalog() -> list[dict[str, Any]]:
                     "key": "preprocess_reference_titles",
                     "desc": "参考文献标题匹配列表",
                 },
+                {
+                    "key": "doc_scope_mode",
+                    "desc": "Doc Scope 模式",
+                    "choices": ["auto", "manual", "none"],
+                },
+                {
+                    "key": "doc_scope_include_paragraph_ids",
+                    "desc": "手动段落选择（paragraph_id 列表）",
+                },
+                {
+                    "key": "doc_scope_page_range",
+                    "desc": "手动页码范围（例如 1-3,5）",
+                },
+                {
+                    "key": "doc_scope_min_pages",
+                    "desc": "自动裁剪最小页数",
+                },
+                {
+                    "key": "doc_scope_min_confidence",
+                    "desc": "自动裁剪最小置信度",
+                },
+                {
+                    "key": "doc_scope_abstract_gap_pages",
+                    "desc": "双语摘要起点间隔阈值",
+                },
             ],
         },
         {
@@ -330,6 +355,7 @@ def _render_example_yaml() -> str:
         return f"'{text}'"
 
     examples: dict[str, Any] = {
+        "doc_scope_mode": "auto",
         "query_planner": "deterministic",
         "reranker": "none",
         "use_structure": True,

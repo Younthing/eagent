@@ -11,6 +11,7 @@ flowchart TD
 
   subgraph Preprocessing
     C[Docling Parser]
+    DS[Doc Scope Selector<br/>auto/manual]
     D[Structured Doc JSON<br/>body, sections, spans]
   end
 
@@ -57,7 +58,8 @@ flowchart TD
   end
 
   A --> C
-  C --> D
+  C --> DS
+  DS --> D
   D --> E
   D --> G1
   D --> G2
@@ -92,6 +94,11 @@ flowchart TD
 ```
 
 Render with any Mermaid-compatible viewer (e.g., `npx @mermaid-js/mermaid-cli -i docs/architecture.md -o architecture.svg`).
+
+### Preprocessing Notes
+
+- 在 Docling 解析后引入 Doc Scope Selector，自动识别混排 PDF 的主文章段落范围；默认保守裁剪，低置信度时仅输出 `doc_scope_report` 提醒。
+- 手动模式支持段落级 `paragraph_id` 选择，解决“同页多文章”场景；页面范围作为兜底。
 
 ### Repository Layout (Reference)
 
@@ -138,7 +145,7 @@ eagent/
 │   │   ├── graphs/
 │   │   │   ├── rob2_graph.py      # 总图：三引擎定位→融合→验证→D1-5→汇总
 │   │   │   ├── nodes/             # 每个节点一个文件，利于测试与复用
-│   │   │   │   ├── preprocess.py  # Docling解析/段落结构构建
+│   │   │   │   ├── preprocess.py  # Docling解析/Doc Scope裁剪/参考文献过滤
 │   │   │   │   ├── planner.py     # ROB2问题规划
 │   │   │   │   ├── locators/      # 证据定位引擎
 │   │   │   │   │   ├── llm_locator.py
@@ -160,6 +167,10 @@ eagent/
 │   │   │   │   ├── domain_audit.py # Full-text audit + evidence patch (M9)
 │   │   │   │   └── aggregate.py   # ROB2汇总 + 输出整形
 │   │   │   └── routing.py         # conditional edges/重试策略/回滚策略
+│   │
+│   ├── preprocessing/             # [预处理工具] 文档裁剪/范围选择
+│   │   ├── __init__.py
+│   │   └── doc_scope.py           # 混排PDF主文裁剪/手动段落选择
 │   │
 │   ├── llm/                       # [LLM层] 模型客户端与提示词资产（LangChain更常用）
 │   │   ├── clients.py             # OpenAI/本地模型/多模型路由
