@@ -19,6 +19,7 @@ from pipelines.graphs.nodes.locators.retrieval_bm25 import bm25_retrieval_locato
 from pipelines.graphs.nodes.locators.retrieval_splade import (
     splade_retrieval_locator_node,
 )
+from pipelines.graphs.nodes.locators.llm_locator import llm_locator_node
 from pipelines.graphs.nodes.locators.rule_based import rule_based_locator_node
 from pipelines.graphs.nodes.planner import planner_node
 from pipelines.graphs.nodes.preprocess import preprocess_node
@@ -85,6 +86,18 @@ class Rob2GraphState(TypedDict, total=False):
     splade_query_max_length: int
     splade_doc_max_length: int
     splade_batch_size: int
+    llm_locator_mode: Literal["llm", "none"]
+    llm_locator_model: str
+    llm_locator_model_provider: str
+    llm_locator_temperature: float
+    llm_locator_timeout: float
+    llm_locator_max_tokens: int
+    llm_locator_max_retries: int
+    llm_locator_max_steps: int
+    llm_locator_seed_top_n: int
+    llm_locator_per_step_top_n: int
+    llm_locator_max_candidates: int
+    llm_locator_llm: object
 
     fusion_top_k: int
     fusion_rrf_k: int
@@ -197,6 +210,7 @@ class Rob2GraphState(TypedDict, total=False):
     fusion_candidates: dict
     relevance_candidates: dict
     existence_candidates: dict
+    llm_locator_debug: dict
 
     validated_evidence: list[dict]
     validated_candidates: dict
@@ -355,6 +369,10 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
         "splade_locator",
         cast(Any, overrides.get("splade_locator") or splade_retrieval_locator_node),
     )
+    builder.add_node(
+        "llm_locator",
+        cast(Any, overrides.get("llm_locator") or llm_locator_node),
+    )
     builder.add_node("fusion", cast(Any, overrides.get("fusion") or fusion_node))
 
     builder.add_node(
@@ -436,7 +454,8 @@ def build_rob2_graph(*, node_overrides: dict[str, NodeFn] | None = None):
     builder.add_edge("init_validation", "rule_based_locator")
     builder.add_edge("rule_based_locator", "bm25_locator")
     builder.add_edge("bm25_locator", "splade_locator")
-    builder.add_edge("splade_locator", "fusion")
+    builder.add_edge("splade_locator", "llm_locator")
+    builder.add_edge("llm_locator", "fusion")
     builder.add_edge("fusion", "relevance_validator")
     builder.add_edge("relevance_validator", "existence_validator")
     builder.add_edge("existence_validator", "consistency_validator")

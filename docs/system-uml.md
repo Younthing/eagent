@@ -43,12 +43,16 @@ flowchart TD
     CE2 --> U[splade_candidates<br/>all fused candidates]
     S --> V[splade_rankings<br/>per-query top-n]
     S --> W[splade_queries]
+
+    S --> LL[llm_locator_node<br/>ReAct LLM]
+    LL --> FT[fulltext_candidates<br/>LLM evidence]
   end
 
   subgraph EvidenceFusion
     L --> FUS[fusion_node<br/>three-engine merge<br/>M6]
     O --> FUS
     U --> FUS
+    FT --> FUS
     FUS --> FE[fusion_evidence<br/>FusedEvidenceBundle top-k]
     FUS --> FC[fusion_candidates<br/>all fused candidates]
   end
@@ -100,6 +104,7 @@ flowchart TD
     P6 --> A4
     P6 --> A5
     P6 --> AFinal
+    P7[src/llm/prompts/locators/llm_locator_system.md] --> LL
   end
 
   %% Milestone 7 rollback/retry: failed validation routes back to EvidenceLocation
@@ -110,7 +115,8 @@ flowchart TD
 
 Notes:
 - This diagram reflects the currently implemented nodes and data flow in code.
-- Evidence location currently includes rule-based, BM25, and SPLADE retrieval locators.
+- Evidence location includes rule-based, BM25, SPLADE, and LLM ReAct locators.
+- `llm_locator_node` runs an LLM ReAct loop over seeded candidates (rule-based/BM25/SPLADE), emits `paragraph_id + quote`, and merges into fusion via `fulltext_candidates`.
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support LLM query planning via LangChain `init_chat_model` (`query_planner=llm`), with deterministic fallback on errors.
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support optional cross-encoder reranking (`reranker=cross_encoder`) after RRF.
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support optional structure-aware filtering/ranking (Milestone 5).
@@ -124,4 +130,4 @@ Notes:
 - Per-domain `*_audit_node` steps (Milestone 9) read the full document, propose citations, patch `validated_candidates`, and re-run the corresponding domain only when `domain_audit_mode=llm` and `domain_audit_rerun_domains=true` (default: false).
 - `final_domain_audit_node` is optional and emits an all-domain audit report (no rerun) when `domain_audit_mode=llm` and `domain_audit_final=true`.
 - `aggregate_node` produces `rob2_result` (JSON) + `rob2_table_markdown` (human-readable).
-- Dense/fulltext locators and cross-domain validation are not implemented yet.
+- Dense retrieval and cross-domain validation are not implemented yet.

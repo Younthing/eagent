@@ -12,6 +12,7 @@ from schemas.internal.evidence import (
     EvidenceCandidate,
     EvidenceSupport,
     FusedEvidenceCandidate,
+    RelevanceVerdict,
 )
 
 
@@ -86,6 +87,13 @@ def fuse_candidates_for_question(
         fused_rows, start=1
     ):
         candidate = best_candidate_by_pid[pid]
+        relevance = None
+        if candidate.supporting_quote:
+            relevance = RelevanceVerdict(
+                label="relevant",
+                confidence=1.0,
+                supporting_quote=candidate.supporting_quote,
+            )
         supports = sorted(
             supports_by_pid[pid].values(),
             key=lambda support: (support.rank, support.engine),
@@ -101,6 +109,7 @@ def fuse_candidates_for_question(
                 fusion_rank=fusion_rank,
                 support_count=support_count,
                 supports=supports,
+                relevance=relevance,
             )
         )
 
@@ -108,4 +117,3 @@ def fuse_candidates_for_question(
 
 
 __all__ = ["fuse_candidates_for_question"]
-

@@ -140,15 +140,29 @@ def relevance_validator_node(state: dict) -> dict:
         skipped = fused[top_n:]
         question_text = question_text_by_id.get(question_id) or question_id
 
-        annotated_validated = annotate_relevance(
-            question_text,
-            to_validate,
-            llm=llm,
-            llm_config=llm_config,
-            config=validation_config,
-        )
+        pending = [candidate for candidate in to_validate if candidate.relevance is None]
+        annotated_pending: List[FusedEvidenceCandidate] = []
+        if pending:
+            annotated_pending = annotate_relevance(
+                question_text,
+                pending,
+                llm=llm,
+                llm_config=llm_config,
+                config=validation_config,
+            )
+
+        pending_map = {candidate.paragraph_id: candidate for candidate in annotated_pending}
+        annotated_validated: List[FusedEvidenceCandidate] = []
+        for candidate in to_validate:
+            if candidate.relevance is not None:
+                annotated_validated.append(candidate)
+            else:
+                annotated_validated.append(pending_map.get(candidate.paragraph_id, candidate))
+
         annotated_skipped = [
-            candidate.model_copy(
+            candidate
+            if candidate.relevance is not None
+            else candidate.model_copy(
                 update={
                     "relevance": RelevanceVerdict(
                         label="unknown",

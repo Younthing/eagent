@@ -82,6 +82,40 @@ class Settings(BaseSettings):
         default=8, validation_alias="SPLADE_BATCH_SIZE"
     )
 
+    llm_locator_mode: str = Field(
+        default="llm", validation_alias="LLM_LOCATOR_MODE"
+    )
+    llm_locator_model: str | None = Field(
+        default=None, validation_alias="LLM_LOCATOR_MODEL"
+    )
+    llm_locator_model_provider: str | None = Field(
+        default=None, validation_alias="LLM_LOCATOR_MODEL_PROVIDER"
+    )
+    llm_locator_temperature: float = Field(
+        default=0.0, validation_alias="LLM_LOCATOR_TEMPERATURE"
+    )
+    llm_locator_timeout: float | None = Field(
+        default=None, validation_alias="LLM_LOCATOR_TIMEOUT"
+    )
+    llm_locator_max_tokens: int | None = Field(
+        default=None, validation_alias="LLM_LOCATOR_MAX_TOKENS"
+    )
+    llm_locator_max_retries: int = Field(
+        default=2, validation_alias="LLM_LOCATOR_MAX_RETRIES"
+    )
+    llm_locator_max_steps: int = Field(
+        default=3, validation_alias="LLM_LOCATOR_MAX_STEPS"
+    )
+    llm_locator_seed_top_n: int = Field(
+        default=5, validation_alias="LLM_LOCATOR_SEED_TOP_N"
+    )
+    llm_locator_per_step_top_n: int = Field(
+        default=10, validation_alias="LLM_LOCATOR_PER_STEP_TOP_N"
+    )
+    llm_locator_max_candidates: int = Field(
+        default=40, validation_alias="LLM_LOCATOR_MAX_CANDIDATES"
+    )
+
     relevance_model: str | None = Field(default=None, validation_alias="RELEVANCE_MODEL")
     relevance_model_provider: str | None = Field(
         default=None, validation_alias="RELEVANCE_MODEL_PROVIDER"

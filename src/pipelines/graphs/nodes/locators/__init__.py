@@ -1,10 +1,12 @@
 """Evidence locator implementations."""
 
+from .llm_locator import llm_locator_node  # noqa: F401
 from .retrieval_bm25 import bm25_retrieval_locator_node  # noqa: F401
 from .retrieval_splade import splade_retrieval_locator_node  # noqa: F401
 from .rule_based import rule_based_locator_node  # noqa: F401
 
 __all__ = [
+    "llm_locator_node",
     "bm25_retrieval_locator_node",
     "rule_based_locator_node",
     "splade_retrieval_locator_node",

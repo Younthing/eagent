@@ -20,9 +20,9 @@ flowchart TD
   end
 
   subgraph EvidenceLocation[Evidence Location Layer]
-    G1[FullText Locator LLM]
+    G1[LLM Locator (ReAct)]
     G2[Rule-Based Locator]
-    G3[Retrieval Engine<br/>BM25/Dense/SPLADE]
+    G3[Retrieval Engine<br/>BM25/SPLADE]
   end
 
   subgraph EvidenceFusion
@@ -140,10 +140,11 @@ eagent/
 │   │   │   ├── nodes/             # 每个节点一个文件，利于测试与复用
 │   │   │   │   ├── preprocess.py  # Docling解析/段落结构构建
 │   │   │   │   ├── planner.py     # ROB2问题规划
-│   │   │   │   ├── locators/      # 证据定位三引擎
-│   │   │   │   │   ├── fulltext.py
+│   │   │   │   ├── locators/      # 证据定位引擎
+│   │   │   │   │   ├── llm_locator.py
 │   │   │   │   │   ├── rule_based.py
-│   │   │   │   │   └── retrieval.py
+│   │   │   │   │   ├── retrieval_bm25.py
+│   │   │   │   │   └── retrieval_splade.py
 │   │   │   │   ├── fusion.py      # Evidence Fusion
 │   │   │   │   ├── validators/    # Evidence validators (M7)
 │   │   │   │   │   ├── existence.py
@@ -242,7 +243,7 @@ Notes:
 
 * **Preprocessing**：解析 PDF，产出可追溯的 DocStructure（body/sections/paragraph_id）。
 * **Domain Question Planner**：输出 Standard ROB2 的问题清单与 decision-tree 绑定。
-* **Evidence Location**：并行定位候选证据（FullText / Rule-Based / Retrieval）。
+* **Evidence Location**：规则/检索/LLM ReAct 并集定位候选证据，LLM 线可迭代扩展检索线索。
 * **Evidence Fusion**：合并、去重、排序，形成每题 Top-k 证据包。
 * **Evidence Validation**：存在性/相关性/一致性/完整性校验，失败仅重试失败问题，重试耗尽触发全文审计降级。
 * **Domain Reasoning (D1-D5)**：LLM 产出子问题答案，风险由规则树（`rob2/decision_rules.py`）判定。
@@ -254,7 +255,7 @@ Notes:
 
 * **DocStructure**: `{ body: str, sections: list[SectionSpan], <section_title>: str }`
 * **QuestionSet**: `list[{ question_id, domain, text, section_prior? }]`
-* **EvidenceCandidate**: `{ question_id, paragraph_id, text, source, score? }`
+* **EvidenceCandidate**: `{ question_id, paragraph_id, text, source, score?, supporting_quote? }`
 * **EvidenceBundle**: `{ question_id, items: list[EvidenceCandidate] }`
 * **ValidatedEvidence**: `{ question_id, items, status, failure_reason? }`
 * **DomainDecision**: `{ domain, effect_type?, answers, risk, risk_rationale, missing_questions }`（risk 由规则树判定）
@@ -282,7 +283,7 @@ Notes:
 
 1. PDF 解析产出 DocStructure。
 2. Planner 生成 QuestionSet。
-3. Evidence Location 并行产出 EvidenceCandidates。
+3. Evidence Location 产出 EvidenceCandidates（规则/检索/LLM 并集）。
 4. Fusion + Validation 形成 ValidatedEvidence；失败仅重试失败问题。
 5. D1-D5 推理产出 DomainDecision。
 6. 重试耗尽时触发 Full-Text Domain Audit 降级，补全证据并重跑 domain。

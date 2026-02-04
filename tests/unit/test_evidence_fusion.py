@@ -51,6 +51,31 @@ def test_fuse_candidates_boosts_multi_engine_hits() -> None:
     assert {support.engine for support in fused[0].supports} == {"rule_based", "bm25"}
 
 
+def test_fuse_candidates_propagates_supporting_quote() -> None:
+    question_id = "q1_1"
+    candidate = EvidenceCandidate(
+        question_id=question_id,
+        paragraph_id="p10",
+        title="Methods",
+        page=3,
+        text="Allocation used a random number table.",
+        source="fulltext",
+        score=1.0,
+        supporting_quote="random number table",
+        engine="llm_locator",
+    )
+    fused = fuse_candidates_for_question(
+        question_id,
+        candidates_by_engine={"fulltext": [candidate]},
+        rrf_k=60,
+    )
+
+    assert fused
+    assert fused[0].relevance is not None
+    assert fused[0].relevance.label == "relevant"
+    assert fused[0].relevance.supporting_quote == "random number table"
+
+
 def test_fusion_node_returns_full_candidates_and_top_k_bundles() -> None:
     question_set = QuestionSet(
         version="test",
@@ -96,4 +121,3 @@ def test_fusion_node_returns_full_candidates_and_top_k_bundles() -> None:
     assert bundles[0]["question_id"] == "q1_1"
     assert len(bundles[0]["items"]) == 1
     assert bundles[0]["items"][0]["paragraph_id"] == "p1"
-

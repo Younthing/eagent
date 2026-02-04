@@ -36,6 +36,10 @@ _DEFAULT_SPLADE_BATCH = 8
 _DEFAULT_QUERY_PLANNER_MAX_KEYWORDS = 10
 _DEFAULT_AUDIT_PATCH_WINDOW = 0
 _DEFAULT_AUDIT_MAX_PATCHES = 3
+_DEFAULT_LLM_LOCATOR_MAX_STEPS = 3
+_DEFAULT_LLM_LOCATOR_SEED_TOP_N = 5
+_DEFAULT_LLM_LOCATOR_PER_STEP_TOP_N = 10
+_DEFAULT_LLM_LOCATOR_MAX_CANDIDATES = 40
 
 
 def run_rob2(
@@ -201,6 +205,41 @@ def _build_run_state(
         ),
         "splade_batch_size": _resolve_int(
             options.splade_batch_size, settings.splade_batch_size or _DEFAULT_SPLADE_BATCH
+        ),
+        "llm_locator_mode": _resolve_choice(
+            options.llm_locator_mode, _resolve_choice(settings.llm_locator_mode, "llm")
+        ),
+        "llm_locator_model": _resolve_str(options.llm_locator_model)
+        or _resolve_str(settings.llm_locator_model),
+        "llm_locator_model_provider": _resolve_str(options.llm_locator_model_provider)
+        or _resolve_str(settings.llm_locator_model_provider),
+        "llm_locator_temperature": _resolve_float(
+            options.llm_locator_temperature, settings.llm_locator_temperature
+        ),
+        "llm_locator_timeout": _resolve_optional_float(
+            options.llm_locator_timeout, settings.llm_locator_timeout
+        ),
+        "llm_locator_max_tokens": _resolve_optional_int(
+            options.llm_locator_max_tokens, settings.llm_locator_max_tokens
+        ),
+        "llm_locator_max_retries": _resolve_int(
+            options.llm_locator_max_retries, settings.llm_locator_max_retries
+        ),
+        "llm_locator_max_steps": _resolve_int(
+            options.llm_locator_max_steps,
+            settings.llm_locator_max_steps or _DEFAULT_LLM_LOCATOR_MAX_STEPS,
+        ),
+        "llm_locator_seed_top_n": _resolve_int(
+            options.llm_locator_seed_top_n,
+            settings.llm_locator_seed_top_n or _DEFAULT_LLM_LOCATOR_SEED_TOP_N,
+        ),
+        "llm_locator_per_step_top_n": _resolve_int(
+            options.llm_locator_per_step_top_n,
+            settings.llm_locator_per_step_top_n or _DEFAULT_LLM_LOCATOR_PER_STEP_TOP_N,
+        ),
+        "llm_locator_max_candidates": _resolve_int(
+            options.llm_locator_max_candidates,
+            settings.llm_locator_max_candidates or _DEFAULT_LLM_LOCATOR_MAX_CANDIDATES,
         ),
         "fusion_top_k": fusion_top_k,
         "fusion_rrf_k": fusion_rrf_k,
@@ -372,6 +411,7 @@ def _build_result(
 
 def _collect_reports(state: Mapping[str, Any]) -> dict[str, Any]:
     report_keys = [
+        "llm_locator_debug",
         "relevance_validator",
         "relevance_config",
         "relevance_debug",
@@ -397,6 +437,7 @@ def _build_debug_payload(state: Mapping[str, Any], level: str) -> dict[str, Any]
         "validation_retry_log",
         "retry_question_ids",
         "fulltext_fallback_used",
+        "llm_locator_debug",
         "completeness_passed",
         "completeness_failed_questions",
         "consistency_failed_questions",

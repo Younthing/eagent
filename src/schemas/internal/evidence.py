@@ -46,6 +46,7 @@ class EvidenceCandidate(BaseModel):
     keyword_score: Optional[float] = Field(default=None, ge=0)
     matched_keywords: Optional[List[str]] = None
     matched_section_priors: Optional[List[str]] = None
+    supporting_quote: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")
 

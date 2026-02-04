@@ -4,7 +4,7 @@ from typing import cast
 
 from evidence.validators.relevance import ChatModelLike, annotate_relevance
 from pipelines.graphs.nodes.validators.relevance import relevance_validator_node
-from schemas.internal.evidence import EvidenceSupport, FusedEvidenceCandidate
+from schemas.internal.evidence import EvidenceSupport, FusedEvidenceCandidate, RelevanceVerdict
 from schemas.internal.rob2 import QuestionSet, Rob2Question
 
 
@@ -174,3 +174,43 @@ def test_relevance_validator_node_merges_retry_questions() -> None:
 
     assert out["relevance_candidates"]["q2_1"] == [prev_candidate.model_dump()]
     assert any(bundle["question_id"] == "q2_1" for bundle in out["relevance_evidence"])
+
+
+def test_relevance_validator_preserves_existing_relevance() -> None:
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q1_1",
+                rob2_id="q1_1",
+                domain="D1",
+                text="Was the allocation sequence random?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            )
+        ],
+    )
+
+    candidate = _candidate(text="Allocation used a random number table.")
+    candidate = candidate.model_copy(
+        update={
+            "relevance": RelevanceVerdict(
+                label="relevant",
+                confidence=1.0,
+                supporting_quote="random number table",
+            )
+        }
+    )
+    state = {
+        "question_set": question_set.model_dump(),
+        "fusion_candidates": {"q1_1": [candidate.model_dump()]},
+        "relevance_mode": "none",
+        "relevance_top_k": 1,
+        "relevance_top_n": 1,
+    }
+
+    out = relevance_validator_node(state)
+    updated = out["relevance_candidates"]["q1_1"][0]
+    assert updated["relevance"]["label"] == "relevant"
+    assert updated["relevance"]["supporting_quote"] == "random number table"

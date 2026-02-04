@@ -71,6 +71,18 @@ class Rob2RunOptions(BaseModel):
     splade_doc_max_length: int | None = Field(default=None, ge=1)
     splade_batch_size: int | None = Field(default=None, ge=1)
 
+    llm_locator_mode: Literal["llm", "none"] | None = None
+    llm_locator_model: str | None = None
+    llm_locator_model_provider: str | None = None
+    llm_locator_temperature: float | None = None
+    llm_locator_timeout: float | None = None
+    llm_locator_max_tokens: int | None = Field(default=None, ge=1)
+    llm_locator_max_retries: int | None = Field(default=None, ge=0)
+    llm_locator_max_steps: int | None = Field(default=None, ge=1)
+    llm_locator_seed_top_n: int | None = Field(default=None, ge=1)
+    llm_locator_per_step_top_n: int | None = Field(default=None, ge=1)
+    llm_locator_max_candidates: int | None = Field(default=None, ge=1)
+
     fusion_top_k: int | None = Field(default=None, ge=1)
     fusion_rrf_k: int | None = Field(default=None, ge=1)
     fusion_engine_weights: dict[str, float] | None = None
