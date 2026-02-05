@@ -10,6 +10,7 @@ import typer
 from pydantic import ValidationError
 
 from schemas.requests import Rob2RunOptions
+from schemas.responses import Rob2RunResult
 
 
 def load_options_payload(
@@ -51,6 +52,58 @@ def emit_json(data: Any) -> None:
     typer.echo(json.dumps(data, ensure_ascii=False, indent=2))
 
 
+def write_run_output_dir(
+    result: Rob2RunResult,
+    output_dir: Path,
+    *,
+    include_table: bool,
+    html: bool = False,
+    docx: bool = False,
+    pdf: bool = False,
+    pdf_name: str = "Unknown",
+) -> None:
+    """Persist a single run result to an output directory."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    result_path = output_dir / "result.json"
+    result_path.write_text(
+        json.dumps(result.model_dump(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    if include_table and result.table_markdown:
+        (output_dir / "table.md").write_text(result.table_markdown, encoding="utf-8")
+
+    if result.reports is not None:
+        (output_dir / "reports.json").write_text(
+            json.dumps(result.reports, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    if result.audit_reports is not None:
+        (output_dir / "audit_reports.json").write_text(
+            json.dumps(result.audit_reports, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    if result.debug is not None:
+        (output_dir / "debug.json").write_text(
+            json.dumps(result.debug, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    if html or docx or pdf:
+        from services.reports import (
+            generate_docx_report,
+            generate_html_report,
+            generate_pdf_report,
+        )
+
+        if html:
+            generate_html_report(result, output_dir / "report.html", pdf_name)
+        if docx:
+            generate_docx_report(result, output_dir / "report.docx", pdf_name)
+        if pdf:
+            generate_pdf_report(result, output_dir / "report.pdf", pdf_name)
+
+
 def _parse_json_string(text: str) -> dict[str, Any]:
     try:
         data = json.loads(text)
@@ -89,4 +142,3 @@ def _parse_set_values(items: list[str]) -> dict[str, Any]:
             raise typer.BadParameter("--set requires a non-empty key.")
         parsed[key] = parse_value(raw_value.strip())
     return parsed
-

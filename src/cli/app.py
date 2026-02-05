@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import typer
@@ -12,10 +11,15 @@ from cli.i18n import apply_cli_localization
 from schemas.requests import Rob2Input
 from schemas.responses import Rob2RunResult
 from services.rob2_runner import run_rob2
-from services.reports import generate_docx_report, generate_html_report, generate_pdf_report
-from cli.common import build_options, emit_json, load_options_payload
+from cli.common import (
+    build_options,
+    emit_json,
+    load_options_payload,
+    write_run_output_dir,
+)
 from cli.commands import (
     audit as audit_command,
+    batch as batch_command,
     cache as cache_command,
     config as config_command,
     fusion as fusion_command,
@@ -46,6 +50,7 @@ app.add_typer(questions_command.app, name="questions")
 app.add_typer(graph_command.app, name="graph")
 app.add_typer(validate_command.app, name="validate")
 app.add_typer(retrieval_command.app, name="retrieval")
+app.add_typer(batch_command.app, name="batch")
 app.add_typer(fusion_command.app, name="fusion")
 app.add_typer(locator_command.app, name="locator")
 app.add_typer(audit_command.app, name="audit")
@@ -91,7 +96,7 @@ def run(
         "--options-file",
         help="包含 Rob2RunOptions 的 JSON/YAML 文件路径",
     ),
-    set_values: list[str] = typer.Option(
+    set_values: list[str] | None = typer.Option(
         None,
         "--set",
         help="使用 key=value 覆盖单个选项，可重复传入",
@@ -261,38 +266,15 @@ def _write_output_dir(
     pdf: bool = False,
     pdf_name: str = "Unknown",
 ) -> None:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    result_path = output_dir / "result.json"
-    result_path.write_text(
-        json.dumps(result.model_dump(), ensure_ascii=False, indent=2),
-        encoding="utf-8",
+    write_run_output_dir(
+        result,
+        output_dir,
+        include_table=include_table,
+        html=html,
+        docx=docx,
+        pdf=pdf,
+        pdf_name=pdf_name,
     )
-
-    if include_table and result.table_markdown:
-        (output_dir / "table.md").write_text(result.table_markdown, encoding="utf-8")
-
-    if result.reports is not None:
-        (output_dir / "reports.json").write_text(
-            json.dumps(result.reports, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-    if result.audit_reports is not None:
-        (output_dir / "audit_reports.json").write_text(
-            json.dumps(result.audit_reports, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-    if result.debug is not None:
-        (output_dir / "debug.json").write_text(
-            json.dumps(result.debug, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-
-    if html:
-        generate_html_report(result, output_dir / "report.html", pdf_name)
-    if docx:
-        generate_docx_report(result, output_dir / "report.docx", pdf_name)
-    if pdf:
-        generate_pdf_report(result, output_dir / "report.pdf", pdf_name)
 
 
 def main() -> None:
