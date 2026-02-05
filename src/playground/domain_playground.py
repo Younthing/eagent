@@ -397,7 +397,7 @@ def _pipeline_run(
         "per_query_top_n": per_query_top_n,
         "rrf_k": 60,
         "query_planner": "deterministic",
-        "reranker": "none",
+        "reranker": "cross_encoder",
         "use_structure": bool(use_structure),
         "splade_model_id": _resolve_splade_model_id(),
         "splade_device": settings.splade_device,

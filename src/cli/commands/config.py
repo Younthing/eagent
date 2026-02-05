@@ -357,7 +357,7 @@ def _render_example_yaml() -> str:
     examples: dict[str, Any] = {
         "doc_scope_mode": "auto",
         "query_planner": "deterministic",
-        "reranker": "none",
+        "reranker": "cross_encoder",
         "use_structure": True,
         "relevance_mode": "none",
         "consistency_mode": "none",

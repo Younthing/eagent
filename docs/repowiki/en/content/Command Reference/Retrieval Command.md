@@ -91,7 +91,7 @@ The retrieval commands accept several input parameters that control the retrieva
 - `planner_max_keywords`: Maximum keywords for LLM query planning
 
 ### Reranking Parameters
-- `reranker`: Reranking strategy (none|cross_encoder) (default: none)
+- `reranker`: Reranking strategy (none|cross_encoder) (default: cross_encoder)
 - `reranker_model_id`: Model ID for reranker
 - `reranker_device`: Device for reranker (cpu|cuda|mps)
 - `reranker_max_length`: Maximum length for reranker tokenizer

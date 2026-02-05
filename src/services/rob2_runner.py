@@ -323,7 +323,7 @@ def _build_run_state(
         "query_planner_max_keywords": _resolve_int(
             options.query_planner_max_keywords, _DEFAULT_QUERY_PLANNER_MAX_KEYWORDS
         ),
-        "reranker": _resolve_choice(options.reranker, "none"),
+        "reranker": _resolve_choice(options.reranker, "cross_encoder"),
         "reranker_model_id": _resolve_str(options.reranker_model_id)
         or _resolve_str(settings.reranker_model_id)
         or DEFAULT_CROSS_ENCODER_MODEL_ID,
