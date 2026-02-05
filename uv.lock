@@ -729,6 +729,7 @@ dependencies = [
     { name = "langextract-anthropic" },
     { name = "langgraph" },
     { name = "langsmith" },
+    { name = "pillow" },
     { name = "pkuseg" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -751,7 +752,6 @@ test = [
 ]
 visual = [
     { name = "gradio" },
-    { name = "pillow" },
     { name = "pymupdf" },
 ]
 
@@ -779,7 +779,7 @@ requires-dist = [
     { name = "langextract-anthropic", specifier = ">=0.2.1" },
     { name = "langgraph" },
     { name = "langsmith" },
-    { name = "pillow", marker = "extra == 'visual'", specifier = ">=10.0.0" },
+    { name = "pillow", specifier = ">=10.0.0" },
     { name = "pkuseg", specifier = ">=0.0.25" },
     { name = "pydantic", specifier = ">=2" },
     { name = "pydantic-settings", specifier = ">=2" },

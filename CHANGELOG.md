@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.6 - 2026-02-05
+- 新增 `rob2 batch plot` 命令，可从批量输出目录或 `batch_summary.json` 生成经典红绿灯矩阵图（PNG）。
+- `rob2 batch run` 新增 `--plot/--no-plot` 与 `--plot-output`，默认自动生成 `batch_traffic_light.png`。
+- 批量红绿灯图支持 legacy 风险值兼容（`some concerns` / `some-concerns`）。
+- 补充批量绘图相关单测/集成测试与 CLI 文档、系统文档同步。
+
 ## 0.1.5 - 2026-02-05
 - 新增持久化子系统（SQLite 元数据 + 文件系统 artifacts），并输出 `run_id` 方便追踪。
 - `run_rob2` 支持持久化/缓存上下文，CLI 增加 `--persist*`、`--batch*`、`--cache*` 参数。

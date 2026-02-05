@@ -137,4 +137,6 @@ Notes:
 - `final_domain_audit_node` is optional and emits an all-domain audit report (no rerun) when `domain_audit_mode=llm` and `domain_audit_final=true`.
 - `aggregate_node` produces `rob2_result` (JSON) + `rob2_table_markdown` (human-readable).
 - CLI now includes `rob2 batch run`, which iterates folder PDFs, auto-resumes via `batch_checkpoint.json`, and invokes `run_rob2` per file while preserving per-run persistence records.
+- `rob2 batch run` now auto-generates `batch_traffic_light.png` (classic Overall+D1..D5 traffic-light matrix) by default; `--no-plot` disables it and `--plot-output` overrides the target path.
+- CLI now includes `rob2 batch plot`, which renders the same PNG from an existing batch output directory or a `batch_summary.json` file.
 - Dense retrieval and cross-domain validation are not implemented yet.

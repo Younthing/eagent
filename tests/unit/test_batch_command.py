@@ -121,3 +121,100 @@ def test_write_summary_files_contains_expected_columns(tmp_path: Path) -> None:
     assert len(rows) == 1
     assert rows[0]["relative_path"] == "a/paper.pdf"
     assert rows[0]["D3_risk"] == "some concerns"
+
+
+def test_plot_batch_accepts_directory_source(tmp_path: Path) -> None:
+    batch_dir = tmp_path / "batch"
+    batch_dir.mkdir()
+    summary = {
+        "items": [
+            {
+                "relative_path": "a/paper.pdf",
+                "status": "success",
+                "overall_risk": "low",
+                "domain_risks": {
+                    "D1": "low",
+                    "D2": "some concerns",
+                    "D3": "high",
+                    "D4": "low",
+                    "D5": "low",
+                },
+            }
+        ]
+    }
+    (batch_dir / "batch_summary.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    batch_command.plot_batch(
+        source=batch_dir,
+        output=None,
+        include_non_success=False,
+    )
+
+    image_path = batch_dir / "batch_traffic_light.png"
+    assert image_path.exists()
+    assert image_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_plot_batch_accepts_summary_file_source(tmp_path: Path) -> None:
+    summary_path = tmp_path / "batch_summary.json"
+    summary = {
+        "items": [
+            {
+                "relative_path": "a/paper.pdf",
+                "status": "success",
+                "overall_risk": "high",
+                "domain_risks": {
+                    "D1": "high",
+                    "D2": "some_concerns",
+                    "D3": "low",
+                    "D4": "low",
+                    "D5": "low",
+                },
+            }
+        ]
+    }
+    summary_path.write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    output = tmp_path / "custom_plot.png"
+    batch_command.plot_batch(
+        source=summary_path,
+        output=output,
+        include_non_success=False,
+    )
+
+    assert output.exists()
+    assert output.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_plot_batch_raises_when_no_plot_rows(tmp_path: Path) -> None:
+    summary_path = tmp_path / "batch_summary.json"
+    summary_path.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "relative_path": "a/paper.pdf",
+                        "status": "failed",
+                        "overall_risk": None,
+                        "domain_risks": {},
+                    }
+                ]
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(typer.BadParameter, match="红绿灯图生成失败"):
+        batch_command.plot_batch(
+            source=summary_path,
+            output=None,
+            include_non_success=False,
+        )

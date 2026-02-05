@@ -21,6 +21,7 @@ Batch outputs:
 - `results/batch/batch_checkpoint.json`
 - `results/batch/batch_summary.json`
 - `results/batch/batch_summary.csv`
+- `results/batch/batch_traffic_light.png`
 - `results/batch/<relative_path_without_ext>/result.json`
 
 Common batch options:
@@ -29,3 +30,11 @@ Common batch options:
 - `--html` / `--docx` / `--pdf`
 - `--batch-id` / `--batch-name`
 - `--reset`
+- `--plot/--no-plot`（默认自动生成红绿灯图）
+- `--plot-output /path/to/custom.png`
+
+**Batch Plot (From Existing Summary)**
+```bash
+uv run rob2 batch plot results/batch
+uv run rob2 batch plot results/batch/batch_summary.json --output results/batch/custom_plot.png
+```

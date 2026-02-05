@@ -19,6 +19,12 @@ from cli.common import (
 from core.config import get_settings
 from persistence.hashing import hash_payload
 from persistence.sqlite_store import SqliteStore
+from reporting.batch_plot import (
+    DEFAULT_BATCH_PLOT_FILE,
+    SUMMARY_FILE_NAME,
+    generate_batch_traffic_light_png,
+    load_batch_summary,
+)
 from schemas.requests import Rob2Input
 from services.rob2_runner import run_rob2
 
@@ -35,8 +41,9 @@ app = typer.Typer(
 
 _CHECKPOINT_VERSION = 1
 _CHECKPOINT_FILE = "batch_checkpoint.json"
-_SUMMARY_JSON_FILE = "batch_summary.json"
+_SUMMARY_JSON_FILE = SUMMARY_FILE_NAME
 _SUMMARY_CSV_FILE = "batch_summary.csv"
+_BATCH_PLOT_FILE = DEFAULT_BATCH_PLOT_FILE
 _CSV_COLUMNS = [
     "relative_path",
     "status",
@@ -146,6 +153,16 @@ def run_batch(
         None,
         "--cache-scope",
         help="缓存范围（deterministic|none）",
+    ),
+    plot: bool = typer.Option(
+        True,
+        "--plot/--no-plot",
+        help="批量结束后生成红绿灯图（PNG）",
+    ),
+    plot_output: Path | None = typer.Option(
+        None,
+        "--plot-output",
+        help="红绿灯图输出路径（默认: <output-dir>/batch_traffic_light.png）",
     ),
 ) -> None:
     input_dir_abs = input_dir.resolve()
@@ -292,12 +309,59 @@ def run_batch(
             _write_summary_files(checkpoint, output_dir_abs)
 
     summary = _build_summary_payload(checkpoint)
+    if plot:
+        if plot_output is None:
+            resolved_plot_output = output_dir_abs / _BATCH_PLOT_FILE
+        else:
+            resolved_plot_output = plot_output.resolve()
+        try:
+            plotted = _generate_batch_plot(
+                summary,
+                resolved_plot_output,
+                include_non_success=False,
+            )
+            typer.echo(f"已写入: {resolved_plot_output} (rows={plotted})")
+        except Exception as exc:  # pragma: no cover - defensive
+            typer.echo(f"Warning: 红绿灯图生成失败: {exc}")
+
     if json_out:
         emit_json(summary)
 
     failed = summary.get("counts", {}).get("failed", 0)
     if failed:
         raise typer.Exit(code=1)
+
+
+@app.command("plot", help="根据批量 summary 绘制红绿灯图（PNG）")
+def plot_batch(
+    source: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=True,
+        readable=True,
+        metavar="目录或summary路径",
+    ),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        help="输出图片路径（默认: <batch-output-dir>/batch_traffic_light.png）",
+    ),
+    include_non_success: bool = typer.Option(
+        False,
+        "--include-non-success/--no-include-non-success",
+        help="将 failed/pending/running 条目以灰色占位纳入图中",
+    ),
+) -> None:
+    summary_path, default_output = _resolve_summary_input(source.resolve())
+    summary = _load_summary_or_raise(summary_path)
+    output_path = output.resolve() if output is not None else default_output
+    plotted = _generate_batch_plot(
+        summary,
+        output_path,
+        include_non_success=include_non_success,
+    )
+    typer.echo(f"已写入: {output_path} (rows={plotted})")
 
 
 def _build_initial_checkpoint(
@@ -492,6 +556,44 @@ def _write_summary_files(checkpoint: dict[str, Any], output_dir: Path) -> None:
                 "error": item.get("error"),
             }
             writer.writerow(row)
+
+
+def _resolve_summary_input(source: Path) -> tuple[Path, Path]:
+    if source.is_dir():
+        summary_path = source / _SUMMARY_JSON_FILE
+        output_path = source / _BATCH_PLOT_FILE
+    else:
+        summary_path = source
+        output_path = source.parent / _BATCH_PLOT_FILE
+
+    if not summary_path.exists():
+        raise typer.BadParameter(f"summary 文件不存在: {summary_path}")
+    if summary_path.is_dir():
+        raise typer.BadParameter(f"summary 不是文件: {summary_path}")
+    return summary_path, output_path
+
+
+def _load_summary_or_raise(path: Path) -> dict[str, Any]:
+    try:
+        return load_batch_summary(path)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+def _generate_batch_plot(
+    summary: dict[str, Any],
+    output_path: Path,
+    *,
+    include_non_success: bool,
+) -> int:
+    try:
+        return generate_batch_traffic_light_png(
+            summary,
+            output_path,
+            include_non_success=include_non_success,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(f"红绿灯图生成失败: {exc}") from exc
 
 
 def _format_error(exc: Exception) -> str:
