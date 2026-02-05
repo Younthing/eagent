@@ -422,7 +422,7 @@ def _build_user_prompt(questions: Sequence[Rob2Question], doc_structure: DocStru
             for span in doc_structure.sections
         ],
     }
-    return json.dumps(payload, ensure_ascii=True)
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def _format_conditions(conditions: Sequence[QuestionCondition]) -> List[dict]:

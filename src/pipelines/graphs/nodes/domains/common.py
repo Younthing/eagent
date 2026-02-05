@@ -216,7 +216,7 @@ def _build_user_prompt(
         },
         "effect_type": effect_type,
     }
-    return json.dumps(payload, ensure_ascii=True)
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def _format_conditions(conditions: Sequence[QuestionCondition]) -> List[dict]:

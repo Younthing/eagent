@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from pipelines.graphs.nodes.domain_audit import d1_audit_node
+from pipelines.graphs.nodes.domain_audit import _build_user_prompt, d1_audit_node
 from schemas.internal.decisions import DomainAnswer, DomainDecision
 from schemas.internal.documents import DocStructure, SectionSpan
 from schemas.internal.rob2 import QuestionSet, Rob2Question
@@ -159,6 +159,45 @@ def test_domain_audit_patches_evidence_and_reruns_domain() -> None:
 
     updated_decision = DomainDecision.model_validate(out["d1_decision"])
     assert updated_decision.answers[0].answer == "Y"
+
+
+def test_domain_audit_prompt_preserve_non_ascii_text() -> None:
+    question_text = "是否使用随机分配？"
+    evidence_text = "分配隐藏采用随机数字表。"
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q1",
+                rob2_id="q1",
+                domain="D1",
+                text=question_text,
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            )
+        ],
+    )
+    doc = DocStructure(
+        body=evidence_text,
+        sections=[
+            SectionSpan(
+                paragraph_id="p1",
+                title="方法",
+                page=1,
+                text=evidence_text,
+            )
+        ],
+    )
+
+    user_prompt = _build_user_prompt(question_set.questions, doc)
+
+    escaped_question = question_text.encode("unicode_escape").decode("ascii")
+    escaped_evidence = evidence_text.encode("unicode_escape").decode("ascii")
+    assert question_text in user_prompt
+    assert evidence_text in user_prompt
+    assert escaped_question not in user_prompt
+    assert escaped_evidence not in user_prompt
 
 
 def test_domain_audit_parses_json_with_noise() -> None:

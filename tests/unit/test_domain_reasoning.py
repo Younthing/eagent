@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 from typing import cast
 
-from pipelines.graphs.nodes.domains.common import ChatModelLike, run_domain_reasoning
+from pipelines.graphs.nodes.domains.common import (
+    ChatModelLike,
+    build_domain_prompts,
+    run_domain_reasoning,
+)
 from schemas.internal.evidence import EvidenceSupport, FusedEvidenceCandidate
 from schemas.internal.rob2 import QuestionCondition, QuestionDependency, QuestionSet, Rob2Question
 
@@ -815,3 +819,38 @@ def test_d5_reasoning_parses_answers() -> None:
     assert answers["q5_1"] == "Y"
     assert answers["q5_2"] == "PY"
     assert answers["q5_3"] == "PN"
+
+
+def test_domain_prompts_preserve_non_ascii_text() -> None:
+    question_text = "是否使用随机分配？"
+    evidence_text = "分配隐藏采用随机数字表。"
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q1_1",
+                rob2_id="q1_1",
+                domain="D1",
+                text=question_text,
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            )
+        ],
+    )
+    validated_candidates = {
+        "q1_1": [_candidate("q1_1", "p1", evidence_text)],
+    }
+
+    _, user_prompt = build_domain_prompts(
+        domain="D1",
+        question_set=question_set,
+        validated_candidates=validated_candidates,
+    )
+
+    escaped_question = question_text.encode("unicode_escape").decode("ascii")
+    escaped_evidence = evidence_text.encode("unicode_escape").decode("ascii")
+    assert question_text in user_prompt
+    assert evidence_text in user_prompt
+    assert escaped_question not in user_prompt
+    assert escaped_evidence not in user_prompt
