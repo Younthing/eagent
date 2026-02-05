@@ -210,9 +210,6 @@ class Rob2GraphState(TypedDict, total=False):
     completeness_required_questions: list[str]
     validated_top_k: int
     domain_evidence_top_k: int
-    domain_quote_validation: bool
-    domain_quote_match_policy: Literal["exact", "folded", "folded_casefold"]
-    domain_quote_fallback: Literal["supporting_quote", "drop_quote", "drop_evidence"]
 
     rule_based_candidates: dict
     bm25_candidates: dict

@@ -231,16 +231,6 @@ class Settings(BaseSettings):
     d5_max_tokens: int | None = Field(default=None, validation_alias="D5_MAX_TOKENS")
     d5_max_retries: int = Field(default=2, validation_alias="D5_MAX_RETRIES")
 
-    domain_quote_validation: bool = Field(
-        default=True, validation_alias="DOMAIN_QUOTE_VALIDATION"
-    )
-    domain_quote_match_policy: str = Field(
-        default="folded_casefold", validation_alias="DOMAIN_QUOTE_MATCH_POLICY"
-    )
-    domain_quote_fallback: str = Field(
-        default="supporting_quote", validation_alias="DOMAIN_QUOTE_FALLBACK"
-    )
-
     domain_audit_mode: str = Field(default="none", validation_alias="DOMAIN_AUDIT_MODE")
     domain_audit_model: str | None = Field(
         default=None, validation_alias="DOMAIN_AUDIT_MODEL"

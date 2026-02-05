@@ -6,7 +6,6 @@ from typing import Mapping, cast
 
 from pipelines.graphs.nodes.domains.common import (
     EffectType,
-    read_domain_quote_config,
     read_domain_llm_config,
     run_domain_reasoning,
 )
@@ -33,7 +32,6 @@ def d2_deviations_node(state: dict) -> dict:
 
     llm = state.get("d2_llm")
     config, config_report = read_domain_llm_config(state, prefix="d2")
-    quote_config = read_domain_quote_config(state)
     if llm is None and not config.model:
         raise ValueError("Missing D2 model (set D2_MODEL or state['d2_model']).")
 
@@ -45,7 +43,6 @@ def d2_deviations_node(state: dict) -> dict:
         llm_config=None if llm is not None else config,
         effect_type=effect_type,
         evidence_top_k=int(state.get("domain_evidence_top_k") or 5),
-        quote_config=quote_config,
     )
 
     return {

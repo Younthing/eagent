@@ -29,8 +29,6 @@ if TYPE_CHECKING:
 
 
 EffectType = Literal["assignment", "adherence"]
-QuoteMatchPolicy = Literal["exact", "folded", "folded_casefold"]
-QuoteFallbackPolicy = Literal["supporting_quote", "drop_quote", "drop_evidence"]
 
 
 class ChatModelLike(Protocol):
@@ -73,13 +71,6 @@ class LLMReasoningConfig:
     max_retries: int | None = 2
 
 
-@dataclass(frozen=True)
-class DomainQuoteValidationConfig:
-    enabled: bool = True
-    match_policy: QuoteMatchPolicy = "folded_casefold"
-    fallback: QuoteFallbackPolicy = "supporting_quote"
-
-
 _RISK_MAP = {
     "low": "low",
     "some concerns": "some_concerns",
@@ -90,9 +81,6 @@ _RISK_MAP = {
 _PROMPTS_DIR = Path(__file__).resolve().parents[4] / "llm" / "prompts" / "domains"
 _SYSTEM_PROMPT_FALLBACK = "rob2_domain_system.md"
 _EFFECT_NOTE_PATTERN = re.compile(r"{{\s*effect_note\s*}}")
-_WHITESPACE = re.compile(r"\s+")
-_QUOTE_MATCH_POLICIES = {"exact", "folded", "folded_casefold"}
-_QUOTE_FALLBACK_POLICIES = {"supporting_quote", "drop_quote", "drop_evidence"}
 
 
 @lru_cache(maxsize=8)
@@ -120,7 +108,6 @@ def run_domain_reasoning(
     evidence_top_k: int = 5,
     system_prompt: Optional[str] = None,
     user_prompt: Optional[str] = None,
-    quote_config: DomainQuoteValidationConfig | None = None,
 ) -> DomainDecision:
     questions = _select_questions(question_set, domain, effect_type=effect_type)
     if not questions:
@@ -138,14 +125,7 @@ def run_domain_reasoning(
 
     messages = _build_messages(system_prompt, user_prompt)
     response = _invoke_model(model, messages)
-    decision = _normalize_decision(
-        domain,
-        questions,
-        evidence_by_q,
-        response,
-        effect_type=effect_type,
-        quote_config=quote_config or DomainQuoteValidationConfig(),
-    )
+    decision = _normalize_decision(domain, questions, evidence_by_q, response, effect_type=effect_type)
     return decision
 
 
@@ -324,7 +304,6 @@ def _normalize_decision(
     response: _DecisionOutput,
     *,
     effect_type: Optional[EffectType],
-    quote_config: DomainQuoteValidationConfig,
 ) -> DomainDecision:
     answer_map = {answer.question_id: answer for answer in response.answers or []}
     answers: List[DomainAnswer] = []
@@ -351,9 +330,7 @@ def _normalize_decision(
         confidence = raw.confidence if raw and raw.confidence is not None else None
 
         evidence_refs = _collect_evidence_refs(
-            raw.evidence if raw else [],
-            evidence_by_q.get(question.question_id) or [],
-            quote_config=quote_config,
+            raw.evidence if raw else [], evidence_by_q.get(question.question_id) or []
         )
         if answer == "NI":
             missing_questions.append(question.question_id)
@@ -424,8 +401,6 @@ def _conditions_met(
 def _collect_evidence_refs(
     evidence: Sequence[_AnswerEvidence],
     candidates: Sequence[FusedEvidenceCandidate],
-    *,
-    quote_config: DomainQuoteValidationConfig,
 ) -> List[EvidenceRef]:
     candidates_by_pid = {candidate.paragraph_id: candidate for candidate in candidates}
     refs: List[EvidenceRef] = []
@@ -433,84 +408,15 @@ def _collect_evidence_refs(
         candidate = candidates_by_pid.get(item.paragraph_id)
         if candidate is None:
             continue
-        if not quote_config.enabled:
-            refs.append(
-                EvidenceRef(
-                    paragraph_id=candidate.paragraph_id,
-                    page=candidate.page,
-                    title=candidate.title,
-                    quote=item.quote,
-                )
-            )
-            continue
-        raw_quote = _clean_quote(item.quote)
-        matched_quote: Optional[str] = None
-        if raw_quote and _quote_matches(raw_quote, candidate.text, quote_config.match_policy):
-            matched_quote = raw_quote
-        else:
-            if quote_config.fallback == "supporting_quote":
-                supporting_quote = None
-                if candidate.relevance is not None:
-                    supporting_quote = _clean_quote(candidate.relevance.supporting_quote)
-                if supporting_quote and _quote_matches(
-                    supporting_quote, candidate.text, quote_config.match_policy
-                ):
-                    matched_quote = supporting_quote
-            elif quote_config.fallback == "drop_evidence":
-                continue
         refs.append(
             EvidenceRef(
                 paragraph_id=candidate.paragraph_id,
                 page=candidate.page,
                 title=candidate.title,
-                quote=matched_quote,
+                quote=item.quote,
             )
         )
     return refs
-
-
-def read_domain_quote_config(state: Mapping[str, Any]) -> DomainQuoteValidationConfig:
-    enabled = _read_bool(state.get("domain_quote_validation"), True)
-    match_policy = _read_choice(
-        state.get("domain_quote_match_policy"),
-        _QUOTE_MATCH_POLICIES,
-        "folded_casefold",
-    )
-    fallback = _read_choice(
-        state.get("domain_quote_fallback"),
-        _QUOTE_FALLBACK_POLICIES,
-        "supporting_quote",
-    )
-    return DomainQuoteValidationConfig(
-        enabled=enabled,
-        match_policy=cast(QuoteMatchPolicy, match_policy),
-        fallback=cast(QuoteFallbackPolicy, fallback),
-    )
-
-
-def _quote_matches(quote: str, text: str, policy: QuoteMatchPolicy) -> bool:
-    if not quote or not text:
-        return False
-    if policy == "exact":
-        return quote in text
-    folded_quote = _fold_whitespace(quote)
-    folded_text = _fold_whitespace(text)
-    if not folded_quote or not folded_text:
-        return False
-    if policy == "folded":
-        return folded_quote in folded_text
-    return folded_quote.casefold() in folded_text.casefold()
-
-
-def _fold_whitespace(text: str) -> str:
-    return _WHITESPACE.sub(" ", text or "").strip()
-
-
-def _clean_quote(value: Optional[str]) -> Optional[str]:
-    if value is None:
-        return None
-    cleaned = str(value).strip()
-    return cleaned or None
 
 
 def build_reasoning_config(
@@ -595,29 +501,12 @@ def _read_optional_float(value: Any) -> float | None:
     return float(str(value))
 
 
-def _read_bool(value: Any, default: bool) -> bool:
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
-
-
-def _read_choice(value: Any, choices: set[str], default: str) -> str:
-    if value is None:
-        return default
-    text = str(value).strip().lower()
-    return text if text in choices else default
-
-
 __all__ = [
     "ChatModelLike",
-    "DomainQuoteValidationConfig",
     "EffectType",
     "LLMReasoningConfig",
     "build_domain_prompts",
     "build_reasoning_config",
-    "read_domain_quote_config",
     "read_domain_llm_config",
     "run_domain_reasoning",
 ]
