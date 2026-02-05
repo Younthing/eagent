@@ -22,6 +22,7 @@ from pipelines.graphs.nodes.retry_utils import (
     merge_by_question,
     read_retry_question_ids,
 )
+from utils.llm_json import extract_json_object
 
 if TYPE_CHECKING:
     from langchain_core.messages import BaseMessage
@@ -73,7 +74,6 @@ class _CandidateInfo:
     source: str
 
 
-_CODE_BLOCK_JSON = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 _DEFAULT_MAX_STEPS = 3
 _DEFAULT_SEED_TOP_N = 5
 _DEFAULT_PER_STEP_TOP_N = 10
@@ -356,15 +356,10 @@ def _parse_locator_response(text: str) -> _LocatorResponse:
 
 
 def _extract_json_object(text: str) -> str:
-    match = _CODE_BLOCK_JSON.search(text)
-    if match:
-        return match.group(1)
-
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        raise ValueError("No JSON object found in LLM response")
-    return text[start : end + 1]
+    try:
+        return extract_json_object(text, prefer_code_block=True)
+    except ValueError as exc:
+        raise ValueError("No JSON object found in LLM response") from exc
 
 
 def _clean_list(values: Sequence[str] | None) -> List[str]:

@@ -6,7 +6,6 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 from persistence.hashing import sha256_bytes
 from persistence.models import ArtifactRecord

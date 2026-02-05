@@ -136,7 +136,7 @@ def run_rob2(
 
     runtime_ms = int((perf_counter() - start) * 1000)
     result = _build_result(final_state, options_obj, runtime_ms, warnings)
-    if run_ctx is None:
+    if run_ctx is None or persistence is None:
         return result
 
     result.run_id = run_ctx.run_id

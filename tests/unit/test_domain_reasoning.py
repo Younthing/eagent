@@ -119,6 +119,50 @@ def test_d1_reasoning_parses_answers_and_evidence() -> None:
     assert decision.answers[0].evidence_refs[0].paragraph_id == "p1"
 
 
+def test_domain_reasoning_parses_json_with_noise() -> None:
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q1_1",
+                rob2_id="q1_1",
+                domain="D1",
+                text="Was the allocation sequence random?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            )
+        ],
+    )
+    validated_candidates = {
+        "q1_1": [_candidate("q1_1", "p1", "Allocation used a random number table.")],
+    }
+    payload = {
+        "domain_risk": "high",
+        "domain_rationale": "Randomization described.",
+        "answers": [
+            {
+                "question_id": "q1_1",
+                "answer": "Y",
+                "rationale": "Random number table reported.",
+                "evidence": [{"paragraph_id": "p1", "quote": "random number table"}],
+                "confidence": 0.8,
+            }
+        ],
+    }
+    llm = _DummyLLM(f"noise {{bad}}\\n{json.dumps(payload)}")
+    decision = run_domain_reasoning(
+        domain="D1",
+        question_set=question_set,
+        validated_candidates=validated_candidates,
+        llm=cast(ChatModelLike, llm),
+        llm_config=None,
+    )
+
+    assert decision.answers[0].answer == "Y"
+    assert decision.answers[0].evidence_refs[0].paragraph_id == "p1"
+
+
 def test_d2_reasoning_enforces_conditions() -> None:
     question_set = QuestionSet(
         version="test",

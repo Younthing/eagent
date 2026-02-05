@@ -7,7 +7,6 @@ fallback to deterministic planning.
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Protocol, Sequence, TYPE_CHECKING
 
@@ -16,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from retrieval.query_planning.planner import generate_queries_for_question
 from schemas.internal.locator import LocatorRules
 from schemas.internal.rob2 import QuestionSet, Rob2Question
+from utils.llm_json import extract_json_object
 
 if TYPE_CHECKING:
     from langchain_core.messages import BaseMessage
@@ -42,9 +42,6 @@ class LLMQueryPlannerConfig:
     timeout: float | None = None
     max_tokens: int | None = None
     max_retries: int | None = 2
-
-
-_CODE_BLOCK_JSON = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 
 
 def generate_query_plan_llm(
@@ -227,15 +224,10 @@ def _parse_query_plan_response(text: str) -> _QueryPlanResponse:
 
 
 def _extract_json_object(text: str) -> str:
-    match = _CODE_BLOCK_JSON.search(text)
-    if match:
-        return match.group(1)
-
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        raise ValueError("No JSON object found in LLM response")
-    return text[start : end + 1]
+    try:
+        return extract_json_object(text, prefer_code_block=True)
+    except ValueError as exc:
+        raise ValueError("No JSON object found in LLM response") from exc
 
 
 def _normalize_query_plan(

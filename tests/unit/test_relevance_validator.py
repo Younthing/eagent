@@ -74,6 +74,24 @@ def test_annotate_relevance_parses_json_and_keeps_relevant_label() -> None:
     assert candidates[0].relevance.supporting_quote == "random number table"
 
 
+def test_annotate_relevance_parses_json_with_noise() -> None:
+    llm = _DummyLLM(
+        content=(
+            "noise {bad}\\n"
+            '{"label":"relevant","confidence":0.9,"supporting_quote":"random number table"}'
+        )
+    )
+    candidates = annotate_relevance(
+        "Was the allocation sequence random?",
+        [_candidate(text="Allocation used a random number table.")],
+        llm=cast(ChatModelLike, llm),
+    )
+
+    assert candidates[0].relevance is not None
+    assert candidates[0].relevance.label == "relevant"
+    assert candidates[0].relevance.supporting_quote == "random number table"
+
+
 def test_annotate_relevance_require_quote_downgrades_missing_quote_to_unknown() -> None:
     llm = _DummyLLM(
         content='{"label":"relevant","confidence":0.9,"supporting_quote":"sealed envelopes"}'

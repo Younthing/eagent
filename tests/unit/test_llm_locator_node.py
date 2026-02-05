@@ -91,6 +91,68 @@ def test_llm_locator_node_emits_supporting_quote() -> None:
     assert candidates[0]["engine"] == "llm_locator"
 
 
+def test_llm_locator_node_parses_json_with_noise() -> None:
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q1",
+                rob2_id="q1",
+                domain="D1",
+                text="Was the allocation sequence random?",
+                options=["Y", "N"],
+                order=1,
+            )
+        ],
+    )
+
+    llm = _DummyLLM(
+        content=(
+            "noise {bad}\\n"
+            '{"sufficient":true,"evidence":[{"paragraph_id":"p1","quote":"random number table"}],"expand":{"keywords":[],"section_priors":[],"queries":[]}}'
+        )
+    )
+    state = {
+        "question_set": question_set.model_dump(),
+        "doc_structure": {
+            "body": "",
+            "sections": [
+                {
+                    "paragraph_id": "p1",
+                    "title": "Methods",
+                    "page": 1,
+                    "text": "Allocation used a random number table.",
+                }
+            ],
+        },
+        "rule_based_candidates": {
+            "q1": [
+                EvidenceCandidate(
+                    question_id="q1",
+                    paragraph_id="p1",
+                    title="Methods",
+                    page=1,
+                    text="Allocation used a random number table.",
+                    source="rule_based",
+                    score=1.0,
+                ).model_dump()
+            ]
+        },
+        "llm_locator_mode": "llm",
+        "llm_locator_llm": llm,
+        "llm_locator_max_steps": 1,
+        "llm_locator_seed_top_n": 1,
+        "llm_locator_per_step_top_n": 1,
+        "llm_locator_max_candidates": 5,
+    }
+
+    out = llm_locator_node(state)
+    candidates = out["fulltext_candidates"]["q1"]
+    assert len(candidates) == 1
+    assert candidates[0]["supporting_quote"] == "random number table"
+
+
 def test_llm_locator_node_drops_invalid_quote() -> None:
     question_set = QuestionSet(
         version="test",

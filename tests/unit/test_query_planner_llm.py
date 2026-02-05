@@ -119,6 +119,17 @@ def test_generate_query_plan_llm_parses_json_code_block() -> None:
     assert any("sealed opaque envelopes" in q for q in plan["q1_2"])
 
 
+def test_generate_query_plan_llm_parses_json_with_noise() -> None:
+    llm = _DummyLLM(
+        content=(
+            "noise {bad}\\n"
+            '{"query_plan": {"q1_2": ["sealed opaque envelopes"]}}'
+        )
+    )
+    plan = generate_query_plan_llm(_question_set(), _rules(), llm=cast(ChatModelLike, llm))
+    assert any("sealed opaque envelopes" in q for q in plan["q1_2"])
+
+
 def test_generate_query_plan_llm_requires_config_if_llm_missing() -> None:
     with pytest.raises(ValueError, match="config is required"):
         generate_query_plan_llm(_question_set(), _rules())

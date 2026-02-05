@@ -29,6 +29,7 @@ from schemas.internal.evidence import (
 from schemas.internal.locator import DomainId
 from schemas.internal.rob2 import QuestionCondition, QuestionSet, Rob2Question
 from utils.text import normalize_block
+from utils.llm_json import extract_json_object
 
 from pipelines.graphs.nodes.domains.d1_randomization import d1_randomization_node
 from pipelines.graphs.nodes.domains.d2_deviations import d2_deviations_node
@@ -39,7 +40,6 @@ from pipelines.graphs.nodes.domains.d5_reporting import d5_reporting_node
 
 AuditMode = str  # "none" | "llm"
 
-_CODE_BLOCK_JSON = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 _WHITESPACE = re.compile(r"\s+")
 _DEFAULT_AUDIT_MAX_RETRIES = 2
 _DEFAULT_AUDIT_PATCH_WINDOW = 0
@@ -492,14 +492,10 @@ def _parse_audit_response(text: str) -> _AuditOutput:
 
 
 def _extract_json_object(text: str) -> str:
-    match = _CODE_BLOCK_JSON.search(text)
-    if match:
-        return match.group(1)
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        raise ValueError("No JSON object found in audit response")
-    return text[start : end + 1]
+    try:
+        return extract_json_object(text, prefer_code_block=True)
+    except ValueError as exc:
+        raise ValueError("No JSON object found in audit response") from exc
 
 
 def _normalize_audit_answers(

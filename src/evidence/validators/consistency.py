@@ -8,7 +8,6 @@ optional; callers should handle missing credentials/providers gracefully.
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from typing import Any, List, Literal, Protocol, Sequence, TYPE_CHECKING, cast
 
@@ -19,6 +18,7 @@ from schemas.internal.evidence import (
     ConsistencyVerdict,
     FusedEvidenceCandidate,
 )
+from utils.llm_json import extract_json_object
 
 if TYPE_CHECKING:
     from langchain_core.messages import BaseMessage
@@ -61,9 +61,6 @@ class LLMConsistencyValidatorConfig:
 class ConsistencyValidationConfig:
     min_confidence: float = 0.6
     require_quotes_for_fail: bool = True
-
-
-_CODE_BLOCK_JSON = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 
 
 def judge_consistency(
@@ -185,15 +182,10 @@ def _parse_consistency_response(text: str) -> _ConsistencyResponse:
 
 
 def _extract_json_object(text: str) -> str:
-    match = _CODE_BLOCK_JSON.search(text)
-    if match:
-        return match.group(1)
-
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        raise ValueError("No JSON object found in LLM response")
-    return text[start : end + 1]
+    try:
+        return extract_json_object(text, prefer_code_block=True)
+    except ValueError as exc:
+        raise ValueError("No JSON object found in LLM response") from exc
 
 
 def _normalize_verdict(
@@ -262,4 +254,3 @@ __all__ = [
     "LLMConsistencyValidatorConfig",
     "judge_consistency",
 ]
-
