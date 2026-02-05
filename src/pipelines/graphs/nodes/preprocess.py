@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import io
 import logging
 import re
 from hashlib import sha1
@@ -11,7 +13,7 @@ from typing import Any, Iterable, List, Optional, Sequence, TYPE_CHECKING, cast
 
 from core.config import get_settings
 from langchain_docling.loader import DoclingLoader
-from schemas.internal.documents import BoundingBox, DocStructure, SectionSpan
+from schemas.internal.documents import BoundingBox, DocStructure, FigureSpan, SectionSpan
 from utils.text import normalize_block
 from eagent import __version__ as _code_version
 from persistence.hashing import preprocess_cache_key
@@ -24,7 +26,11 @@ if TYPE_CHECKING:
     from docling.datamodel.layout_model_specs import LayoutModelConfig
     from docling.document_converter import DocumentConverter
     from docling_core.transforms.chunker.base import BaseChunker
+    from langchain_core.messages import BaseMessage
     from langchain_core.documents import Document
+
+    class ChatModelLike:
+        def invoke(self, input: object) -> Any: ...
 
 _CONVERTER_CACHE: tuple[Optional["DocumentConverter"], dict[str, object]] | None = None
 _CHUNKER_CACHE: tuple[Optional["BaseChunker"], dict[str, object]] | None = None
@@ -59,6 +65,30 @@ def preprocess_node(state: dict) -> dict:
             or settings.docling_chunker_model,
             "docling_chunker_max_tokens": state.get("docling_chunker_max_tokens")
             or settings.docling_chunker_max_tokens,
+            "docling_images_scale": _resolve_float(
+                state.get("docling_images_scale"),
+                settings.docling_images_scale,
+            ),
+            "docling_generate_page_images": _resolve_bool(
+                state.get("docling_generate_page_images"),
+                settings.docling_generate_page_images,
+            ),
+            "docling_generate_picture_images": _resolve_bool(
+                state.get("docling_generate_picture_images"),
+                settings.docling_generate_picture_images,
+            ),
+            "docling_do_picture_classification": _resolve_bool(
+                state.get("docling_do_picture_classification"),
+                settings.docling_do_picture_classification,
+            ),
+            "docling_do_picture_description": _resolve_bool(
+                state.get("docling_do_picture_description"),
+                settings.docling_do_picture_description,
+            ),
+            "docling_picture_description_preset": _resolve_str(
+                state.get("docling_picture_description_preset")
+            )
+            or _resolve_str(settings.docling_picture_description_preset),
         }
         doc_scope_config = {
             "mode": str(state.get("doc_scope_mode") or settings.doc_scope_mode or "auto")
@@ -95,6 +125,40 @@ def preprocess_node(state: dict) -> dict:
                 settings.preprocess_drop_references,
             ),
             "reference_titles": resolved_reference_titles,
+            "figure_description_mode": str(
+                state.get("figure_description_mode")
+                or settings.figure_description_mode
+                or "none"
+            )
+            .strip()
+            .lower(),
+            "figure_description_model": _resolve_str(
+                state.get("figure_description_model")
+            )
+            or _resolve_str(settings.figure_description_model),
+            "figure_description_model_provider": _resolve_str(
+                state.get("figure_description_model_provider")
+            )
+            or _resolve_str(settings.figure_description_model_provider),
+            "figure_description_max_images": int(
+                state.get("figure_description_max_images")
+                or settings.figure_description_max_images
+                or 8
+            ),
+            "figure_description_max_tokens": int(
+                state.get("figure_description_max_tokens")
+                or settings.figure_description_max_tokens
+                or 256
+            ),
+            "figure_description_timeout": _resolve_optional_float(
+                state.get("figure_description_timeout"),
+                settings.figure_description_timeout,
+            ),
+            "figure_description_max_retries": int(
+                state.get("figure_description_max_retries")
+                or settings.figure_description_max_retries
+                or 2
+            ),
         }
         metadata_config = {
             "mode": str(
@@ -193,15 +257,23 @@ def parse_docling_pdf(
 ) -> DocStructure:
     """Parse a PDF into DocStructure using Docling metadata."""
     resolved_source = _resolve_docling_source(source)
-    spans, body_text, docling_config = _load_with_docling(
+    spans, body_text, docling_config, converter = _load_with_docling(
         resolved_source,
         overrides=overrides,
     )
+    figures, figure_config = _extract_figures_with_docling(
+        resolved_source,
+        converter=converter,
+        overrides=overrides,
+    )
+    if figure_config:
+        docling_config = {**docling_config, **figure_config}
 
     section_map = _aggregate_sections_by_title(spans)
     payload = {
         "body": body_text,
         "sections": spans,
+        "figures": figures,
         "spans": spans,
         **section_map,
     }
@@ -320,7 +392,12 @@ def _load_with_docling(
     source: str,
     *,
     overrides: Optional[dict[str, object]] = None,
-) -> tuple[List[SectionSpan], str, dict[str, object]]:
+) -> tuple[
+    List[SectionSpan],
+    str,
+    dict[str, object],
+    Optional["DocumentConverter"],
+]:
     """Load content with Docling via LangChain DoclingLoader."""
     try:
         converter, config = _build_docling_converter(overrides=overrides)
@@ -341,7 +418,7 @@ def _load_with_docling(
         if not body:
             raise ValueError("Docling returned empty body text.")
         logger.debug("Docling parsed %d spans from %s", len(spans), source)
-        return spans, body, config
+        return spans, body, config, converter
     except Exception as exc:
         logger.warning("Docling parsing failed for %s", source, exc_info=True)
         raise RuntimeError(f"Docling parsing failed for {source}") from exc
@@ -372,16 +449,98 @@ def _build_docling_converter(
     config: dict[str, object] = {"pipeline": "standard_pdf"}
     artifacts_path = settings.docling_artifacts_path
     layout_model_name = settings.docling_layout_model
+    images_scale = float(settings.docling_images_scale)
+    generate_page_images = bool(settings.docling_generate_page_images)
+    generate_picture_images = bool(settings.docling_generate_picture_images)
+    do_picture_classification = bool(settings.docling_do_picture_classification)
+    do_picture_description = bool(settings.docling_do_picture_description)
+    picture_description_preset = _resolve_str(settings.docling_picture_description_preset)
+    figure_description_mode = str(settings.figure_description_mode or "none").strip().lower()
+
     if overrides:
         if overrides.get("docling_artifacts_path") is not None:
             artifacts_path = str(overrides["docling_artifacts_path"])
         if overrides.get("docling_layout_model") is not None:
             layout_model_name = str(overrides["docling_layout_model"])
+        if overrides.get("docling_images_scale") is not None:
+            images_scale = _resolve_float(overrides["docling_images_scale"], images_scale)
+        if overrides.get("docling_generate_page_images") is not None:
+            generate_page_images = _resolve_bool(
+                overrides.get("docling_generate_page_images"),
+                generate_page_images,
+            )
+        if overrides.get("docling_generate_picture_images") is not None:
+            generate_picture_images = _resolve_bool(
+                overrides.get("docling_generate_picture_images"),
+                generate_picture_images,
+            )
+        if overrides.get("docling_do_picture_classification") is not None:
+            do_picture_classification = _resolve_bool(
+                overrides.get("docling_do_picture_classification"),
+                do_picture_classification,
+            )
+        if overrides.get("docling_do_picture_description") is not None:
+            do_picture_description = _resolve_bool(
+                overrides.get("docling_do_picture_description"),
+                do_picture_description,
+            )
+        if overrides.get("docling_picture_description_preset") is not None:
+            picture_description_preset = _resolve_str(
+                overrides.get("docling_picture_description_preset")
+            )
+        if overrides.get("figure_description_mode") is not None:
+            figure_description_mode = str(
+                overrides.get("figure_description_mode") or "none"
+            ).strip().lower()
+
+    # Figure-level enrichment needs rendered/cropped images.
+    if do_picture_description or figure_description_mode == "llm":
+        generate_page_images = True
+        generate_picture_images = True
 
     pipeline_options = PdfPipelineOptions()
     if artifacts_path:
         pipeline_options.artifacts_path = artifacts_path
         config["artifacts_path"] = artifacts_path
+    pipeline_options.images_scale = float(images_scale)
+    pipeline_options.generate_page_images = bool(generate_page_images)
+    pipeline_options.generate_picture_images = bool(generate_picture_images)
+    pipeline_options.do_picture_classification = bool(do_picture_classification)
+    pipeline_options.do_picture_description = bool(do_picture_description)
+    config["images_scale"] = float(images_scale)
+    config["generate_page_images"] = bool(generate_page_images)
+    config["generate_picture_images"] = bool(generate_picture_images)
+    config["do_picture_classification"] = bool(do_picture_classification)
+    config["do_picture_description"] = bool(do_picture_description)
+
+    if do_picture_description and picture_description_preset:
+        try:
+            from docling.datamodel import pipeline_options as pipeline_options_module
+
+            preset_cls = getattr(
+                pipeline_options_module,
+                "PictureDescriptionVlmEngineOptions",
+                None,
+            ) or getattr(
+                pipeline_options_module,
+                "PictureDescriptionVlmOptions",
+                None,
+            )
+            if preset_cls is None or not hasattr(preset_cls, "from_preset"):
+                raise RuntimeError(
+                    "Docling picture description preset class is unavailable."
+                )
+            pipeline_options.picture_description_options = preset_cls.from_preset(
+                picture_description_preset
+            )
+            config["picture_description_preset"] = picture_description_preset
+        except Exception as exc:
+            logger.warning(
+                "Unknown or unavailable picture description preset %s",
+                picture_description_preset,
+                exc_info=True,
+            )
+            config["picture_description_preset_error"] = str(exc)[:300]
 
     resolved_layout = _resolve_layout_model(layout_model_name)
     if layout_model_name and resolved_layout is None:
@@ -468,9 +627,526 @@ def _read_docling_overrides(state: dict) -> Optional[dict[str, object]]:
         "docling_artifacts_path",
         "docling_chunker_model",
         "docling_chunker_max_tokens",
+        "docling_images_scale",
+        "docling_generate_page_images",
+        "docling_generate_picture_images",
+        "docling_do_picture_classification",
+        "docling_do_picture_description",
+        "docling_picture_description_preset",
+        "figure_description_mode",
+        "figure_description_model",
+        "figure_description_model_provider",
+        "figure_description_max_images",
+        "figure_description_max_tokens",
+        "figure_description_timeout",
+        "figure_description_max_retries",
     )
     overrides = {key: state.get(key) for key in keys if state.get(key) is not None}
     return overrides or None
+
+
+def _resolve_str(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _resolve_float(value: object, default: float) -> float:
+    if value is None:
+        return float(default)
+    return float(str(value))
+
+
+def _resolve_optional_float(value: object, default: float | None) -> float | None:
+    if value is None:
+        return float(default) if default is not None else None
+    return float(str(value))
+
+
+def _resolve_int(value: object, default: int) -> int:
+    if value is None:
+        return int(default)
+    return int(str(value))
+
+
+def _extract_figures_with_docling(
+    source: str,
+    *,
+    converter: Optional["DocumentConverter"],
+    overrides: Optional[dict[str, object]] = None,
+) -> tuple[List[FigureSpan], dict[str, object]]:
+    settings = get_settings()
+    do_picture_description = bool(settings.docling_do_picture_description)
+    do_picture_classification = bool(settings.docling_do_picture_classification)
+    generate_picture_images = bool(settings.docling_generate_picture_images)
+    figure_mode = str(settings.figure_description_mode or "none").strip().lower()
+    figure_model = _resolve_str(settings.figure_description_model)
+    figure_model_provider = _resolve_str(settings.figure_description_model_provider)
+    figure_max_images = int(settings.figure_description_max_images or 8)
+    figure_max_tokens = int(settings.figure_description_max_tokens or 256)
+    figure_timeout = settings.figure_description_timeout
+    figure_max_retries = int(settings.figure_description_max_retries or 2)
+
+    if overrides:
+        if overrides.get("docling_do_picture_description") is not None:
+            do_picture_description = _resolve_bool(
+                overrides.get("docling_do_picture_description"),
+                do_picture_description,
+            )
+        if overrides.get("docling_do_picture_classification") is not None:
+            do_picture_classification = _resolve_bool(
+                overrides.get("docling_do_picture_classification"),
+                do_picture_classification,
+            )
+        if overrides.get("docling_generate_picture_images") is not None:
+            generate_picture_images = _resolve_bool(
+                overrides.get("docling_generate_picture_images"),
+                generate_picture_images,
+            )
+        if overrides.get("figure_description_mode") is not None:
+            figure_mode = str(overrides.get("figure_description_mode") or "none").strip().lower()
+        if overrides.get("figure_description_model") is not None:
+            figure_model = _resolve_str(overrides.get("figure_description_model"))
+        if overrides.get("figure_description_model_provider") is not None:
+            figure_model_provider = _resolve_str(
+                overrides.get("figure_description_model_provider")
+            )
+        if overrides.get("figure_description_max_images") is not None:
+            figure_max_images = _resolve_int(
+                overrides.get("figure_description_max_images"), figure_max_images
+            )
+        if overrides.get("figure_description_max_tokens") is not None:
+            figure_max_tokens = _resolve_int(
+                overrides.get("figure_description_max_tokens"), figure_max_tokens
+            )
+        if overrides.get("figure_description_timeout") is not None:
+            figure_timeout = _resolve_optional_float(
+                overrides.get("figure_description_timeout"),
+                figure_timeout,
+            )
+        if overrides.get("figure_description_max_retries") is not None:
+            figure_max_retries = _resolve_int(
+                overrides.get("figure_description_max_retries"),
+                figure_max_retries,
+            )
+
+    if figure_mode not in {"none", "llm"}:
+        figure_mode = "none"
+
+    config: dict[str, object] = {
+        "figure_description_mode": figure_mode,
+        "figure_description_model": figure_model,
+        "figure_description_max_images": figure_max_images,
+    }
+
+    should_extract = (
+        do_picture_description
+        or do_picture_classification
+        or generate_picture_images
+        or figure_mode == "llm"
+    )
+    if not should_extract:
+        return [], config
+    if converter is None:
+        config["figure_extraction_error"] = "Docling converter unavailable."
+        return [], config
+
+    try:
+        from docling_core.types.doc import PictureItem
+    except Exception as exc:
+        config["figure_extraction_error"] = str(exc)[:300]
+        return [], config
+
+    try:
+        conv_res = converter.convert(source)
+    except Exception as exc:
+        logger.warning("Docling figure extraction failed for %s", source, exc_info=True)
+        config["figure_extraction_error"] = str(exc)[:300]
+        return [], config
+
+    provider = _infer_provider_hint(figure_model, figure_model_provider)
+    llm = None
+    if figure_mode == "llm":
+        if not figure_model:
+            config["figure_description_error"] = (
+                "figure_description_mode=llm but figure_description_model is empty."
+            )
+        else:
+            try:
+                llm = _build_figure_description_model(
+                    model_id=figure_model,
+                    model_provider=figure_model_provider,
+                    max_tokens=figure_max_tokens,
+                    timeout=figure_timeout,
+                    max_retries=figure_max_retries,
+                )
+            except Exception as exc:
+                logger.warning("Figure description model init failed", exc_info=True)
+                config["figure_description_error"] = str(exc)[:300]
+
+    figures: List[FigureSpan] = []
+    for index, picture in enumerate(
+        _iter_picture_items(conv_res.document, PictureItem),
+        start=1,
+    ):
+        if figure_max_images > 0 and index > figure_max_images:
+            break
+
+        pages, bboxes_by_page = _get_pages_and_bboxes_from_prov(getattr(picture, "prov", None))
+        page = pages[0] if pages else None
+        bboxes = bboxes_by_page.get(page, []) if page is not None else []
+        bbox = _union_bboxes(bboxes) if bboxes else None
+
+        caption = _get_picture_caption_text(picture, conv_res.document)
+        doc_item_ref = _resolve_str(getattr(picture, "self_ref", None))
+        figure_id = _build_figure_id(doc_item_ref, index=index, page=page, caption=caption)
+        raw_meta = _to_plain_dict(getattr(picture, "meta", None))
+        docling_description = _extract_docling_picture_description(raw_meta)
+
+        llm_description: str | None = None
+        llm_description_error: str | None = None
+        if llm is not None:
+            image_bytes = _render_picture_png_bytes(picture, conv_res.document)
+            if image_bytes is None:
+                llm_description_error = (
+                    "Figure image not available. Enable Docling image generation."
+                )
+            else:
+                try:
+                    llm_description = _describe_picture_with_llm(
+                        llm=llm,
+                        provider=provider,
+                        image_bytes=image_bytes,
+                        caption=caption,
+                        page=page,
+                    )
+                except Exception as exc:
+                    llm_description_error = str(exc)[:300]
+
+        figures.append(
+            FigureSpan(
+                figure_id=figure_id,
+                page=page,
+                pages=pages or None,
+                bbox=bbox,
+                bboxes=bboxes or None,
+                caption=caption,
+                docling_description=docling_description,
+                llm_description=llm_description,
+                llm_description_error=llm_description_error,
+                llm_model=figure_model if llm is not None else None,
+                doc_item_ref=doc_item_ref,
+                docling_meta=raw_meta,
+            )
+        )
+
+    config["figure_count"] = len(figures)
+    if figure_mode == "llm":
+        config["figure_llm_provider"] = provider
+        config["figure_llm_enabled"] = llm is not None
+    return figures, config
+
+
+def _iter_picture_items(doc: object, picture_item_type: type) -> Iterable[object]:
+    pictures = getattr(doc, "pictures", None)
+    if isinstance(pictures, Iterable) and not isinstance(
+        pictures, (str, bytes, bytearray)
+    ):
+        for picture in pictures:
+            if isinstance(picture, picture_item_type):
+                yield picture
+        return
+
+    iterate_items = getattr(doc, "iterate_items", None)
+    if callable(iterate_items):
+        for item, _level in iterate_items():
+            if isinstance(item, picture_item_type):
+                yield item
+
+
+def _get_pages_and_bboxes_from_prov(
+    prov: object,
+) -> tuple[List[int], dict[int, List[BoundingBox]]]:
+    entries: list[object]
+    if prov is None:
+        entries = []
+    elif isinstance(prov, Iterable) and not isinstance(prov, (str, bytes, bytearray)):
+        entries = list(prov)
+    else:
+        entries = [prov]
+
+    bboxes_by_page: dict[int, List[BoundingBox]] = {}
+    for entry in entries:
+        raw_entry = _to_plain(entry)
+        if not isinstance(raw_entry, dict):
+            continue
+        entry_dict = cast(dict[str, object], raw_entry)
+        raw_page_no = entry_dict.get("page_no")
+        if not isinstance(raw_page_no, (int, float, str)):
+            continue
+        try:
+            page_no = int(raw_page_no)
+        except (TypeError, ValueError):
+            continue
+        raw_bbox = _to_plain(entry_dict.get("bbox"))
+        if not isinstance(raw_bbox, dict):
+            continue
+        bbox = _bbox_from_raw(raw_bbox)
+        if bbox is None:
+            continue
+        bboxes_by_page.setdefault(page_no, []).append(bbox)
+
+    pages = sorted(bboxes_by_page.keys())
+    return pages, bboxes_by_page
+
+
+def _get_picture_caption_text(picture: object, doc: object) -> str | None:
+    caption_fn = getattr(picture, "caption_text", None)
+    if callable(caption_fn):
+        try:
+            text = caption_fn(doc=doc)
+        except TypeError:
+            text = caption_fn(doc)
+        if text:
+            normalized = normalize_block(str(text))
+            return normalized or None
+
+    raw_caption = _to_plain(getattr(picture, "caption", None))
+    if isinstance(raw_caption, str):
+        normalized = normalize_block(raw_caption)
+        return normalized or None
+    return None
+
+
+def _build_figure_id(
+    doc_item_ref: str | None,
+    *,
+    index: int,
+    page: int | None,
+    caption: str | None,
+) -> str:
+    if doc_item_ref:
+        cleaned = re.sub(r"[^0-9A-Za-z_.-]+", "-", doc_item_ref).strip("-")
+        if cleaned:
+            return cleaned
+
+    seed = f"{index}|{page}|{caption or ''}"
+    digest = sha1(seed.encode("utf-8")).hexdigest()[:12]
+    return f"fig-{digest}"
+
+
+def _to_plain(value: object) -> object:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(k): _to_plain(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_plain(v) for v in value]
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        try:
+            return _to_plain(model_dump())
+        except Exception:
+            pass
+    to_dict = getattr(value, "dict", None)
+    if callable(to_dict):
+        try:
+            return _to_plain(to_dict())
+        except Exception:
+            pass
+    return str(value)
+
+
+def _to_plain_dict(value: object) -> dict[str, object] | None:
+    raw = _to_plain(value)
+    if isinstance(raw, dict):
+        return cast(dict[str, object], raw)
+    return None
+
+
+def _extract_docling_picture_description(meta: dict[str, object] | None) -> str | None:
+    if not meta:
+        return None
+
+    keys = {
+        "description",
+        "picture_description",
+        "generated_description",
+        "summary",
+    }
+    found = _find_first_string_by_keys(meta, keys, max_depth=6)
+    if not found:
+        return None
+    normalized = normalize_block(found)
+    return normalized or None
+
+
+def _find_first_string_by_keys(
+    payload: object,
+    keys: set[str],
+    *,
+    max_depth: int,
+) -> str | None:
+    if max_depth < 0:
+        return None
+    if isinstance(payload, str):
+        return payload.strip() or None
+    if isinstance(payload, dict):
+        payload_dict = cast(dict[str, object], payload)
+        for key in keys:
+            value = payload_dict.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        for value in payload_dict.values():
+            nested = _find_first_string_by_keys(value, keys, max_depth=max_depth - 1)
+            if nested:
+                return nested
+    if isinstance(payload, list):
+        for value in payload:
+            nested = _find_first_string_by_keys(value, keys, max_depth=max_depth - 1)
+            if nested:
+                return nested
+    return None
+
+
+def _render_picture_png_bytes(picture: object, doc: object) -> bytes | None:
+    get_image = getattr(picture, "get_image", None)
+    if not callable(get_image):
+        return None
+    try:
+        image = get_image(doc)
+    except TypeError:
+        image = get_image(doc=doc)
+    if image is None:
+        return None
+
+    pil_image = getattr(image, "pil_image", None) or image
+    save_fn = getattr(pil_image, "save", None)
+    if not callable(save_fn):
+        return None
+
+    buffer = io.BytesIO()
+    save_fn(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _build_figure_description_model(
+    *,
+    model_id: str,
+    model_provider: str | None,
+    max_tokens: int,
+    timeout: float | None,
+    max_retries: int,
+) -> "ChatModelLike":
+    from langchain.chat_models import init_chat_model
+
+    kwargs: dict[str, Any] = {"temperature": 0.0, "max_tokens": max_tokens}
+    if model_provider:
+        kwargs["model_provider"] = model_provider
+    if timeout is not None:
+        kwargs["timeout"] = timeout
+    if max_retries is not None:
+        kwargs["max_retries"] = max_retries
+    return cast("ChatModelLike", init_chat_model(model_id, **kwargs))
+
+
+def _infer_provider_hint(model_id: str | None, model_provider: str | None) -> str:
+    provider = str(model_provider or "").strip().lower()
+    if provider:
+        return provider
+    lowered = str(model_id or "").strip().lower()
+    if lowered.startswith(
+        ("openai:", "gpt-", "gpt4", "gpt-4", "gpt5", "gpt-5", "o1", "o3", "o4")
+    ):
+        return "openai"
+    if lowered.startswith(("anthropic:", "anthropic-")) or "claude" in lowered:
+        return "anthropic"
+    return "openai"
+
+
+def _describe_picture_with_llm(
+    *,
+    llm: "ChatModelLike",
+    provider: str,
+    image_bytes: bytes,
+    caption: str | None,
+    page: int | None,
+) -> str:
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    b64 = base64.b64encode(image_bytes).decode("ascii")
+    prompt = (
+        "Describe this figure from a scientific article in 3-6 sentences. "
+        "Focus on chart/axis/trend/legend and clinically relevant signal. "
+        "Do not invent values that are not visible."
+    )
+    if caption:
+        prompt += f"\nCaption text: {caption}"
+    if page is not None:
+        prompt += f"\nPage: {page}"
+
+    if provider == "anthropic":
+        human_content: object = [
+            {"type": "text", "text": prompt},
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": b64,
+                },
+            },
+        ]
+    else:
+        human_content = [
+            {"type": "text", "text": prompt},
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{b64}"},
+            },
+        ]
+
+    messages: list["BaseMessage"] = [
+        SystemMessage(
+            content=(
+                "You are an assistant for ROB2 evidence extraction. "
+                "Return only concise factual description."
+            )
+        ),
+        HumanMessage(content=human_content),
+    ]
+    raw = llm.invoke(messages)
+    content = getattr(raw, "content", raw)
+    text = _extract_text_content(content)
+    normalized = normalize_block(text)
+    if not normalized:
+        raise ValueError("Figure description model returned empty text.")
+    return normalized
+
+
+def _extract_text_content(content: object) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                cleaned = item.strip()
+                if cleaned:
+                    parts.append(cleaned)
+                continue
+            if isinstance(item, dict):
+                item_dict = cast(dict[str, object], item)
+                text = item_dict.get("text")
+                if isinstance(text, str) and text.strip():
+                    parts.append(text.strip())
+                continue
+            raw_text = getattr(item, "text", None)
+            if isinstance(raw_text, str) and raw_text.strip():
+                parts.append(raw_text.strip())
+        return "\n".join(parts)
+    return str(content)
 
 
 def _resolve_layout_model(name: Optional[str]) -> Optional["LayoutModelConfig"]:

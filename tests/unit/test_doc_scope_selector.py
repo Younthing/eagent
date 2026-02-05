@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from preprocessing.doc_scope import apply_doc_scope
-from schemas.internal.documents import DocStructure, SectionSpan
+from schemas.internal.documents import DocStructure, FigureSpan, SectionSpan
 
 
 def _span(pid: str, text: str, page: int | None, title: str = "body") -> SectionSpan:
@@ -16,6 +16,10 @@ def _span(pid: str, text: str, page: int | None, title: str = "body") -> Section
 def _doc(spans: list[SectionSpan]) -> DocStructure:
     body = "\n\n".join(span.text for span in spans)
     return DocStructure(body=body, sections=spans)
+
+
+def _figure(fid: str, page: int | None) -> FigureSpan:
+    return FigureSpan(figure_id=fid, page=page)
 
 
 def test_doc_scope_auto_english_cuts_second_article() -> None:
@@ -145,6 +149,27 @@ def test_doc_scope_manual_page_range() -> None:
     assert report["reason"] == "manual_page_range"
     assert report["selected_pages"] == [2, 3]
     assert {span.paragraph_id for span in doc.sections} == {"p2", "p3"}
+
+
+def test_doc_scope_manual_page_range_filters_figures() -> None:
+    spans = [
+        _span("p1", "Abstract", 1),
+        _span("p2", "Methods", 2),
+        _span("p3", "Results", 3),
+    ]
+    figures = [_figure("f1", 1), _figure("f2", 2), _figure("f3", 3)]
+    doc, report = apply_doc_scope(
+        DocStructure(body="Abstract\nMethods\nResults", sections=spans, figures=figures),
+        mode="manual",
+        include_paragraph_ids=None,
+        page_range="2-3",
+        min_pages=1,
+        min_confidence=0.6,
+        abstract_gap_pages=3,
+    )
+
+    assert report["reason"] == "manual_page_range"
+    assert {figure.figure_id for figure in doc.figures} == {"f2", "f3"}
 
 
 def test_doc_scope_missing_page_info_skips() -> None:

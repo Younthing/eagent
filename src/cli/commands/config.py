@@ -137,6 +137,59 @@ def _options_catalog() -> list[dict[str, Any]]:
                     "desc": "Chunker 最大 token 数",
                 },
                 {
+                    "key": "docling_images_scale",
+                    "desc": "Docling 图像缩放（影响图像清晰度）",
+                },
+                {
+                    "key": "docling_generate_page_images",
+                    "desc": "是否生成页面图像",
+                },
+                {
+                    "key": "docling_generate_picture_images",
+                    "desc": "是否生成 figure 图像",
+                },
+                {
+                    "key": "docling_do_picture_classification",
+                    "desc": "启用 Docling 图片分类",
+                },
+                {
+                    "key": "docling_do_picture_description",
+                    "desc": "启用 Docling 图片描述",
+                },
+                {
+                    "key": "docling_picture_description_preset",
+                    "desc": "Docling 图片描述预设（如 smolvlm）",
+                },
+                {
+                    "key": "figure_description_mode",
+                    "desc": "是否启用外部大模型图片描述",
+                    "choices": ["none", "llm"],
+                },
+                {
+                    "key": "figure_description_model",
+                    "desc": "外部大模型图片描述模型 ID",
+                },
+                {
+                    "key": "figure_description_model_provider",
+                    "desc": "外部大模型提供方",
+                },
+                {
+                    "key": "figure_description_max_images",
+                    "desc": "每篇最多描述的 figure 数",
+                },
+                {
+                    "key": "figure_description_max_tokens",
+                    "desc": "图片描述 max_tokens",
+                },
+                {
+                    "key": "figure_description_timeout",
+                    "desc": "图片描述超时（秒）",
+                },
+                {
+                    "key": "figure_description_max_retries",
+                    "desc": "图片描述重试次数",
+                },
+                {
                     "key": "preprocess_drop_references",
                     "desc": "预处理过滤参考文献",
                 },

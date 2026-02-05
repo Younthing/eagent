@@ -39,6 +39,45 @@ class Settings(BaseSettings):
     docling_chunker_max_tokens: int | None = Field(
         default=None, validation_alias="DOCLING_CHUNKER_MAX_TOKENS"
     )
+    docling_images_scale: float = Field(
+        default=1.0, validation_alias="DOCLING_IMAGES_SCALE"
+    )
+    docling_generate_page_images: bool = Field(
+        default=False, validation_alias="DOCLING_GENERATE_PAGE_IMAGES"
+    )
+    docling_generate_picture_images: bool = Field(
+        default=False, validation_alias="DOCLING_GENERATE_PICTURE_IMAGES"
+    )
+    docling_do_picture_classification: bool = Field(
+        default=False, validation_alias="DOCLING_DO_PICTURE_CLASSIFICATION"
+    )
+    docling_do_picture_description: bool = Field(
+        default=False, validation_alias="DOCLING_DO_PICTURE_DESCRIPTION"
+    )
+    docling_picture_description_preset: str | None = Field(
+        default=None, validation_alias="DOCLING_PICTURE_DESCRIPTION_PRESET"
+    )
+    figure_description_mode: str = Field(
+        default="none", validation_alias="FIGURE_DESCRIPTION_MODE"
+    )
+    figure_description_model: str | None = Field(
+        default=None, validation_alias="FIGURE_DESCRIPTION_MODEL"
+    )
+    figure_description_model_provider: str | None = Field(
+        default=None, validation_alias="FIGURE_DESCRIPTION_MODEL_PROVIDER"
+    )
+    figure_description_max_images: int = Field(
+        default=8, validation_alias="FIGURE_DESCRIPTION_MAX_IMAGES"
+    )
+    figure_description_max_tokens: int = Field(
+        default=256, validation_alias="FIGURE_DESCRIPTION_MAX_TOKENS"
+    )
+    figure_description_timeout: float | None = Field(
+        default=None, validation_alias="FIGURE_DESCRIPTION_TIMEOUT"
+    )
+    figure_description_max_retries: int = Field(
+        default=2, validation_alias="FIGURE_DESCRIPTION_MAX_RETRIES"
+    )
     preprocess_drop_references: bool = Field(
         default=True, validation_alias="PREPROCESS_DROP_REFERENCES"
     )

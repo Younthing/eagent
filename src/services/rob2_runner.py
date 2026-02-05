@@ -280,6 +280,56 @@ def _build_run_state(
         "docling_chunker_max_tokens": _resolve_optional_int(
             options.docling_chunker_max_tokens, settings.docling_chunker_max_tokens
         ),
+        "docling_images_scale": _resolve_float(
+            options.docling_images_scale,
+            settings.docling_images_scale,
+        ),
+        "docling_generate_page_images": _resolve_bool(
+            options.docling_generate_page_images,
+            settings.docling_generate_page_images,
+        ),
+        "docling_generate_picture_images": _resolve_bool(
+            options.docling_generate_picture_images,
+            settings.docling_generate_picture_images,
+        ),
+        "docling_do_picture_classification": _resolve_bool(
+            options.docling_do_picture_classification,
+            settings.docling_do_picture_classification,
+        ),
+        "docling_do_picture_description": _resolve_bool(
+            options.docling_do_picture_description,
+            settings.docling_do_picture_description,
+        ),
+        "docling_picture_description_preset": _resolve_str(
+            options.docling_picture_description_preset
+        )
+        or _resolve_str(settings.docling_picture_description_preset),
+        "figure_description_mode": _resolve_choice(
+            options.figure_description_mode,
+            _resolve_choice(settings.figure_description_mode, "none"),
+        ),
+        "figure_description_model": _resolve_str(options.figure_description_model)
+        or _resolve_str(settings.figure_description_model),
+        "figure_description_model_provider": _resolve_str(
+            options.figure_description_model_provider
+        )
+        or _resolve_str(settings.figure_description_model_provider),
+        "figure_description_max_images": _resolve_int(
+            options.figure_description_max_images,
+            settings.figure_description_max_images,
+        ),
+        "figure_description_max_tokens": _resolve_int(
+            options.figure_description_max_tokens,
+            settings.figure_description_max_tokens,
+        ),
+        "figure_description_timeout": _resolve_optional_float(
+            options.figure_description_timeout,
+            settings.figure_description_timeout,
+        ),
+        "figure_description_max_retries": _resolve_int(
+            options.figure_description_max_retries,
+            settings.figure_description_max_retries,
+        ),
         "preprocess_drop_references": _resolve_bool(
             options.preprocess_drop_references, settings.preprocess_drop_references
         ),

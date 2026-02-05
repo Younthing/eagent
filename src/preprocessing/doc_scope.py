@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from typing import Iterable, List, Sequence
 
-from schemas.internal.documents import DocStructure, SectionSpan
+from schemas.internal.documents import DocStructure, FigureSpan, SectionSpan
 from utils.text import normalize_block
 
 _DOI_RE = re.compile(r"10\.\d{4,9}/[^\s\"'<>]+", re.IGNORECASE)
@@ -496,9 +496,16 @@ def _rebuild_doc_structure(
 ) -> DocStructure:
     body = normalize_block("\n\n".join(span.text for span in kept))
     section_map = _aggregate_sections_by_title(kept)
+    selected_pages: set[int] = set()
+    for span in kept:
+        pages = _span_pages(span)
+        if pages:
+            selected_pages.update(pages)
+    figures = _filter_figures(doc.figures, selected_pages)
     payload = {
         "body": body,
         "sections": list(kept),
+        "figures": figures,
         "spans": list(kept),
         **section_map,
     }
@@ -516,6 +523,24 @@ def _aggregate_sections_by_title(spans: Iterable[SectionSpan]) -> dict[str, str]
             continue
         aggregated.setdefault(title, []).append(text)
     return {title: "\n\n".join(parts) for title, parts in aggregated.items()}
+
+
+def _filter_figures(
+    figures: Sequence[FigureSpan],
+    selected_pages: set[int],
+) -> list[FigureSpan]:
+    if not figures:
+        return []
+    if not selected_pages:
+        return list(figures)
+    kept: list[FigureSpan] = []
+    for figure in figures:
+        pages = set(figure.pages or [])
+        if figure.page is not None:
+            pages.add(figure.page)
+        if not pages or pages & selected_pages:
+            kept.append(figure)
+    return kept
 
 
 def _fill_report_pages(report: dict, doc: DocStructure, kept: Sequence[SectionSpan]) -> None:

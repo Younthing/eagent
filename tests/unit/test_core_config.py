@@ -115,6 +115,15 @@ def test_settings_preprocess_defaults():
             settings = Settings()
     
     assert settings.preprocess_drop_references is True
+    assert settings.docling_images_scale == 1.0
+    assert settings.docling_generate_page_images is False
+    assert settings.docling_generate_picture_images is False
+    assert settings.docling_do_picture_classification is False
+    assert settings.docling_do_picture_description is False
+    assert settings.figure_description_mode == "none"
+    assert settings.figure_description_max_images == 8
+    assert settings.figure_description_max_tokens == 256
+    assert settings.figure_description_max_retries == 2
     assert settings.document_metadata_mode == "llm"
     assert settings.document_metadata_model == "anthropic-claude-3-5-sonnet-latest"
     assert settings.document_metadata_max_chars == 4000

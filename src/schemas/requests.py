@@ -29,6 +29,19 @@ class Rob2RunOptions(BaseModel):
     docling_artifacts_path: str | None = None
     docling_chunker_model: str | None = None
     docling_chunker_max_tokens: int | None = Field(default=None, ge=1)
+    docling_images_scale: float | None = Field(default=None, gt=0)
+    docling_generate_page_images: bool | None = None
+    docling_generate_picture_images: bool | None = None
+    docling_do_picture_classification: bool | None = None
+    docling_do_picture_description: bool | None = None
+    docling_picture_description_preset: str | None = None
+    figure_description_mode: Literal["none", "llm"] | None = None
+    figure_description_model: str | None = None
+    figure_description_model_provider: str | None = None
+    figure_description_max_images: int | None = Field(default=None, ge=1)
+    figure_description_max_tokens: int | None = Field(default=None, ge=1)
+    figure_description_timeout: float | None = Field(default=None, gt=0)
+    figure_description_max_retries: int | None = Field(default=None, ge=0)
     preprocess_drop_references: bool | None = None
     preprocess_reference_titles: list[str] | str | None = None
     document_metadata_mode: Literal["none", "llm"] | None = None

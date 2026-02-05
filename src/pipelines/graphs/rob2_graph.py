@@ -57,6 +57,19 @@ class Rob2GraphState(TypedDict, total=False):
     docling_artifacts_path: str
     docling_chunker_model: str
     docling_chunker_max_tokens: int
+    docling_images_scale: float
+    docling_generate_page_images: bool
+    docling_generate_picture_images: bool
+    docling_do_picture_classification: bool
+    docling_do_picture_description: bool
+    docling_picture_description_preset: str
+    figure_description_mode: Literal["none", "llm"]
+    figure_description_model: str
+    figure_description_model_provider: str
+    figure_description_max_images: int
+    figure_description_max_tokens: int
+    figure_description_timeout: float
+    figure_description_max_retries: int
     preprocess_drop_references: bool
     preprocess_reference_titles: list[str] | str | None
     doc_scope_mode: Literal["auto", "manual", "none"]

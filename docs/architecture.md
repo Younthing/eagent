@@ -262,7 +262,7 @@ Notes:
 
 ### Building Blocks & Responsibilities
 
-* **Preprocessing**：解析 PDF，产出可追溯的 DocStructure（body/sections/paragraph_id），并抽取文档元数据（title/authors/year/affiliations/funders）。
+* **Preprocessing**：解析 PDF，产出可追溯的 DocStructure（body/sections/paragraph_id），并可选提取 `figure`（caption/bbox/page/描述），同时抽取文档元数据（title/authors/year/affiliations/funders）。
 * **Domain Question Planner**：输出 Standard ROB2 的问题清单与 decision-tree 绑定。
 * **Evidence Location**：规则/检索/LLM ReAct 并集定位候选证据，LLM 线可迭代扩展检索线索。
 * **Evidence Fusion**：合并、去重、排序，形成每题 Top-k 证据包。
@@ -274,7 +274,7 @@ Notes:
 
 ### Interface Contracts (Data Schemas)
 
-* **DocStructure**: `{ body: str, sections: list[SectionSpan], document_metadata?: DocumentMetadata, <section_title>: str }`
+* **DocStructure**: `{ body: str, sections: list[SectionSpan], figures?: list[FigureSpan], document_metadata?: DocumentMetadata, <section_title>: str }`
 * **QuestionSet**: `list[{ question_id, domain, text, section_prior? }]`
 * **EvidenceCandidate**: `{ question_id, paragraph_id, text, source, score?, supporting_quote? }`
 * **EvidenceBundle**: `{ question_id, items: list[EvidenceCandidate] }`

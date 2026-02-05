@@ -33,11 +33,29 @@ class SectionSpan(BaseModel):
     text: str
 
 
+class FigureSpan(BaseModel):
+    """A figure-level span extracted from article pictures."""
+
+    figure_id: str = Field(description="Stable figure identifier.")
+    page: Optional[int] = None
+    pages: Optional[List[int]] = None
+    bbox: Optional[BoundingBox] = None
+    bboxes: Optional[List[BoundingBox]] = None
+    caption: Optional[str] = None
+    docling_description: Optional[str] = None
+    llm_description: Optional[str] = None
+    llm_description_error: Optional[str] = None
+    llm_model: Optional[str] = None
+    doc_item_ref: Optional[str] = None
+    docling_meta: Optional[dict[str, object]] = None
+
+
 class DocStructure(BaseModel):
     """Normalized structure emitted by the preprocessing layer."""
 
     body: str
     sections: List[SectionSpan]
+    figures: List[FigureSpan] = Field(default_factory=list)
     docling_config: Optional[dict[str, object]] = Field(
         default=None,
         description="Docling preprocessing configuration metadata.",
@@ -47,4 +65,4 @@ class DocStructure(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
-__all__ = ["BoundingBox", "SectionSpan", "DocStructure"]
+__all__ = ["BoundingBox", "SectionSpan", "FigureSpan", "DocStructure"]
