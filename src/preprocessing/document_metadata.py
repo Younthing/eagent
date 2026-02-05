@@ -7,6 +7,7 @@ import re
 from typing import Any, Iterable, List, Sequence, cast
 
 import langextract as lx
+from langextract.resolver import ResolverParsingError
 
 from schemas.internal.documents import DocStructure, SectionSpan
 from schemas.internal.metadata import (
@@ -38,10 +39,11 @@ def extract_document_metadata(
         text = "\n\n".join(span.text for span in doc_structure.sections if span.text)
     snippet = text[: max(0, int(max_chars or 0))] if max_chars else text
 
+    provider = _infer_provider(model_id)
     extraction_meta = DocumentMetadataExtraction(
         method="langextract",
         model_id=model_id,
-        provider="anthropic",
+        provider=provider,
     )
 
     resolved_base_url = base_url or os.getenv("ANTHROPIC_BASE_URL")
@@ -49,17 +51,29 @@ def extract_document_metadata(
     try:
         _ensure_anthropic_schema()
         _ensure_anthropic_base_url()
-        result = lx.extract(
-            text_or_documents=snippet,
-            prompt_description=_build_prompt(),
-            examples=_build_examples(),
-            model_id=model_id,
-            model_url=resolved_base_url,
-            use_schema_constraints=True,
-            extraction_passes=max(1, int(extraction_passes)),
-            language_model_params={"max_tokens": int(max_output_tokens)},
-            max_char_buffer=max(1, int(max_chars)),
-        )
+        default_fence_output = provider == "anthropic"
+        try:
+            result = _run_extract(
+                snippet=snippet,
+                model_id=model_id,
+                model_url=resolved_base_url,
+                extraction_passes=extraction_passes,
+                max_output_tokens=max_output_tokens,
+                max_chars=max_chars,
+                use_schema_constraints=True,
+                fence_output=default_fence_output,
+            )
+        except ResolverParsingError:
+            result = _run_extract(
+                snippet=snippet,
+                model_id=model_id,
+                model_url=resolved_base_url,
+                extraction_passes=extraction_passes,
+                max_output_tokens=max_output_tokens,
+                max_chars=max_chars,
+                use_schema_constraints=False,
+                fence_output=True,
+            )
         annotated = _normalize_result(result)
         metadata = _build_metadata_from_extractions(
             annotated.extractions or [], doc_structure.sections
@@ -69,6 +83,42 @@ def extract_document_metadata(
     except Exception as exc:
         extraction_meta.error = str(exc)[:500]
         return DocumentMetadata(extraction=extraction_meta)
+
+
+def _infer_provider(model_id: str) -> str:
+    lowered = str(model_id or "").strip().lower()
+    if lowered.startswith(
+        ("openai:", "gpt-", "gpt4", "gpt-4", "gpt5", "gpt-5", "o1", "o3", "o4")
+    ):
+        return "openai"
+    if lowered.startswith(("anthropic:", "anthropic-")) or "claude" in lowered:
+        return "anthropic"
+    return "auto"
+
+
+def _run_extract(
+    *,
+    snippet: str,
+    model_id: str,
+    model_url: str | None,
+    extraction_passes: int,
+    max_output_tokens: int,
+    max_chars: int,
+    use_schema_constraints: bool,
+    fence_output: bool,
+) -> object:
+    return lx.extract(
+        text_or_documents=snippet,
+        prompt_description=_build_prompt(),
+        examples=_build_examples(),
+        model_id=model_id,
+        model_url=model_url,
+        fence_output=fence_output,
+        use_schema_constraints=use_schema_constraints,
+        extraction_passes=max(1, int(extraction_passes)),
+        language_model_params={"max_tokens": int(max_output_tokens)},
+        max_char_buffer=max(1, int(max_chars)),
+    )
 
 
 def _normalize_result(result: object) -> lx.data.AnnotatedDocument:
