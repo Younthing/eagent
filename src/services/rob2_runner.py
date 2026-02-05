@@ -284,6 +284,24 @@ def _build_run_state(
             options.preprocess_drop_references, settings.preprocess_drop_references
         ),
         "preprocess_reference_titles": reference_titles,
+        "document_metadata_mode": _resolve_choice(
+            options.document_metadata_mode,
+            _resolve_choice(settings.document_metadata_mode, "llm"),
+        ),
+        "document_metadata_model": _resolve_str(options.document_metadata_model)
+        or _resolve_str(settings.document_metadata_model)
+        or "anthropic-claude-3-5-sonnet-latest",
+        "document_metadata_max_chars": _resolve_int(
+            options.document_metadata_max_chars, settings.document_metadata_max_chars or 4000
+        ),
+        "document_metadata_extraction_passes": _resolve_int(
+            options.document_metadata_extraction_passes,
+            settings.document_metadata_extraction_passes or 1,
+        ),
+        "document_metadata_max_output_tokens": _resolve_int(
+            options.document_metadata_max_output_tokens,
+            settings.document_metadata_max_output_tokens or 1024,
+        ),
         "doc_scope_mode": _resolve_choice(
             options.doc_scope_mode, _resolve_choice(settings.doc_scope_mode, "auto")
         ),

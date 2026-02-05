@@ -46,6 +46,7 @@ def preprocess_cache_key(
     docling_config: Mapping[str, Any],
     doc_scope_config: Mapping[str, Any],
     preprocess_flags: Mapping[str, Any],
+    metadata_config: Mapping[str, Any],
     code_version: str | None = None,
 ) -> str:
     payload = {
@@ -54,6 +55,7 @@ def preprocess_cache_key(
         "docling": dict(docling_config),
         "doc_scope": dict(doc_scope_config),
         "preprocess": dict(preprocess_flags),
+        "metadata": dict(metadata_config),
     }
     if code_version:
         payload["code_version"] = code_version

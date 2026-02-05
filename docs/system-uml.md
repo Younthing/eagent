@@ -6,7 +6,8 @@ flowchart TD
     A[DoclingLoader] --> B[preprocess_node<br/>Docling parse]
     B --> DS[doc_scope_selector<br/>auto/manual]
     DS --> FR[filter_reference_sections]
-    FR --> C[DocStructure]
+    FR --> DM[document_metadata_extraction<br/>LangExtract]
+    DM --> C[DocStructure]
   end
 
   subgraph Planning

@@ -31,6 +31,11 @@ class Rob2RunOptions(BaseModel):
     docling_chunker_max_tokens: int | None = Field(default=None, ge=1)
     preprocess_drop_references: bool | None = None
     preprocess_reference_titles: list[str] | str | None = None
+    document_metadata_mode: Literal["none", "llm"] | None = None
+    document_metadata_model: str | None = None
+    document_metadata_max_chars: int | None = Field(default=None, ge=1)
+    document_metadata_extraction_passes: int | None = Field(default=None, ge=1)
+    document_metadata_max_output_tokens: int | None = Field(default=None, ge=1)
     doc_scope_mode: Literal["auto", "manual", "none"] | None = None
     doc_scope_include_paragraph_ids: list[str] | str | None = None
     doc_scope_page_range: str | None = None

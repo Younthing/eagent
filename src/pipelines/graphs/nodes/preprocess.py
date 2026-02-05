@@ -16,6 +16,7 @@ from utils.text import normalize_block
 from eagent import __version__ as _code_version
 from persistence.hashing import preprocess_cache_key
 from preprocessing.doc_scope import apply_doc_scope, parse_paragraph_ids
+from preprocessing.document_metadata import extract_document_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +45,11 @@ def preprocess_node(state: dict) -> dict:
     if not pdf_path:
         raise ValueError("preprocess_node requires 'pdf_path'.")
 
+    settings = get_settings()
     cache = state.get("cache_manager")
     doc_hash = state.get("doc_hash")
     cache_key: str | None = None
     if cache is not None and doc_hash:
-        settings = get_settings()
         docling_config = {
             "docling_layout_model": state.get("docling_layout_model")
             or settings.docling_layout_model,
@@ -95,11 +96,41 @@ def preprocess_node(state: dict) -> dict:
             ),
             "reference_titles": resolved_reference_titles,
         }
+        metadata_config = {
+            "mode": str(
+                state.get("document_metadata_mode")
+                or settings.document_metadata_mode
+                or "llm"
+            )
+            .strip()
+            .lower(),
+            "model": str(
+                state.get("document_metadata_model")
+                or settings.document_metadata_model
+                or "anthropic-claude-3-5-sonnet-latest"
+            ).strip(),
+            "max_chars": int(
+                state.get("document_metadata_max_chars")
+                or settings.document_metadata_max_chars
+                or 4000
+            ),
+            "extraction_passes": int(
+                state.get("document_metadata_extraction_passes")
+                or settings.document_metadata_extraction_passes
+                or 1
+            ),
+            "max_output_tokens": int(
+                state.get("document_metadata_max_output_tokens")
+                or settings.document_metadata_max_output_tokens
+                or 1024
+            ),
+        }
         cache_key = preprocess_cache_key(
             doc_hash,
             docling_config,
             doc_scope_config,
             preprocess_flags,
+            metadata_config,
             code_version=_code_version,
         )
         cached = cache.get_json(stage="preprocess", key=cache_key)
@@ -116,6 +147,36 @@ def preprocess_node(state: dict) -> dict:
             doc_structure,
             reference_titles=state.get("preprocess_reference_titles"),
         )
+    metadata = extract_document_metadata(
+        doc_structure,
+        mode=str(
+            state.get("document_metadata_mode")
+            or settings.document_metadata_mode
+            or "llm"
+        ).strip().lower(),
+        model_id=str(
+            state.get("document_metadata_model")
+            or settings.document_metadata_model
+            or "anthropic-claude-3-5-sonnet-latest"
+        ).strip(),
+        max_chars=int(
+            state.get("document_metadata_max_chars")
+            or settings.document_metadata_max_chars
+            or 4000
+        ),
+        extraction_passes=int(
+            state.get("document_metadata_extraction_passes")
+            or settings.document_metadata_extraction_passes
+            or 1
+        ),
+        max_output_tokens=int(
+            state.get("document_metadata_max_output_tokens")
+            or settings.document_metadata_max_output_tokens
+            or 1024
+        ),
+    )
+    if metadata is not None:
+        doc_structure = doc_structure.model_copy(update={"document_metadata": metadata})
     payload = {
         "doc_structure": doc_structure.model_dump(),
         "doc_scope_report": scope_report,

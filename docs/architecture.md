@@ -262,7 +262,7 @@ Notes:
 
 ### Building Blocks & Responsibilities
 
-* **Preprocessing**：解析 PDF，产出可追溯的 DocStructure（body/sections/paragraph_id）。
+* **Preprocessing**：解析 PDF，产出可追溯的 DocStructure（body/sections/paragraph_id），并抽取文档元数据（title/authors/year/affiliations/funders）。
 * **Domain Question Planner**：输出 Standard ROB2 的问题清单与 decision-tree 绑定。
 * **Evidence Location**：规则/检索/LLM ReAct 并集定位候选证据，LLM 线可迭代扩展检索线索。
 * **Evidence Fusion**：合并、去重、排序，形成每题 Top-k 证据包。
@@ -274,13 +274,13 @@ Notes:
 
 ### Interface Contracts (Data Schemas)
 
-* **DocStructure**: `{ body: str, sections: list[SectionSpan], <section_title>: str }`
+* **DocStructure**: `{ body: str, sections: list[SectionSpan], document_metadata?: DocumentMetadata, <section_title>: str }`
 * **QuestionSet**: `list[{ question_id, domain, text, section_prior? }]`
 * **EvidenceCandidate**: `{ question_id, paragraph_id, text, source, score?, supporting_quote? }`
 * **EvidenceBundle**: `{ question_id, items: list[EvidenceCandidate] }`
 * **ValidatedEvidence**: `{ question_id, items, status, failure_reason? }`
 * **DomainDecision**: `{ domain, effect_type?, answers, risk, risk_rationale, missing_questions }`（risk 由规则树判定）
-* **Rob2FinalOutput**: `{ overall, domains, citations }`（见 `src/schemas/internal/results.py`）
+* **Rob2FinalOutput**: `{ overall, domains, citations, document_metadata? }`（见 `src/schemas/internal/results.py`）
   * `citations[*]`: `{ paragraph_id, page, title, text, uses[] }`
   * 额外输出：`rob2_table_markdown`（Markdown 表格，便于人读）
 

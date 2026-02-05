@@ -20,6 +20,7 @@ def test_cache_keys_are_deterministic() -> None:
         {"layout": "x"},
         {"mode": "auto"},
         {"drop_references": True},
+        {"mode": "llm"},
         code_version="0.1.5",
     )
     assert preprocess_key == preprocess_cache_key(
@@ -27,6 +28,7 @@ def test_cache_keys_are_deterministic() -> None:
         {"layout": "x"},
         {"mode": "auto"},
         {"drop_references": True},
+        {"mode": "llm"},
         code_version="0.1.5",
     )
 

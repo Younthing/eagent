@@ -45,6 +45,22 @@ class Settings(BaseSettings):
     preprocess_reference_titles: str | None = Field(
         default=None, validation_alias="PREPROCESS_REFERENCE_TITLES"
     )
+    document_metadata_mode: str = Field(
+        default="llm", validation_alias="DOCUMENT_METADATA_MODE"
+    )
+    document_metadata_model: str = Field(
+        default="anthropic-claude-3-5-sonnet-latest",
+        validation_alias="DOCUMENT_METADATA_MODEL",
+    )
+    document_metadata_max_chars: int = Field(
+        default=4000, validation_alias="DOCUMENT_METADATA_MAX_CHARS"
+    )
+    document_metadata_extraction_passes: int = Field(
+        default=1, validation_alias="DOCUMENT_METADATA_EXTRACTION_PASSES"
+    )
+    document_metadata_max_output_tokens: int = Field(
+        default=1024, validation_alias="DOCUMENT_METADATA_MAX_OUTPUT_TOKENS"
+    )
     doc_scope_mode: str = Field(
         default="auto", validation_alias="DOC_SCOPE_MODE"
     )

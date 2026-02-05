@@ -5,11 +5,18 @@ from unittest.mock import patch
 
 import pytest
 from core.config import Settings, get_settings
+from pydantic_settings import SettingsConfigDict
 
 
 def test_settings_defaults():
     """Test that Settings initializes with expected defaults."""
-    settings = Settings()
+    with patch.dict(os.environ, {}, clear=True):
+        with patch.object(
+            Settings,
+            "model_config",
+            SettingsConfigDict(env_file=None, env_file_encoding="utf-8", extra="ignore"),
+        ):
+            settings = Settings()
     
     # Check default locator settings
     assert settings.locator_tokenizer == "auto"
@@ -25,7 +32,7 @@ def test_settings_defaults():
     assert settings.reranker_top_n == 50
     
     # Check default domain audit settings
-    assert settings.domain_audit_mode == "none"
+    assert settings.domain_audit_mode == "llm"
     assert settings.domain_audit_patch_window == 0
     assert settings.domain_audit_max_patches_per_question == 3
 
@@ -99,6 +106,17 @@ def test_settings_extra_field_handling():
 
 def test_settings_preprocess_defaults():
     """Test preprocess-related settings defaults."""
-    settings = Settings()
+    with patch.dict(os.environ, {}, clear=True):
+        with patch.object(
+            Settings,
+            "model_config",
+            SettingsConfigDict(env_file=None, env_file_encoding="utf-8", extra="ignore"),
+        ):
+            settings = Settings()
     
     assert settings.preprocess_drop_references is True
+    assert settings.document_metadata_mode == "llm"
+    assert settings.document_metadata_model == "anthropic-claude-3-5-sonnet-latest"
+    assert settings.document_metadata_max_chars == 4000
+    assert settings.document_metadata_extraction_passes == 1
+    assert settings.document_metadata_max_output_tokens == 1024

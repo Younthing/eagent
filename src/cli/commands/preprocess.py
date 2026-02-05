@@ -9,6 +9,11 @@ from typing import Any
 import typer
 
 from schemas.internal.documents import DocStructure
+from persistence import CacheManager
+from persistence.hashing import sha256_file
+from persistence.sqlite_store import SqliteStore
+from pipelines.graphs.nodes.preprocess import preprocess_node
+from core.config import get_settings
 from .shared import emit_json, load_doc_structure
 
 
@@ -190,6 +195,93 @@ def show_preprocess(
         return
 
     _print_summary(doc_structure, stats)
+
+
+@app.command("metadata", help="抽取文档元数据")
+def extract_metadata(
+    pdf_path: Path = typer.Argument(
+        ...,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        metavar="PDF路径",
+    ),
+    mode: str | None = typer.Option(
+        None,
+        "--mode",
+        help="元数据抽取模式（none|llm）",
+    ),
+    model: str | None = typer.Option(
+        None,
+        "--model",
+        help="元数据抽取模型 ID",
+    ),
+    max_chars: int | None = typer.Option(
+        None,
+        "--max-chars",
+        help="用于抽取的最大字符数",
+    ),
+    extraction_passes: int | None = typer.Option(
+        None,
+        "--passes",
+        help="抽取轮次",
+    ),
+    max_output_tokens: int | None = typer.Option(
+        None,
+        "--max-output-tokens",
+        help="模型最大输出 token",
+    ),
+    use_cache: bool = typer.Option(
+        True,
+        "--cache/--no-cache",
+        help="是否使用预处理缓存",
+    ),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        help="写入 JSON 文件路径",
+    ),
+    json_out: bool = typer.Option(True, "--json/--no-json", help="输出 JSON"),
+) -> None:
+    settings = get_settings()
+    cache_manager = None
+    if use_cache and settings.cache_scope != "none":
+        base_dir = Path(settings.cache_dir or settings.persistence_dir)
+        store = SqliteStore(base_dir / "metadata.sqlite")
+        cache_manager = CacheManager(base_dir, store, scope=settings.cache_scope)
+
+    state: dict[str, Any] = {
+        "pdf_path": str(pdf_path),
+        "doc_hash": sha256_file(str(pdf_path)),
+        "cache_manager": cache_manager,
+    }
+    if mode is not None:
+        state["document_metadata_mode"] = mode
+    if model is not None:
+        state["document_metadata_model"] = model
+    if max_chars is not None:
+        state["document_metadata_max_chars"] = max_chars
+    if extraction_passes is not None:
+        state["document_metadata_extraction_passes"] = extraction_passes
+    if max_output_tokens is not None:
+        state["document_metadata_max_output_tokens"] = max_output_tokens
+
+    payload = preprocess_node(state)
+    doc_structure = DocStructure.model_validate(payload["doc_structure"])
+    metadata = doc_structure.document_metadata
+    result = {"document_metadata": metadata.model_dump() if metadata else None}
+
+    if output is not None:
+        output.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        typer.echo(f"已写入: {output}")
+        if not json_out:
+            return
+
+    if json_out:
+        emit_json(result)
 
 
 __all__ = ["app"]

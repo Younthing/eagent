@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from schemas.internal.decisions import AnswerOption, DomainRisk, EvidenceRef
 from schemas.internal.locator import DomainId
+from schemas.internal.metadata import DocumentMetadata
 
 OverallRisk = Literal["low", "some_concerns", "high", "not_applicable"]
 
@@ -67,6 +68,7 @@ class Rob2FinalOutput(BaseModel):
     overall: Rob2OverallResult
     domains: List[Rob2DomainResult]
     citations: List[Citation] = Field(default_factory=list)
+    document_metadata: Optional[DocumentMetadata] = None
 
     model_config = ConfigDict(extra="forbid")
 

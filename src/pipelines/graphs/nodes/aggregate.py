@@ -102,6 +102,7 @@ def aggregate_node(state: dict) -> dict:
         overall=Rob2OverallResult(risk=overall_risk, rationale=overall_rationale),
         domains=domain_results,
         citations=_sorted_citations(citations_by_pid.values()),
+        document_metadata=doc_structure.document_metadata,
     )
 
     return {

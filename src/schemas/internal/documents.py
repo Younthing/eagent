@@ -6,6 +6,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from schemas.internal.metadata import DocumentMetadata
+
 
 class BoundingBox(BaseModel):
     """Bounding box coordinates from Docling provenance."""
@@ -40,6 +42,7 @@ class DocStructure(BaseModel):
         default=None,
         description="Docling preprocessing configuration metadata.",
     )
+    document_metadata: Optional[DocumentMetadata] = None
 
     model_config = ConfigDict(extra="allow")
 

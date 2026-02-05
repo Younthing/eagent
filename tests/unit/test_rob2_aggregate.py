@@ -3,6 +3,7 @@ from __future__ import annotations
 from pipelines.graphs.nodes.aggregate import aggregate_node
 from schemas.internal.decisions import DomainAnswer, DomainDecision, EvidenceRef
 from schemas.internal.documents import DocStructure, SectionSpan
+from schemas.internal.metadata import DocumentMetadata, DocumentMetadataExtraction, DocumentMetadataSource
 from schemas.internal.rob2 import QuestionSet, Rob2Question
 
 
@@ -135,3 +136,34 @@ def test_aggregate_includes_rule_trace() -> None:
     domains = out["rob2_result"]["domains"]
     d1_out = next(domain for domain in domains if domain["domain"] == "D1")
     assert d1_out["rule_trace"] == d1.rule_trace
+
+
+def test_aggregate_includes_document_metadata() -> None:
+    metadata = DocumentMetadata(
+        title="Example Title",
+        authors=["Author A"],
+        year=1997,
+        affiliations=["Example Institute"],
+        funders=["Example Foundation"],
+        sources=[DocumentMetadataSource(paragraph_id="p1", quote="Author A")],
+        extraction=DocumentMetadataExtraction(
+            method="langextract",
+            model_id="anthropic-claude-3-5-sonnet-latest",
+            provider="anthropic",
+        ),
+    )
+    doc = _doc().model_copy(update={"document_metadata": metadata})
+    out = aggregate_node(
+        {
+            "doc_structure": doc.model_dump(),
+            "question_set": _question_set().model_dump(),
+            "d1_decision": _empty("D1", risk="low").model_dump(),
+            "d2_decision": _empty("D2", risk="low").model_dump(),
+            "d3_decision": _empty("D3", risk="low").model_dump(),
+            "d4_decision": _empty("D4", risk="low").model_dump(),
+            "d5_decision": _empty("D5", risk="low").model_dump(),
+        }
+    )
+    rob2 = out["rob2_result"]
+    assert rob2["document_metadata"]["title"] == "Example Title"
+    assert rob2["document_metadata"]["authors"] == ["Author A"]
