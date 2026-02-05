@@ -129,7 +129,7 @@ def run(
     output_dir: Path | None = typer.Option(
         None,
         "--output-dir",
-        help="输出目录（写入 result.json/table.md 等）",
+        help="输出目录（写入 result.json/table.md 等；默认: ./results）",
     ),
     html: bool = typer.Option(
         False,
@@ -147,6 +147,9 @@ def run(
         help="生成 PDF 报告 (需要 --output-dir)",
     ),
 ) -> None:
+    if output_dir is None:
+        output_dir = Path("results")
+
     if (html or docx or pdf) and output_dir is None:
         typer.echo("Error: --output-dir is required when generating reports.")
         raise typer.Exit(code=1)
@@ -173,16 +176,15 @@ def run(
     options_obj = build_options(payload)
     result = run_rob2(Rob2Input(pdf_path=str(pdf_path)), options_obj)
     _emit_result(result, json_out=json_out, table=table)
-    if output_dir is not None:
-        _write_output_dir(
-            result,
-            output_dir,
-            include_table=table,
-            html=html,
-            docx=docx,
-            pdf=pdf,
-            pdf_name=pdf_path.name,
-        )
+    _write_output_dir(
+        result,
+        output_dir,
+        include_table=table,
+        html=html,
+        docx=docx,
+        pdf=pdf,
+        pdf_name=pdf_path.name,
+    )
 
 
 def _emit_result(result: Rob2RunResult, *, json_out: bool, table: bool) -> None:

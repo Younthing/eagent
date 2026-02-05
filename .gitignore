@@ -14,3 +14,4 @@ example
 # Local model artifacts
 models/
 .qoder
+results/
