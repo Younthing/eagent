@@ -132,6 +132,15 @@ eagent/
 │   │   ├── rob2_runner.py          # 统一参数解析/状态构建/图执行
 │   │   └── io.py                   # PDF 临时文件处理
 │   │
+│   ├── reporting/                 # [报告层] HTML/DOCX/PDF 渲染
+│   │   ├── __init__.py
+│   │   ├── context.py             # 报告上下文/标签
+│   │   ├── html.py                # HTML 渲染
+│   │   ├── pdf.py                 # PDF 渲染
+│   │   ├── docx.py                # DOCX 渲染
+│   │   └── templates/
+│   │       └── report.html
+│   │
 │   ├── schemas/                   # [DTO] FastAPI 入参/出参 + 内部契约
 │   │   ├── requests.py            # EvaluateRequest (PDF元信息、选项)
 │   │   ├── responses.py           # EvaluateResponse (ROB2表+证据引用)

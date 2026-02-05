@@ -41,6 +41,7 @@ def mock_result():
                     domain="D1",
                     risk="low",
                     risk_rationale="Domain 1 rationale",
+                    rule_trace=["D1:R1 q1_2 in NO -> high"],
                     answers=[
                         Rob2AnswerResult(
                             question_id="1.1",
@@ -66,6 +67,7 @@ def test_generate_html_report(mock_result, tmp_path, reports_module):
     content = output_path.read_text(encoding="utf-8")
     assert "ROB2 风险偏倚评估报告" in content
     assert "Domain 1 rationale" in content
+    assert "规则路径" in content
 
 def test_generate_docx_report(mock_result, tmp_path, reports_module):
     output_path = tmp_path / "report.docx"
@@ -77,3 +79,10 @@ def test_generate_pdf_report(mock_result, tmp_path, reports_module):
     reports_module.generate_pdf_report(mock_result, output_path, "test.pdf")
     if output_path.exists():
         assert output_path.stat().st_size > 0
+
+
+def test_render_html_includes_rule_trace(mock_result):
+    from reporting.html import render_html
+
+    content = render_html(mock_result, pdf_name="test.pdf")
+    assert "规则路径" in content

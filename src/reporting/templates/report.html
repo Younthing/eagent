@@ -107,6 +107,14 @@
             padding: 10px;
             border-radius: 4px;
         }
+        .rule-trace {
+            margin-top: 10px;
+            font-size: 0.95em;
+            color: #4a5568;
+            background-color: #f2f4f7;
+            padding: 10px;
+            border-radius: 4px;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -156,6 +164,16 @@
                 </div>
                 <div class="domain-content">
                     <p><strong>风险理由:</strong> {{ domain.risk_rationale }}</p>
+                    {% if domain.rule_trace %}
+                    <div class="rule-trace">
+                        <strong>规则路径:</strong>
+                        <ul>
+                            {% for trace in domain.rule_trace %}
+                            <li>{{ trace }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
 
                     <h3>具体问题</h3>
                     {% for answer in domain.answers %}

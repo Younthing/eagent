@@ -5,6 +5,7 @@
 - 支持段落级手动选择与 `doc_scope_report` 输出，配置项与文档同步更新。
 - Domain 决策结果新增 `rule_trace`，记录命中的规则路径并透传到最终输出。
 - CLI `rob2 run` 默认写入 `./results/result.json`（以及表格/报告按配置输出）。
+- HTML/DOCX/PDF 报告新增 `rule_trace` 展示，报告模块拆分为上下文与渲染逻辑。
 
 ## 0.1.3 - 2026-02-04
 - 新增 LLM ReAct 证据定位线并与检索/规则候选并集融合。
