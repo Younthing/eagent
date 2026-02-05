@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, TYPE_
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from core.config import get_settings
 from rob2.decision_rules import evaluate_domain_risk_with_trace
 from schemas.internal.decisions import (
     AnswerOption,
@@ -83,18 +84,31 @@ _SYSTEM_PROMPT_FALLBACK = "rob2_domain_system.md"
 _EFFECT_NOTE_PATTERN = re.compile(r"{{\s*effect_note\s*}}")
 
 
+@lru_cache(maxsize=1)
+def _read_prompt_lang() -> str:
+    lang = str(get_settings().prompt_lang or "").strip().lower()
+    return lang or "zh"
+
+
 @lru_cache(maxsize=8)
 def _load_system_prompt_template(domain: DomainId) -> str:
     domain_key = str(domain).lower()
-    prompt_path = _PROMPTS_DIR / f"{domain_key}_system.md"
-    if not prompt_path.exists():
-        prompt_path = _PROMPTS_DIR / _SYSTEM_PROMPT_FALLBACK
-    try:
-        return prompt_path.read_text(encoding="utf-8")
-    except FileNotFoundError as exc:
-        raise FileNotFoundError(
-            f"System prompt template not found: {prompt_path}"
-        ) from exc
+    lang = _read_prompt_lang()
+    candidates: List[Path] = []
+    if lang:
+        candidates.append(_PROMPTS_DIR / f"{domain_key}_system.{lang}.md")
+    candidates.append(_PROMPTS_DIR / f"{domain_key}_system.md")
+    if lang:
+        candidates.append(_PROMPTS_DIR / f"rob2_domain_system.{lang}.md")
+    candidates.append(_PROMPTS_DIR / _SYSTEM_PROMPT_FALLBACK)
+
+    for path in candidates:
+        if path.exists():
+            return path.read_text(encoding="utf-8")
+    raise FileNotFoundError(
+        "System prompt template not found. Tried: "
+        + ", ".join(str(path) for path in candidates)
+    )
 
 
 def run_domain_reasoning(

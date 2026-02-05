@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     doc_scope_abstract_gap_pages: int = Field(
         default=3, validation_alias="DOC_SCOPE_ABSTRACT_GAP_PAGES"
     )
+    prompt_lang: str = Field(default="zh", validation_alias="PROMPT_LANG")
     locator_tokenizer: str = Field(
         default="auto", validation_alias="LOCATOR_TOKENIZER"
     )
@@ -231,7 +232,7 @@ class Settings(BaseSettings):
     d5_max_tokens: int | None = Field(default=None, validation_alias="D5_MAX_TOKENS")
     d5_max_retries: int = Field(default=2, validation_alias="D5_MAX_RETRIES")
 
-    domain_audit_mode: str = Field(default="none", validation_alias="DOMAIN_AUDIT_MODE")
+    domain_audit_mode: str = Field(default="llm", validation_alias="DOMAIN_AUDIT_MODE")
     domain_audit_model: str | None = Field(
         default=None, validation_alias="DOMAIN_AUDIT_MODEL"
     )
@@ -257,7 +258,7 @@ class Settings(BaseSettings):
         default=3, validation_alias="DOMAIN_AUDIT_MAX_PATCHES_PER_QUESTION"
     )
     domain_audit_rerun_domains: bool = Field(
-        default=False, validation_alias="DOMAIN_AUDIT_RERUN_DOMAINS"
+        default=True, validation_alias="DOMAIN_AUDIT_RERUN_DOMAINS"
     )
     domain_audit_final: bool = Field(
         default=False, validation_alias="DOMAIN_AUDIT_FINAL"

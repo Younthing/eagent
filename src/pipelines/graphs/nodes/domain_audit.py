@@ -19,6 +19,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from core.config import get_settings
 from schemas.internal.decisions import AnswerOption, DomainDecision
 from schemas.internal.documents import DocStructure, SectionSpan
 from schemas.internal.evidence import (
@@ -76,23 +77,30 @@ class _AuditOutput(BaseModel):
 
 
 @lru_cache(maxsize=1)
+def _read_prompt_lang() -> str:
+    lang = str(get_settings().prompt_lang or "").strip().lower()
+    return lang or "zh"
+
+
+@lru_cache(maxsize=1)
 def _load_audit_system_prompt() -> str:
-    prompt_path = (
-        Path(__file__).resolve().parents[3]
-        / "llm"
-        / "prompts"
-        / "validators"
-        / "domain_audit_system.md"
+    prompt_dir = Path(__file__).resolve().parents[3] / "llm" / "prompts" / "validators"
+    lang = _read_prompt_lang()
+    candidates: List[Path] = []
+    if lang:
+        candidates.append(prompt_dir / f"domain_audit_system.{lang}.md")
+    candidates.append(prompt_dir / "domain_audit_system.md")
+
+    for path in candidates:
+        if path.exists():
+            return path.read_text(encoding="utf-8").strip()
+    return (
+        "You are a strict ROB2 audit assistant.\n"
+        "Given ROB2 signaling questions and a full document represented as a list of\n"
+        "paragraph spans with paragraph_id, answer each question using only the document.\n"
+        "Always cite evidence with paragraph_id and an exact quote from that paragraph.\n"
+        "Return JSON matching the requested schema."
     )
-    if not prompt_path.exists():
-        return (
-            "You are a strict ROB2 audit assistant.\n"
-            "Given ROB2 signaling questions and a full document represented as a list of\n"
-            "paragraph spans with paragraph_id, answer each question using only the document.\n"
-            "Always cite evidence with paragraph_id and an exact quote from that paragraph.\n"
-            "Return JSON matching the requested schema."
-        )
-    return prompt_path.read_text(encoding="utf-8").strip()
 
 
 def d1_audit_node(state: dict) -> dict:

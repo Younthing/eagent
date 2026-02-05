@@ -487,7 +487,9 @@ def _build_run_state(
         "d5_timeout": _resolve_optional_float(options.d5_timeout, settings.d5_timeout),
         "d5_max_tokens": _resolve_optional_int(options.d5_max_tokens, settings.d5_max_tokens),
         "d5_max_retries": _resolve_int(options.d5_max_retries, settings.d5_max_retries or _DEFAULT_DOMAIN_MAX_RETRIES),
-        "domain_audit_mode": _resolve_choice(options.domain_audit_mode, "none"),
+        "domain_audit_mode": _resolve_choice(
+            options.domain_audit_mode, _resolve_choice(settings.domain_audit_mode, "llm")
+        ),
         "domain_audit_model": _resolve_str(options.domain_audit_model)
         or _resolve_str(settings.domain_audit_model)
         or _resolve_str(settings.d1_model),

@@ -95,12 +95,12 @@ flowchart TD
     A5 -. optional .-> AFinal[final_domain_audit_node<br/>all-domain audit report<br/>M9]
     A5 --> AGG
     AFinal --> AGG
-    P1[src/llm/prompts/domains/d1_system.md] --> D1
-    P2[src/llm/prompts/domains/d2_system.md] --> D2
-    P3[src/llm/prompts/domains/d3_system.md] --> D3
-    P4[src/llm/prompts/domains/d4_system.md] --> D4
-    P5[src/llm/prompts/domains/d5_system.md] --> D5
-    P6[src/llm/prompts/validators/domain_audit_system.md] --> A1
+    P1[src/llm/prompts/domains/d1_system.{lang}.md] --> D1
+    P2[src/llm/prompts/domains/d2_system.{lang}.md] --> D2
+    P3[src/llm/prompts/domains/d3_system.{lang}.md] --> D3
+    P4[src/llm/prompts/domains/d4_system.{lang}.md] --> D4
+    P5[src/llm/prompts/domains/d5_system.{lang}.md] --> D5
+    P6[src/llm/prompts/validators/domain_audit_system.{lang}.md] --> A1
     P6 --> A2
     P6 --> A3
     P6 --> A4
@@ -128,9 +128,10 @@ Notes:
 - `consistency_validator_node` optionally checks multi-evidence contradictions per question (Milestone 7).
 - `completeness_validator_node` selects `validated_evidence` from candidates that passed validations (Milestone 7).
 - Validation failures trigger retry scoped to failed questions; if retries exhaust, a full-text audit fallback is enabled (Milestone 7/9).
-- Domain reasoning loads system prompts from `src/llm/prompts/domains/{domain}_system.md`, with a fallback to `rob2_domain_system.md`.
+- Domain reasoning loads system prompts from `src/llm/prompts/domains/{domain}_system.{lang}.md` using `PROMPT_LANG` (default `zh`), with fallback to `{domain}_system.md`, then `rob2_domain_system.{lang}.md`, then `rob2_domain_system.md`.
+- Domain audit loads system prompts from `src/llm/prompts/validators/domain_audit_system.{lang}.md` (falls back to `domain_audit_system.md` if missing).
 - Domain reasoning normalizes answers and applies decision-tree rules (`src/rob2/decision_rules.py`) to set domain risk when defined.
-- Per-domain `*_audit_node` steps (Milestone 9) read the full document, propose citations, patch `validated_candidates`, and re-run the corresponding domain only when `domain_audit_mode=llm` and `domain_audit_rerun_domains=true` (default: false).
+- Per-domain `*_audit_node` steps (Milestone 9) read the full document, propose citations, patch `validated_candidates`, and re-run the corresponding domain only when `domain_audit_mode=llm` and `domain_audit_rerun_domains=true` (default: true).
 - `final_domain_audit_node` is optional and emits an all-domain audit report (no rerun) when `domain_audit_mode=llm` and `domain_audit_final=true`.
 - `aggregate_node` produces `rob2_result` (JSON) + `rob2_table_markdown` (human-readable).
 - Dense retrieval and cross-domain validation are not implemented yet.
