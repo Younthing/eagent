@@ -117,7 +117,7 @@ class Settings(BaseSettings):
     )
 
     llm_locator_mode: str = Field(
-        default="llm", validation_alias="LLM_LOCATOR_MODE"
+        default="none", validation_alias="LLM_LOCATOR_MODE"
     )
     llm_locator_model: str | None = Field(
         default=None, validation_alias="LLM_LOCATOR_MODEL"

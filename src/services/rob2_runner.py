@@ -356,7 +356,7 @@ def _build_run_state(
             options.splade_batch_size, settings.splade_batch_size or _DEFAULT_SPLADE_BATCH
         ),
         "llm_locator_mode": _resolve_choice(
-            options.llm_locator_mode, _resolve_choice(settings.llm_locator_mode, "llm")
+            options.llm_locator_mode, _resolve_choice(settings.llm_locator_mode, "none")
         ),
         "llm_locator_model": _resolve_str(options.llm_locator_model)
         or _resolve_str(settings.llm_locator_model),

@@ -112,7 +112,7 @@ def llm_locator_node(state: dict) -> dict:
     doc_structure = DocStructure.model_validate(raw_doc)
     question_set = QuestionSet.model_validate(raw_questions)
 
-    mode = str(state.get("llm_locator_mode") or "llm").strip().lower()
+    mode = str(state.get("llm_locator_mode") or "none").strip().lower()
     if mode not in {"llm", "none"}:
         raise ValueError("llm_locator_mode must be 'llm' or 'none'")
     if mode == "none":
