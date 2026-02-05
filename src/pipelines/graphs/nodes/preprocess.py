@@ -13,6 +13,7 @@ from core.config import get_settings
 from langchain_docling.loader import DoclingLoader
 from schemas.internal.documents import BoundingBox, DocStructure, SectionSpan
 from utils.text import normalize_block
+from eagent import __version__ as _code_version
 from persistence.hashing import preprocess_cache_key
 from preprocessing.doc_scope import apply_doc_scope, parse_paragraph_ids
 
@@ -47,24 +48,59 @@ def preprocess_node(state: dict) -> dict:
     doc_hash = state.get("doc_hash")
     cache_key: str | None = None
     if cache is not None and doc_hash:
-        docling_config = _read_docling_overrides(state) or {}
-        doc_scope_config = {
-            "mode": str(state.get("doc_scope_mode") or "auto").strip().lower(),
-            "include_paragraph_ids": state.get("doc_scope_include_paragraph_ids"),
-            "page_range": state.get("doc_scope_page_range"),
-            "min_pages": int(state.get("doc_scope_min_pages") or 6),
-            "min_confidence": float(state.get("doc_scope_min_confidence") or 0.75),
-            "abstract_gap_pages": int(state.get("doc_scope_abstract_gap_pages") or 3),
+        settings = get_settings()
+        docling_config = {
+            "docling_layout_model": state.get("docling_layout_model")
+            or settings.docling_layout_model,
+            "docling_artifacts_path": state.get("docling_artifacts_path")
+            or settings.docling_artifacts_path,
+            "docling_chunker_model": state.get("docling_chunker_model")
+            or settings.docling_chunker_model,
+            "docling_chunker_max_tokens": state.get("docling_chunker_max_tokens")
+            or settings.docling_chunker_max_tokens,
         }
+        doc_scope_config = {
+            "mode": str(state.get("doc_scope_mode") or settings.doc_scope_mode or "auto")
+            .strip()
+            .lower(),
+            "include_paragraph_ids": state.get("doc_scope_include_paragraph_ids")
+            or settings.doc_scope_include_paragraph_ids,
+            "page_range": state.get("doc_scope_page_range")
+            or settings.doc_scope_page_range,
+            "min_pages": int(
+                state.get("doc_scope_min_pages")
+                or settings.doc_scope_min_pages
+                or 6
+            ),
+            "min_confidence": float(
+                state.get("doc_scope_min_confidence")
+                or settings.doc_scope_min_confidence
+                or 0.75
+            ),
+            "abstract_gap_pages": int(
+                state.get("doc_scope_abstract_gap_pages")
+                or settings.doc_scope_abstract_gap_pages
+                or 3
+            ),
+        }
+        resolved_reference_titles = _normalize_reference_titles(
+            state.get("preprocess_reference_titles")
+            if state.get("preprocess_reference_titles") is not None
+            else settings.preprocess_reference_titles
+        )
         preprocess_flags = {
-            "drop_references": _resolve_bool(state.get("preprocess_drop_references"), True),
-            "reference_titles": state.get("preprocess_reference_titles"),
+            "drop_references": _resolve_bool(
+                state.get("preprocess_drop_references"),
+                settings.preprocess_drop_references,
+            ),
+            "reference_titles": resolved_reference_titles,
         }
         cache_key = preprocess_cache_key(
             doc_hash,
             docling_config,
             doc_scope_config,
             preprocess_flags,
+            code_version=_code_version,
         )
         cached = cache.get_json(stage="preprocess", key=cache_key)
         if cached is not None:

@@ -28,6 +28,7 @@ from pipelines.graphs.nodes.retry_utils import (
     merge_by_question,
     read_retry_question_ids,
 )
+from eagent import __version__ as _code_version
 from persistence.hashing import splade_cache_key
 
 
@@ -282,7 +283,9 @@ def splade_retrieval_locator_node(state: dict) -> dict:
     cache_key: str | None = None
     doc_vectors = None
     if cache is not None and doc_hash:
-        cache_key = splade_cache_key(doc_hash, model_id, doc_max_length)
+        cache_key = splade_cache_key(
+            doc_hash, model_id, doc_max_length, code_version=_code_version
+        )
         doc_vectors = cache.get_numpy(stage="splade_doc_vectors", key=cache_key)
 
     encoder = get_splade_encoder(model_id=model_id, device=device, hf_token=hf_token)

@@ -20,16 +20,22 @@ def test_cache_keys_are_deterministic() -> None:
         {"layout": "x"},
         {"mode": "auto"},
         {"drop_references": True},
+        code_version="0.1.5",
     )
     assert preprocess_key == preprocess_cache_key(
         doc_hash,
         {"layout": "x"},
         {"mode": "auto"},
         {"drop_references": True},
+        code_version="0.1.5",
     )
 
-    bm25_key = bm25_cache_key(doc_hash, {"mode": "auto", "char_ngram": 2})
-    assert bm25_key == bm25_cache_key(doc_hash, {"char_ngram": 2, "mode": "auto"})
+    bm25_key = bm25_cache_key(
+        doc_hash, {"mode": "auto", "char_ngram": 2}, code_version="0.1.5"
+    )
+    assert bm25_key == bm25_cache_key(
+        doc_hash, {"char_ngram": 2, "mode": "auto"}, code_version="0.1.5"
+    )
 
-    splade_key = splade_cache_key(doc_hash, "model", 128)
-    assert splade_key == splade_cache_key(doc_hash, "model", 128)
+    splade_key = splade_cache_key(doc_hash, "model", 128, code_version="0.1.5")
+    assert splade_key == splade_cache_key(doc_hash, "model", 128, code_version="0.1.5")

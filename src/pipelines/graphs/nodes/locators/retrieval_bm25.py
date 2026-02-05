@@ -31,6 +31,7 @@ from pipelines.graphs.nodes.retry_utils import (
     merge_by_question,
     read_retry_question_ids,
 )
+from eagent import __version__ as _code_version
 from persistence.hashing import bm25_cache_key
 
 
@@ -210,7 +211,7 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
             "mode": tokenizer_config.mode,
             "char_ngram": tokenizer_config.char_ngram,
         }
-        cache_key = bm25_cache_key(doc_hash, tokenizer_payload)
+        cache_key = bm25_cache_key(doc_hash, tokenizer_payload, code_version=_code_version)
         cached_payload = cache.get_json(stage="bm25_index", key=cache_key)
 
     if cached_payload:

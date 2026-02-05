@@ -46,6 +46,7 @@ def preprocess_cache_key(
     docling_config: Mapping[str, Any],
     doc_scope_config: Mapping[str, Any],
     preprocess_flags: Mapping[str, Any],
+    code_version: str | None = None,
 ) -> str:
     payload = {
         "stage": "preprocess",
@@ -54,25 +55,40 @@ def preprocess_cache_key(
         "doc_scope": dict(doc_scope_config),
         "preprocess": dict(preprocess_flags),
     }
+    if code_version:
+        payload["code_version"] = code_version
     return hash_payload(payload)
 
 
-def bm25_cache_key(doc_hash: str, tokenizer_config: Mapping[str, Any]) -> str:
+def bm25_cache_key(
+    doc_hash: str,
+    tokenizer_config: Mapping[str, Any],
+    code_version: str | None = None,
+) -> str:
     payload = {
         "stage": "bm25_index",
         "doc_hash": doc_hash,
         "tokenizer": dict(tokenizer_config),
     }
+    if code_version:
+        payload["code_version"] = code_version
     return hash_payload(payload)
 
 
-def splade_cache_key(doc_hash: str, model_id: str, doc_max_length: int) -> str:
+def splade_cache_key(
+    doc_hash: str,
+    model_id: str,
+    doc_max_length: int,
+    code_version: str | None = None,
+) -> str:
     payload = {
         "stage": "splade_doc_vectors",
         "doc_hash": doc_hash,
         "model_id": model_id,
         "doc_max_length": int(doc_max_length),
     }
+    if code_version:
+        payload["code_version"] = code_version
     return hash_payload(payload)
 
 
