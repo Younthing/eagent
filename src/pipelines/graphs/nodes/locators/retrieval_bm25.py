@@ -31,6 +31,7 @@ from pipelines.graphs.nodes.retry_utils import (
     merge_by_question,
     read_retry_question_ids,
 )
+from persistence.hashing import bm25_cache_key
 
 
 _DEFAULT_QUERY_PLANNER_TEMPERATURE = 0.0
@@ -198,7 +199,56 @@ def bm25_retrieval_locator_node(state: dict) -> dict:
     )
 
     spans = doc_structure.sections
-    full_index = build_bm25_index(spans, tokenizer=tokenizer_config)
+    cache = state.get("cache_manager")
+    doc_hash = state.get("doc_hash")
+    cache_key: str | None = None
+    full_index: BM25Index
+
+    cached_payload = None
+    if cache is not None and doc_hash:
+        tokenizer_payload = {
+            "mode": tokenizer_config.mode,
+            "char_ngram": tokenizer_config.char_ngram,
+        }
+        cache_key = bm25_cache_key(doc_hash, tokenizer_payload)
+        cached_payload = cache.get_json(stage="bm25_index", key=cache_key)
+
+    if cached_payload:
+        try:
+            if int(cached_payload.get("span_count") or 0) == len(spans):
+                full_index = BM25Index(
+                    term_freqs=cached_payload["term_freqs"],
+                    doc_lengths=cached_payload["doc_lengths"],
+                    idf=cached_payload["idf"],
+                    avgdl=cached_payload["avgdl"],
+                    k1=cached_payload.get("k1", 1.5),
+                    b=cached_payload.get("b", 0.75),
+                    tokenizer=tokenizer_config,
+                )
+            else:
+                cached_payload = None
+                full_index = build_bm25_index(spans, tokenizer=tokenizer_config)
+        except Exception:
+            cached_payload = None
+            full_index = build_bm25_index(spans, tokenizer=tokenizer_config)
+    else:
+        full_index = build_bm25_index(spans, tokenizer=tokenizer_config)
+
+    if cache is not None and doc_hash and cache_key and not cached_payload:
+        cache_payload = {
+            "term_freqs": full_index._term_freqs,  # noqa: SLF001
+            "doc_lengths": full_index._doc_lengths,  # noqa: SLF001
+            "idf": full_index._idf,  # noqa: SLF001
+            "avgdl": full_index._avgdl,  # noqa: SLF001
+            "k1": full_index._k1,  # noqa: SLF001
+            "b": full_index._b,  # noqa: SLF001
+            "tokenizer": {
+                "mode": tokenizer_config.mode,
+                "char_ngram": tokenizer_config.char_ngram,
+            },
+            "span_count": len(spans),
+        }
+        cache.set_json(stage="bm25_index", key=cache_key, payload=cache_payload)
     full_mapping = list(range(len(spans)))
 
     domain_indices: Dict[str, _StructuredIndex] = {}

@@ -50,6 +50,7 @@ from pipelines.graphs.routing import (
 
 class Rob2GraphState(TypedDict, total=False):
     pdf_path: str
+    doc_hash: str
     doc_structure: dict
     question_set: dict
     docling_layout_model: str
@@ -239,6 +240,7 @@ class Rob2GraphState(TypedDict, total=False):
     validation_retry_log: Annotated[list[dict], operator.add]
     retry_question_ids: list[str]
     fulltext_fallback_used: bool
+    cache_manager: object
 
 
 NodeFn = object

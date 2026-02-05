@@ -1,6 +1,6 @@
 [project]
 name = "eagent"
-version = "0.1.4"
+version = "0.1.5"
 description = "Production-ready LangGraph agent example"
 readme = "README.md"
 authors = [

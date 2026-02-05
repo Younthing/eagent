@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.5 - 2026-02-05
+- 新增持久化子系统（SQLite 元数据 + 文件系统 artifacts），并输出 `run_id` 方便追踪。
+- `run_rob2` 支持持久化/缓存上下文，CLI 增加 `--persist*`、`--batch*`、`--cache*` 参数。
+- 确定性阶段缓存（preprocess / BM25 / SPLADE）可复用，`rob2 cache` 新增持久化统计与 `prune` 清理。
+- 新增持久化与缓存的单测/集成测试覆盖。
+
 ## 0.1.4 - 2026-02-05
 - 预处理阶段新增 Doc Scope Selector，自动/手动裁剪混排 PDF 的主文段落范围。
 - 支持段落级手动选择与 `doc_scope_report` 输出，配置项与文档同步更新。

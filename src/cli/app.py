@@ -131,6 +131,41 @@ def run(
         "--output-dir",
         help="输出目录（写入 result.json/table.md 等；默认: ./results）",
     ),
+    persist: bool = typer.Option(
+        True,
+        "--persist/--no-persist",
+        help="写入持久化运行记录与分析包",
+    ),
+    persist_dir: Path | None = typer.Option(
+        None,
+        "--persist-dir",
+        help="持久化根目录（默认使用配置项）",
+    ),
+    persist_scope: str | None = typer.Option(
+        None,
+        "--persist-scope",
+        help="持久化范围（analysis 等）",
+    ),
+    batch_id: str | None = typer.Option(
+        None,
+        "--batch-id",
+        help="绑定已有批次 ID",
+    ),
+    batch_name: str | None = typer.Option(
+        None,
+        "--batch-name",
+        help="创建新批次并绑定",
+    ),
+    cache_dir: Path | None = typer.Option(
+        None,
+        "--cache-dir",
+        help="缓存根目录（默认使用配置项）",
+    ),
+    cache_scope: str | None = typer.Option(
+        None,
+        "--cache-scope",
+        help="缓存范围（deterministic|none）",
+    ),
     html: bool = typer.Option(
         False,
         "--html",
@@ -174,7 +209,17 @@ def run(
             table = True
 
     options_obj = build_options(payload)
-    result = run_rob2(Rob2Input(pdf_path=str(pdf_path)), options_obj)
+    result = run_rob2(
+        Rob2Input(pdf_path=str(pdf_path)),
+        options_obj,
+        persist_enabled=persist,
+        persistence_dir=str(persist_dir) if persist_dir else None,
+        persistence_scope=persist_scope,
+        cache_dir=str(cache_dir) if cache_dir else None,
+        cache_scope=cache_scope,
+        batch_id=batch_id,
+        batch_name=batch_name,
+    )
     _emit_result(result, json_out=json_out, table=table)
     _write_output_dir(
         result,

@@ -5,6 +5,7 @@ from __future__ import annotations
 from time import perf_counter
 from pathlib import Path
 from typing import Any, Mapping
+import json
 
 from core.config import get_settings
 from pipelines.graphs.rob2_graph import build_rob2_graph
@@ -15,6 +16,9 @@ from schemas.internal.results import Rob2FinalOutput
 from schemas.requests import Rob2Input, Rob2RunOptions
 from schemas.responses import Rob2RunResult
 from services.io import temp_pdf
+from persistence import CacheManager, PersistenceManager, build_manifest
+from persistence.hashing import sha256_bytes, sha256_file
+from persistence.models import RunSummaryRecord
 
 
 _DEFAULT_TOP_K = 5
@@ -47,6 +51,15 @@ def run_rob2(
     options: Rob2RunOptions | Mapping[str, Any] | None = None,
     *,
     state_overrides: Mapping[str, Any] | None = None,
+    persistence: PersistenceManager | None = None,
+    cache: CacheManager | None = None,
+    batch_id: str | None = None,
+    batch_name: str | None = None,
+    persist_enabled: bool | None = None,
+    persistence_dir: str | None = None,
+    persistence_scope: str | None = None,
+    cache_dir: str | None = None,
+    cache_scope: str | None = None,
 ) -> Rob2RunResult:
     """Run the ROB2 graph with normalized options and return a typed result."""
     input_obj = input_data if isinstance(input_data, Rob2Input) else Rob2Input.model_validate(input_data)
@@ -54,19 +67,138 @@ def run_rob2(
 
     start = perf_counter()
     warnings: list[str] = []
+    settings = get_settings()
+    resolved_persist_enabled = (
+        settings.persistence_enabled if persist_enabled is None else persist_enabled
+    )
+    resolved_persistence_dir = persistence_dir or settings.persistence_dir
+    resolved_persistence_scope = persistence_scope or settings.persistence_scope
+    resolved_cache_scope = str(cache_scope or settings.cache_scope or "none").strip().lower()
+    resolved_cache_dir = cache_dir or settings.cache_dir or resolved_persistence_dir
+
+    doc_hash: str
+    bytes_size: int | None = None
+    filename: str | None = None
+    if input_obj.pdf_bytes is not None:
+        doc_hash = sha256_bytes(input_obj.pdf_bytes)
+        bytes_size = len(input_obj.pdf_bytes)
+        filename = input_obj.filename
+    else:
+        doc_path = Path(str(input_obj.pdf_path))
+        doc_hash = sha256_file(doc_path)
+        bytes_size = doc_path.stat().st_size if doc_path.exists() else None
+        filename = doc_path.name
+
+    if persistence is None and resolved_persist_enabled:
+        persistence = PersistenceManager(
+            resolved_persistence_dir, scope=resolved_persistence_scope
+        )
+
+    if cache is None:
+        if resolved_cache_scope != "none":
+            store = (
+                persistence.store
+                if persistence is not None and Path(resolved_cache_dir) == persistence.base_dir
+                else None
+            )
+            if store is None:
+                from persistence.sqlite_store import SqliteStore
+
+                store = SqliteStore(Path(resolved_cache_dir) / "metadata.sqlite")
+            cache = CacheManager(resolved_cache_dir, store, scope=resolved_cache_scope)
+
+    run_ctx = None
+    if persistence is not None:
+        run_ctx = persistence.start_run(
+            doc_hash=doc_hash,
+            filename=filename,
+            bytes_size=bytes_size,
+            options_payload=options_obj.model_dump(),
+            batch_id=batch_id,
+            batch_name=batch_name,
+        )
 
     if input_obj.pdf_bytes is not None:
         with temp_pdf(input_obj.pdf_bytes, filename=input_obj.filename) as path:
             state = _build_run_state(str(path), options_obj, warnings)
             state.update(state_overrides or {})
+            state["doc_hash"] = doc_hash
+            if cache is not None:
+                state["cache_manager"] = cache
             final_state = _invoke_graph(state)
     else:
         state = _build_run_state(str(input_obj.pdf_path), options_obj, warnings)
         state.update(state_overrides or {})
+        state["doc_hash"] = doc_hash
+        if cache is not None:
+            state["cache_manager"] = cache
         final_state = _invoke_graph(state)
 
     runtime_ms = int((perf_counter() - start) * 1000)
-    return _build_result(final_state, options_obj, runtime_ms, warnings)
+    result = _build_result(final_state, options_obj, runtime_ms, warnings)
+    if run_ctx is None:
+        return result
+
+    result.run_id = run_ctx.run_id
+    question_set_payload = final_state.get("question_set")
+    question_set_version = None
+    if isinstance(question_set_payload, dict):
+        question_set_version = question_set_payload.get("version")
+    question_set_version = question_set_version or getattr(result.result, "question_set_version", None)
+
+    manifest = build_manifest(
+        run_id=run_ctx.run_id,
+        doc_hash=doc_hash,
+        options_payload=options_obj.model_dump(),
+        state_config={k: v for k, v in state.items() if k not in {"cache_manager"}},
+        question_set_version=question_set_version,
+    )
+
+    validation_reports = {
+        "relevance_config": final_state.get("relevance_config"),
+        "relevance_debug": final_state.get("relevance_debug"),
+        "consistency_reports": final_state.get("consistency_reports"),
+        "completeness_report": final_state.get("completeness_report"),
+        "validation_retry_log": final_state.get("validation_retry_log"),
+    }
+    if not any(value is not None for value in validation_reports.values()):
+        validation_reports = None
+
+    persistence.persist_artifacts(
+        run_ctx=run_ctx,
+        result_payload=result.model_dump(),
+        table_markdown=result.table_markdown,
+        manifest=manifest,
+        doc_structure=final_state.get("doc_structure"),
+        question_set=question_set_payload,
+        validated_candidates=final_state.get("validated_candidates"),
+        validation_reports=validation_reports,
+        audit_reports=final_state.get("domain_audit_reports"),
+    )
+
+    domain_risks = {
+        domain.domain: domain.risk for domain in result.result.domains
+    }
+    validated_candidates = final_state.get("validated_candidates") or {}
+    validated_count = sum(
+        len(items) for items in validated_candidates.values() if isinstance(items, list)
+    )
+    summary = RunSummaryRecord(
+        run_id=run_ctx.run_id,
+        overall_risk=result.result.overall.risk,
+        domain_risks_json=json.dumps(domain_risks, ensure_ascii=False),
+        citations_count=len(result.result.citations),
+        validated_evidence_count=validated_count,
+    )
+    persistence.finalize_run(
+        run_ctx=run_ctx,
+        result_payload=result.model_dump(),
+        summary=summary,
+        runtime_ms=runtime_ms,
+        warnings=warnings,
+        question_set_version=question_set_version,
+    )
+    return result
 
 
 def _invoke_graph(state: dict[str, Any]) -> dict[str, Any]:

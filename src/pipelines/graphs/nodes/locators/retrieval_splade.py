@@ -28,6 +28,7 @@ from pipelines.graphs.nodes.retry_utils import (
     merge_by_question,
     read_retry_question_ids,
 )
+from persistence.hashing import splade_cache_key
 
 
 _DEFAULT_QUERY_PLANNER_TEMPERATURE = 0.0
@@ -276,13 +277,24 @@ def splade_retrieval_locator_node(state: dict) -> dict:
             "splade_structure": structure_payload,
         }
 
+    cache = state.get("cache_manager")
+    doc_hash = state.get("doc_hash")
+    cache_key: str | None = None
+    doc_vectors = None
+    if cache is not None and doc_hash:
+        cache_key = splade_cache_key(doc_hash, model_id, doc_max_length)
+        doc_vectors = cache.get_numpy(stage="splade_doc_vectors", key=cache_key)
+
     encoder = get_splade_encoder(model_id=model_id, device=device, hf_token=hf_token)
 
-    doc_vectors = encoder.encode(
-        [span.text for span in spans],
-        max_length=doc_max_length,
-        batch_size=batch_size,
-    )
+    if doc_vectors is None:
+        doc_vectors = encoder.encode(
+            [span.text for span in spans],
+            max_length=doc_max_length,
+            batch_size=batch_size,
+        )
+        if cache is not None and doc_hash and cache_key:
+            cache.set_numpy(stage="splade_doc_vectors", key=cache_key, array=doc_vectors)
     if doc_vectors.shape[0] != len(spans):
         raise RuntimeError("SPLADE doc embedding count mismatch.")
 

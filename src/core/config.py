@@ -11,6 +11,22 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Centralized runtime configuration."""
 
+    persistence_enabled: bool = Field(
+        default=True, validation_alias="PERSISTENCE_ENABLED"
+    )
+    persistence_dir: str = Field(
+        default="data/rob2", validation_alias="PERSISTENCE_DIR"
+    )
+    persistence_scope: str = Field(
+        default="analysis", validation_alias="PERSISTENCE_SCOPE"
+    )
+    cache_dir: str = Field(
+        default="data/rob2", validation_alias="CACHE_DIR"
+    )
+    cache_scope: str = Field(
+        default="deterministic", validation_alias="CACHE_SCOPE"
+    )
+
     docling_layout_model: str | None = Field(
         default=None, validation_alias="DOCLING_LAYOUT_MODEL"
     )

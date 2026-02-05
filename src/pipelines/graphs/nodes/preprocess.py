@@ -13,6 +13,7 @@ from core.config import get_settings
 from langchain_docling.loader import DoclingLoader
 from schemas.internal.documents import BoundingBox, DocStructure, SectionSpan
 from utils.text import normalize_block
+from persistence.hashing import preprocess_cache_key
 from preprocessing.doc_scope import apply_doc_scope, parse_paragraph_ids
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,33 @@ def preprocess_node(state: dict) -> dict:
     if not pdf_path:
         raise ValueError("preprocess_node requires 'pdf_path'.")
 
+    cache = state.get("cache_manager")
+    doc_hash = state.get("doc_hash")
+    cache_key: str | None = None
+    if cache is not None and doc_hash:
+        docling_config = _read_docling_overrides(state) or {}
+        doc_scope_config = {
+            "mode": str(state.get("doc_scope_mode") or "auto").strip().lower(),
+            "include_paragraph_ids": state.get("doc_scope_include_paragraph_ids"),
+            "page_range": state.get("doc_scope_page_range"),
+            "min_pages": int(state.get("doc_scope_min_pages") or 6),
+            "min_confidence": float(state.get("doc_scope_min_confidence") or 0.75),
+            "abstract_gap_pages": int(state.get("doc_scope_abstract_gap_pages") or 3),
+        }
+        preprocess_flags = {
+            "drop_references": _resolve_bool(state.get("preprocess_drop_references"), True),
+            "reference_titles": state.get("preprocess_reference_titles"),
+        }
+        cache_key = preprocess_cache_key(
+            doc_hash,
+            docling_config,
+            doc_scope_config,
+            preprocess_flags,
+        )
+        cached = cache.get_json(stage="preprocess", key=cache_key)
+        if cached is not None:
+            return cached
+
     overrides = _read_docling_overrides(state)
     doc_structure = parse_docling_pdf(pdf_path, overrides=overrides)
     doc_structure, scope_report = _apply_doc_scope_if_enabled(
@@ -52,7 +80,13 @@ def preprocess_node(state: dict) -> dict:
             doc_structure,
             reference_titles=state.get("preprocess_reference_titles"),
         )
-    return {"doc_structure": doc_structure.model_dump(), "doc_scope_report": scope_report}
+    payload = {
+        "doc_structure": doc_structure.model_dump(),
+        "doc_scope_report": scope_report,
+    }
+    if cache is not None and doc_hash and cache_key:
+        cache.set_json(stage="preprocess", key=cache_key, payload=payload)
+    return payload
 
 
 def parse_docling_pdf(

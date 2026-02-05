@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import typer
 
+from pathlib import Path
+
 from core.config import get_settings
+from persistence.cache import CacheManager
+from persistence.sqlite_store import SqliteStore
 from pipelines.graphs.nodes.domain_audit import _load_audit_system_prompt
 from pipelines.graphs.nodes.domains.common import _load_system_prompt_template
 from retrieval.engines.splade import get_splade_encoder
@@ -41,6 +45,9 @@ def cache_stats() -> None:
     for name, func in _CACHED_FUNCS.items():
         info = getattr(func, "cache_info", None)
         payload[name] = info()._asdict() if callable(info) else {"cached": False}
+    persistent = _persistent_cache_stats()
+    if persistent is not None:
+        payload["persistent_cache"] = {"stages": persistent}
     emit_json(payload)
 
 
@@ -53,6 +60,42 @@ def cache_clear() -> None:
             clear()
             cleared.append(name)
     emit_json({"cleared": cleared})
+
+
+@app.command("prune", help="清理持久化缓存")
+def cache_prune(
+    days: int = typer.Option(
+        30,
+        "--days",
+        min=1,
+        help="删除超过指定天数的缓存条目",
+    ),
+) -> None:
+    manager = _build_cache_manager()
+    if manager is None:
+        emit_json({"removed": 0, "reason": "cache_disabled"})
+        return
+    removed = manager.prune_older_than(days=days)
+    emit_json({"removed": removed})
+
+
+def _build_cache_manager() -> CacheManager | None:
+    settings = get_settings()
+    scope = str(getattr(settings, "cache_scope", "none") or "none").strip().lower()
+    if scope == "none":
+        return None
+    base_dir = getattr(settings, "cache_dir", None) or getattr(
+        settings, "persistence_dir", "data/rob2"
+    )
+    store = SqliteStore(Path(base_dir) / "metadata.sqlite")
+    return CacheManager(base_dir, store, scope=scope)
+
+
+def _persistent_cache_stats() -> list[dict] | None:
+    manager = _build_cache_manager()
+    if manager is None:
+        return None
+    return manager.stats()
 
 
 __all__ = ["app"]

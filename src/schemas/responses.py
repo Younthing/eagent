@@ -10,6 +10,7 @@ from schemas.internal.results import Rob2FinalOutput
 
 
 class Rob2RunResult(BaseModel):
+    run_id: str | None = None
     result: Rob2FinalOutput
     table_markdown: str
     reports: dict[str, Any] | None = None
