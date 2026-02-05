@@ -135,4 +135,5 @@ Notes:
 - Per-domain `*_audit_node` steps (Milestone 9) read the full document, propose citations, patch `validated_candidates`, and re-run the corresponding domain only when `domain_audit_mode=llm` and `domain_audit_rerun_domains=true` (default: true).
 - `final_domain_audit_node` is optional and emits an all-domain audit report (no rerun) when `domain_audit_mode=llm` and `domain_audit_final=true`.
 - `aggregate_node` produces `rob2_result` (JSON) + `rob2_table_markdown` (human-readable).
+- CLI now includes `rob2 batch run`, which iterates folder PDFs, auto-resumes via `batch_checkpoint.json`, and invokes `run_rob2` per file while preserving per-run persistence records.
 - Dense retrieval and cross-domain validation are not implemented yet.

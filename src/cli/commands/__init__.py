@@ -2,6 +2,7 @@
 
 __all__ = [
     "audit",
+    "batch",
     "cache",
     "config",
     "fusion",
@@ -16,6 +17,7 @@ __all__ = [
 
 from . import (
     audit,
+    batch,
     cache,
     config,
     fusion,
