@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Protocol, Sequence, TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -144,21 +146,7 @@ def _invoke_query_planner(
         ],
     }
 
-    system_prompt = (
-        "You generate short keyword-style search queries for retrieving evidence "
-        "snippets from RCT papers. Return ONLY valid JSON matching this schema:\n"
-        "{\n"
-        '  "query_plan": {\n'
-        '    "<question_id>": ["query 1", "query 2", "..."]\n'
-        "  }\n"
-        "}\n"
-        "Rules:\n"
-        f"- Provide at most {max_queries} queries per question_id.\n"
-        "- Do NOT include the full question text as a query.\n"
-        "- Use short phrases likely to appear in Methods/Results.\n"
-        "- Prefer methodology terms (randomization, allocation concealment, ITT, missing data, blinding).\n"
-        "- No commentary, no markdown, no code blocks."
-    )
+    system_prompt = _load_query_planner_system_prompt(max_queries=max_queries)
     user_prompt = json.dumps(payload, ensure_ascii=False)
 
     messages = _build_messages(system_prompt, user_prompt)
@@ -228,6 +216,36 @@ def _extract_json_object(text: str) -> str:
         return extract_json_object(text, prefer_code_block=True)
     except ValueError as exc:
         raise ValueError("No JSON object found in LLM response") from exc
+
+
+@lru_cache(maxsize=8)
+def _load_query_planner_system_prompt(*, max_queries: int) -> str:
+    prompt_path = (
+        Path(__file__).resolve().parents[2]
+        / "llm"
+        / "prompts"
+        / "planners"
+        / "query_planner_system.md"
+    )
+    if prompt_path.exists():
+        template = prompt_path.read_text(encoding="utf-8").strip()
+    else:
+        template = (
+            "You generate short keyword-style search queries for retrieving evidence "
+            "snippets from RCT papers. Return ONLY valid JSON matching this schema:\\n"
+            "{\\n"
+            '  \"query_plan\": {\\n'
+            '    \"<question_id>\": [\"query 1\", \"query 2\", \"...\"]\\n'
+            "  }\\n"
+            "}\\n"
+            "Rules:\\n"
+            "- Provide at most {{max_queries}} queries per question_id.\\n"
+            "- Do NOT include the full question text as a query.\\n"
+            "- Use short phrases likely to appear in Methods/Results.\\n"
+            "- Prefer methodology terms (randomization, allocation concealment, ITT, missing data, blinding).\\n"
+            "- No commentary, no markdown, no code blocks."
+        )
+    return template.replace("{{max_queries}}", str(max_queries))
 
 
 def _normalize_query_plan(

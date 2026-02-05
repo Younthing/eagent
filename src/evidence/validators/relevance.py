@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, List, Literal, Protocol, Sequence, TYPE_CHECKING, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -115,16 +117,7 @@ def _judge_relevance(
     candidate: FusedEvidenceCandidate,
     require_quote: bool,
 ) -> RelevanceVerdict:
-    system_prompt = (
-        "You judge whether a paragraph contains DIRECT evidence to answer a ROB2 signaling question.\n"
-        "Return ONLY valid JSON with keys: label, confidence, supporting_quote.\n"
-        "label must be one of: relevant, irrelevant, unknown.\n"
-        "confidence must be a number between 0 and 1.\n"
-        "supporting_quote must be an EXACT substring copied from the paragraph, or null.\n"
-        "If the paragraph does not contain an explicit statement answering the question, choose irrelevant.\n"
-        "If you are unsure, choose unknown.\n"
-        "No markdown, no explanations."
-    )
+    system_prompt = _load_relevance_system_prompt()
 
     payload = {
         "question": question_text,
@@ -179,6 +172,29 @@ def _extract_json_object(text: str) -> str:
         return extract_json_object(text, prefer_code_block=True)
     except ValueError as exc:
         raise ValueError("No JSON object found in LLM response") from exc
+
+
+@lru_cache(maxsize=1)
+def _load_relevance_system_prompt() -> str:
+    prompt_path = (
+        Path(__file__).resolve().parents[2]
+        / "llm"
+        / "prompts"
+        / "validators"
+        / "relevance_system.md"
+    )
+    if prompt_path.exists():
+        return prompt_path.read_text(encoding="utf-8").strip()
+    return (
+        "You judge whether a paragraph contains DIRECT evidence to answer a ROB2 signaling question.\n"
+        "Return ONLY valid JSON with keys: label, confidence, supporting_quote.\n"
+        "label must be one of: relevant, irrelevant, unknown.\n"
+        "confidence must be a number between 0 and 1.\n"
+        "supporting_quote must be an EXACT substring copied from the paragraph, or null.\n"
+        "If the paragraph does not contain an explicit statement answering the question, choose irrelevant.\n"
+        "If you are unsure, choose unknown.\n"
+        "No markdown, no explanations."
+    )
 
 
 def _normalize_verdict(

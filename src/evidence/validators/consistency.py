@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, List, Literal, Protocol, Sequence, TYPE_CHECKING, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -136,14 +138,7 @@ def _invoke_consistency(
         ],
     }
 
-    system_prompt = (
-        "You check whether multiple paragraphs contradict each other about a ROB2 signaling question.\n"
-        "Return ONLY JSON with keys: label, confidence, conflicts.\n"
-        "label must be one of: pass, fail, unknown.\n"
-        "conflicts is a list of objects: paragraph_id_a, paragraph_id_b, reason, quote_a, quote_b.\n"
-        "If you mark fail, include at least one conflict and provide quote_a/quote_b as exact substrings.\n"
-        "No markdown, no explanations."
-    )
+    system_prompt = _load_consistency_system_prompt()
     user_prompt = json.dumps(payload, ensure_ascii=False)
     messages = _build_messages(system_prompt, user_prompt)
 
@@ -186,6 +181,27 @@ def _extract_json_object(text: str) -> str:
         return extract_json_object(text, prefer_code_block=True)
     except ValueError as exc:
         raise ValueError("No JSON object found in LLM response") from exc
+
+
+@lru_cache(maxsize=1)
+def _load_consistency_system_prompt() -> str:
+    prompt_path = (
+        Path(__file__).resolve().parents[2]
+        / "llm"
+        / "prompts"
+        / "validators"
+        / "consistency_system.md"
+    )
+    if prompt_path.exists():
+        return prompt_path.read_text(encoding="utf-8").strip()
+    return (
+        "You check whether multiple paragraphs contradict each other about a ROB2 signaling question.\n"
+        "Return ONLY JSON with keys: label, confidence, conflicts.\n"
+        "label must be one of: pass, fail, unknown.\n"
+        "conflicts is a list of objects: paragraph_id_a, paragraph_id_b, reason, quote_a, quote_b.\n"
+        "If you mark fail, include at least one conflict and provide quote_a/quote_b as exact substrings.\n"
+        "No markdown, no explanations."
+    )
 
 
 def _normalize_verdict(
