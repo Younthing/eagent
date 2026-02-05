@@ -40,6 +40,7 @@ def _empty(domain: str, *, risk: str) -> DomainDecision:
         risk_rationale="stub",
         answers=[],
         missing_questions=[],
+        rule_trace=[],
     )
 
 
@@ -91,6 +92,7 @@ def test_aggregate_builds_citation_index() -> None:
             )
         ],
         missing_questions=[],
+        rule_trace=["D1:R3 q1_2 in YES & q1_3 in NO/NI & q1_1 in YES/NI -> low"],
     )
     out = aggregate_node(
         {
@@ -108,3 +110,28 @@ def test_aggregate_builds_citation_index() -> None:
     assert citations[0]["paragraph_id"] == "p1"
     assert citations[0]["uses"][0]["domain"] == "D1"
     assert citations[0]["uses"][0]["question_id"] == "q1"
+
+
+def test_aggregate_includes_rule_trace() -> None:
+    d1 = DomainDecision(
+        domain="D1",
+        risk="low",
+        risk_rationale="ok",
+        answers=[],
+        missing_questions=[],
+        rule_trace=["D1:R3 q1_2 in YES & q1_3 in NO/NI & q1_1 in YES/NI -> low"],
+    )
+    out = aggregate_node(
+        {
+            "doc_structure": _doc().model_dump(),
+            "question_set": _question_set().model_dump(),
+            "d1_decision": d1.model_dump(),
+            "d2_decision": _empty("D2", risk="low").model_dump(),
+            "d3_decision": _empty("D3", risk="low").model_dump(),
+            "d4_decision": _empty("D4", risk="low").model_dump(),
+            "d5_decision": _empty("D5", risk="low").model_dump(),
+        }
+    )
+    domains = out["rob2_result"]["domains"]
+    d1_out = next(domain for domain in domains if domain["domain"] == "D1")
+    assert d1_out["rule_trace"] == d1.rule_trace

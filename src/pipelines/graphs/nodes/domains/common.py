@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, TYPE_
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from rob2.decision_rules import evaluate_domain_risk
+from rob2.decision_rules import evaluate_domain_risk_with_trace
 from schemas.internal.decisions import (
     AnswerOption,
     DomainAnswer,
@@ -350,7 +350,7 @@ def _normalize_decision(
         )
 
     llm_risk = _normalize_risk(response.domain_risk)
-    rule_risk = evaluate_domain_risk(
+    rule_risk, rule_trace = evaluate_domain_risk_with_trace(
         domain,
         normalized_answers,
         effect_type=effect_type,
@@ -364,6 +364,7 @@ def _normalize_decision(
         or "No domain-level rationale provided.",
         answers=answers,
         missing_questions=missing_questions,
+        rule_trace=rule_trace,
     )
 
 

@@ -49,6 +49,7 @@ class Rob2DomainResult(BaseModel):
     risk_rationale: str
     answers: List[Rob2AnswerResult]
     missing_questions: List[str] = Field(default_factory=list)
+    rule_trace: List[str] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 

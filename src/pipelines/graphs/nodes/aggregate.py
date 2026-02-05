@@ -92,6 +92,7 @@ def aggregate_node(state: dict) -> dict:
                 risk_rationale=decision.risk_rationale,
                 answers=answer_results,
                 missing_questions=decision.missing_questions,
+                rule_trace=decision.rule_trace,
             )
         )
 

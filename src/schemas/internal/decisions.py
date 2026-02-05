@@ -44,6 +44,7 @@ class DomainDecision(BaseModel):
     risk_rationale: str
     answers: List[DomainAnswer]
     missing_questions: List[str] = Field(default_factory=list)
+    rule_trace: List[str] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 
