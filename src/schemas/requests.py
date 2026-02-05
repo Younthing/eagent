@@ -135,6 +135,9 @@ class Rob2RunOptions(BaseModel):
     # Domain reasoning
     d2_effect_type: Literal["assignment", "adherence"] | None = None
     domain_evidence_top_k: int | None = Field(default=None, ge=1)
+    domain_quote_validation: bool | None = None
+    domain_quote_match_policy: Literal["exact", "folded", "folded_casefold"] | None = None
+    domain_quote_fallback: Literal["supporting_quote", "drop_quote", "drop_evidence"] | None = None
 
     d1_model: str | None = None
     d1_model_provider: str | None = None

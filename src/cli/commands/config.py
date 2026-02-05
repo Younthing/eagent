@@ -269,6 +269,20 @@ def _options_catalog() -> list[dict[str, Any]]:
                     "choices": ["assignment", "adherence"],
                 },
                 {"key": "domain_evidence_top_k", "desc": "领域证据 top_k"},
+                {
+                    "key": "domain_quote_validation",
+                    "desc": "领域证据引用校验",
+                },
+                {
+                    "key": "domain_quote_match_policy",
+                    "desc": "领域引用匹配策略",
+                    "choices": ["exact", "folded", "folded_casefold"],
+                },
+                {
+                    "key": "domain_quote_fallback",
+                    "desc": "领域引用兜底策略",
+                    "choices": ["supporting_quote", "drop_quote", "drop_evidence"],
+                },
                 {"key": "d1_model", "desc": "D1 模型 ID"},
                 {"key": "d1_model_provider", "desc": "D1 模型提供方"},
                 {"key": "d1_temperature", "desc": "D1 温度"},

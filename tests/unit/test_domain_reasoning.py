@@ -3,8 +3,12 @@ from __future__ import annotations
 import json
 from typing import cast
 
-from pipelines.graphs.nodes.domains.common import ChatModelLike, run_domain_reasoning
-from schemas.internal.evidence import EvidenceSupport, FusedEvidenceCandidate
+from pipelines.graphs.nodes.domains.common import (
+    ChatModelLike,
+    DomainQuoteValidationConfig,
+    run_domain_reasoning,
+)
+from schemas.internal.evidence import EvidenceSupport, FusedEvidenceCandidate, RelevanceVerdict
 from schemas.internal.rob2 import QuestionCondition, QuestionDependency, QuestionSet, Rob2Question
 
 
@@ -37,6 +41,30 @@ def _candidate(question_id: str, paragraph_id: str, text: str) -> dict:
         fusion_rank=1,
         support_count=1,
         supports=[EvidenceSupport(engine="rule_based", rank=1, score=1.0)],
+    ).model_dump()
+
+
+def _candidate_with_supporting_quote(
+    question_id: str,
+    paragraph_id: str,
+    text: str,
+    supporting_quote: str,
+) -> dict:
+    return FusedEvidenceCandidate(
+        question_id=question_id,
+        paragraph_id=paragraph_id,
+        title="Methods",
+        page=2,
+        text=text,
+        fusion_score=0.8,
+        fusion_rank=1,
+        support_count=1,
+        supports=[EvidenceSupport(engine="rule_based", rank=1, score=1.0)],
+        relevance=RelevanceVerdict(
+            label="relevant",
+            confidence=1.0,
+            supporting_quote=supporting_quote,
+        ),
     ).model_dump()
 
 
@@ -815,3 +843,171 @@ def test_d5_reasoning_parses_answers() -> None:
     assert answers["q5_1"] == "Y"
     assert answers["q5_2"] == "PY"
     assert answers["q5_3"] == "PN"
+
+
+def _single_question_set() -> QuestionSet:
+    return QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q1_1",
+                rob2_id="q1_1",
+                domain="D1",
+                text="Was the allocation sequence random?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            )
+        ],
+    )
+
+
+def test_domain_reasoning_quote_invalid_uses_supporting_quote() -> None:
+    question_set = _single_question_set()
+    validated_candidates = {
+        "q1_1": [
+            _candidate_with_supporting_quote(
+                "q1_1",
+                "p1",
+                "Allocation used a random number table.",
+                "random number table",
+            )
+        ]
+    }
+    llm = _DummyLLM(
+        json.dumps(
+            {
+                "domain_risk": "high",
+                "domain_rationale": "Randomization described.",
+                "answers": [
+                    {
+                        "question_id": "q1_1",
+                        "answer": "Y",
+                        "rationale": "Random number table reported.",
+                        "evidence": [{"paragraph_id": "p1", "quote": "wrong quote"}],
+                        "confidence": 0.8,
+                    }
+                ],
+            }
+        )
+    )
+
+    decision = run_domain_reasoning(
+        domain="D1",
+        question_set=question_set,
+        validated_candidates=validated_candidates,
+        llm=cast(ChatModelLike, llm),
+        llm_config=None,
+    )
+
+    assert decision.answers[0].evidence_refs[0].quote == "random number table"
+
+
+def test_domain_reasoning_quote_invalid_drops_quote() -> None:
+    question_set = _single_question_set()
+    validated_candidates = {
+        "q1_1": [_candidate("q1_1", "p1", "Allocation used a random number table.")],
+    }
+    llm = _DummyLLM(
+        json.dumps(
+            {
+                "domain_risk": "high",
+                "domain_rationale": "Randomization described.",
+                "answers": [
+                    {
+                        "question_id": "q1_1",
+                        "answer": "Y",
+                        "rationale": "Random number table reported.",
+                        "evidence": [{"paragraph_id": "p1", "quote": "wrong quote"}],
+                        "confidence": 0.8,
+                    }
+                ],
+            }
+        )
+    )
+
+    decision = run_domain_reasoning(
+        domain="D1",
+        question_set=question_set,
+        validated_candidates=validated_candidates,
+        llm=cast(ChatModelLike, llm),
+        llm_config=None,
+    )
+
+    assert decision.answers[0].evidence_refs[0].quote is None
+
+
+def test_domain_reasoning_quote_validation_disabled_keeps_llm_quote() -> None:
+    question_set = _single_question_set()
+    validated_candidates = {
+        "q1_1": [_candidate("q1_1", "p1", "Allocation used a random number table.")],
+    }
+    llm = _DummyLLM(
+        json.dumps(
+            {
+                "domain_risk": "high",
+                "domain_rationale": "Randomization described.",
+                "answers": [
+                    {
+                        "question_id": "q1_1",
+                        "answer": "Y",
+                        "rationale": "Random number table reported.",
+                        "evidence": [{"paragraph_id": "p1", "quote": "wrong quote"}],
+                        "confidence": 0.8,
+                    }
+                ],
+            }
+        )
+    )
+    quote_config = DomainQuoteValidationConfig(
+        enabled=False,
+        match_policy="folded_casefold",
+        fallback="supporting_quote",
+    )
+
+    decision = run_domain_reasoning(
+        domain="D1",
+        question_set=question_set,
+        validated_candidates=validated_candidates,
+        llm=cast(ChatModelLike, llm),
+        llm_config=None,
+        quote_config=quote_config,
+    )
+
+    assert decision.answers[0].evidence_refs[0].quote == "wrong quote"
+
+
+def test_domain_reasoning_quote_match_policy_folded_casefold() -> None:
+    question_set = _single_question_set()
+    validated_candidates = {
+        "q1_1": [_candidate("q1_1", "p1", "Allocation used a Random Number Table.")],
+    }
+    llm = _DummyLLM(
+        json.dumps(
+            {
+                "domain_risk": "high",
+                "domain_rationale": "Randomization described.",
+                "answers": [
+                    {
+                        "question_id": "q1_1",
+                        "answer": "Y",
+                        "rationale": "Random number table reported.",
+                        "evidence": [
+                            {"paragraph_id": "p1", "quote": "random   number table"}
+                        ],
+                        "confidence": 0.8,
+                    }
+                ],
+            }
+        )
+    )
+
+    decision = run_domain_reasoning(
+        domain="D1",
+        question_set=question_set,
+        validated_candidates=validated_candidates,
+        llm=cast(ChatModelLike, llm),
+        llm_config=None,
+    )
+
+    assert decision.answers[0].evidence_refs[0].quote == "random   number table"

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Mapping
 
 from pipelines.graphs.nodes.domains.common import (
+    read_domain_quote_config,
     read_domain_llm_config,
     run_domain_reasoning,
 )
@@ -26,6 +27,7 @@ def d1_randomization_node(state: dict) -> dict:
 
     llm = state.get("d1_llm")
     config, config_report = read_domain_llm_config(state, prefix="d1")
+    quote_config = read_domain_quote_config(state)
     if llm is None and not config.model:
         raise ValueError("Missing D1 model (set D1_MODEL or state['d1_model']).")
 
@@ -36,6 +38,7 @@ def d1_randomization_node(state: dict) -> dict:
         llm=llm,
         llm_config=None if llm is not None else config,
         evidence_top_k=int(state.get("domain_evidence_top_k") or 5),
+        quote_config=quote_config,
     )
 
     return {

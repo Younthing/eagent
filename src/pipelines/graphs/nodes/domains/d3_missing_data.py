@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Mapping
 
 from pipelines.graphs.nodes.domains.common import (
+    read_domain_quote_config,
     read_domain_llm_config,
     run_domain_reasoning,
 )
@@ -26,6 +27,7 @@ def d3_missing_data_node(state: dict) -> dict:
 
     llm = state.get("d3_llm")
     config, config_report = read_domain_llm_config(state, prefix="d3")
+    quote_config = read_domain_quote_config(state)
     if llm is None and not config.model:
         raise ValueError("Missing D3 model (set D3_MODEL or state['d3_model']).")
 
@@ -36,6 +38,7 @@ def d3_missing_data_node(state: dict) -> dict:
         llm=llm,
         llm_config=None if llm is not None else config,
         evidence_top_k=int(state.get("domain_evidence_top_k") or 5),
+        quote_config=quote_config,
     )
 
     return {

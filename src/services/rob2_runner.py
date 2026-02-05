@@ -452,6 +452,17 @@ def _build_run_state(
         "validation_relax_on_retry": _resolve_bool(options.validation_relax_on_retry, True),
         "d2_effect_type": _resolve_choice(options.d2_effect_type, "assignment"),
         "domain_evidence_top_k": domain_evidence_top_k,
+        "domain_quote_validation": _resolve_bool(
+            options.domain_quote_validation, settings.domain_quote_validation
+        ),
+        "domain_quote_match_policy": _resolve_choice(
+            options.domain_quote_match_policy,
+            settings.domain_quote_match_policy or "folded_casefold",
+        ),
+        "domain_quote_fallback": _resolve_choice(
+            options.domain_quote_fallback,
+            settings.domain_quote_fallback or "supporting_quote",
+        ),
         "d1_model": _resolve_str(options.d1_model) or _resolve_str(settings.d1_model),
         "d1_model_provider": _resolve_str(options.d1_model_provider)
         or _resolve_str(settings.d1_model_provider),
