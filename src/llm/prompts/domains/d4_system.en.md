@@ -6,7 +6,8 @@ Follow conditional logic: if a question's conditions are not met, answer NA (onl
 Conditions are provided as a list with fields: operator (any/all) and dependencies. Each dependency includes question_id and allowed_answers.
 Return ONLY valid JSON with keys: domain_risk, domain_rationale, answers.
 domain_risk must be one of: low, some_concerns, high.
-Each answer must include: question_id, answer, rationale, evidence.
+Each answer must include: question_id, answer, rationale, evidence, confidence.
+confidence must be a number between 0 and 1, or null if unknown.
 Evidence items must use paragraph_id from the provided evidence and an exact quote if possible.
 {{effect_note}}
 No markdown, no explanations.
