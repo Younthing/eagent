@@ -3,6 +3,7 @@ import sys
 from unittest.mock import MagicMock
 
 import pytest
+from docx import Document
 
 from schemas.responses import Rob2RunResult
 from schemas.internal.results import (
@@ -11,6 +12,7 @@ from schemas.internal.results import (
     Rob2DomainResult,
     Rob2AnswerResult,
 )
+from schemas.internal.metadata import DocumentMetadata
 
 
 @pytest.fixture
@@ -51,7 +53,24 @@ def mock_result():
                         )
                     ]
                 )
-            ]
+            ],
+            document_metadata=DocumentMetadata.model_validate(
+                {
+                    "title": "Test Study Title",
+                    "authors": ["Alice", "Bob"],
+                    "year": 2024,
+                    "affiliations": ["Hospital A"],
+                    "funders": ["Fund X"],
+                    "sources": [{"paragraph_id": "p1-0001", "quote": "Test Study Title"}],
+                    "extraction": {
+                        "method": "langextract",
+                        "model_id": "model-x",
+                        "provider": "anthropic",
+                        "confidence": 0.95,
+                        "error": None,
+                    },
+                }
+            ),
         ),
         table_markdown="| Table |",
         reports={},
@@ -66,6 +85,8 @@ def test_generate_html_report(mock_result, tmp_path, reports_module):
     assert output_path.exists()
     content = output_path.read_text(encoding="utf-8")
     assert "ROB2 风险偏倚评估报告" in content
+    assert "文献元信息" in content
+    assert "Test Study Title" in content
     assert "Domain 1 rationale" in content
     assert "规则路径" in content
 
@@ -73,6 +94,10 @@ def test_generate_docx_report(mock_result, tmp_path, reports_module):
     output_path = tmp_path / "report.docx"
     reports_module.generate_docx_report(mock_result, output_path, "test.pdf")
     assert output_path.exists()
+    document = Document(str(output_path))
+    text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+    assert "文献元信息" in text
+    assert "Test Study Title" in text
 
 def test_generate_pdf_report(mock_result, tmp_path, reports_module):
     output_path = tmp_path / "report.pdf"
@@ -86,3 +111,4 @@ def test_render_html_includes_rule_trace(mock_result):
 
     content = render_html(mock_result, pdf_name="test.pdf")
     assert "规则路径" in content
+    assert "文献元信息" in content

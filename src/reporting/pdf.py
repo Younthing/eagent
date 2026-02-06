@@ -11,7 +11,7 @@ try:
     from weasyprint import HTML, CSS
 
     WEASYPRINT_AVAILABLE = True
-except ImportError:
+except Exception:
     WEASYPRINT_AVAILABLE = False
 
 

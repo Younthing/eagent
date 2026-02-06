@@ -31,8 +31,11 @@ def build_report_context(
     generated_at: datetime.datetime | None = None,
 ) -> dict[str, Any]:
     timestamp = generated_at or datetime.datetime.now()
+    metadata = result.result.document_metadata
+    metadata_payload = metadata.model_dump() if metadata is not None else None
     return {
         "data": result.result,
+        "document_metadata": metadata_payload,
         "pdf_name": pdf_name,
         "generated_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
         "risk_labels": RISK_LABELS,

@@ -270,6 +270,7 @@ Notes:
 * **Domain Reasoning (D1-D5)**：LLM 产出子问题答案，风险由规则树（`rob2/decision_rules.py`）判定。
 * **Full-Text Domain Audit（可选）**：全文审核信号答案，提供引用并补全证据后重跑受影响 domain。
 * **ROB2 Aggregator**：汇总五域与 overall risk（ROB2 Standard 规则），输出结构化结果。
+* **Batch Exporter**：基于批量 `batch_summary.json` + 各 `result.json` 生成红绿灯图（PNG）与多 sheet 审计工作簿（XLSX）。
 * **Runtime/Orchestration**：LangGraph 装配、并行调度与中断恢复。
 
 ### Interface Contracts (Data Schemas)
@@ -283,6 +284,7 @@ Notes:
 * **Rob2FinalOutput**: `{ overall, domains, citations, document_metadata? }`（见 `src/schemas/internal/results.py`）
   * `citations[*]`: `{ paragraph_id, page, title, text, uses[] }`
   * 额外输出：`rob2_table_markdown`（Markdown 表格，便于人读）
+* **Batch Artifacts**: `batch_summary.json/csv` + `batch_traffic_light.png` + `batch_summary.xlsx`
 
 ### Subsystem vs Package Boundary
 

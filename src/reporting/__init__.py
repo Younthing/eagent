@@ -10,6 +10,10 @@ from reporting.batch_plot import (
     generate_batch_traffic_light_png,
     load_batch_summary,
 )
+from reporting.batch_excel import (
+    DEFAULT_BATCH_EXCEL_FILE,
+    generate_batch_summary_excel,
+)
 from reporting.context import build_report_context
 from schemas.responses import Rob2RunResult
 
@@ -34,8 +38,10 @@ def generate_pdf_report(result: Rob2RunResult, output_path: Path, pdf_name: str 
 
 __all__ = [
     "DEFAULT_BATCH_PLOT_FILE",
+    "DEFAULT_BATCH_EXCEL_FILE",
     "SUMMARY_FILE_NAME",
     "build_report_context",
+    "generate_batch_summary_excel",
     "generate_batch_traffic_light_png",
     "generate_docx_report",
     "generate_html_report",

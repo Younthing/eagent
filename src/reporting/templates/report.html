@@ -36,6 +36,27 @@
             font-size: 1.2em;
             font-weight: bold;
         }
+        .metadata-card {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            background-color: #fafafa;
+        }
+        .metadata-grid {
+            display: grid;
+            grid-template-columns: 140px 1fr;
+            row-gap: 8px;
+            column-gap: 10px;
+            margin-bottom: 10px;
+        }
+        .metadata-label {
+            font-weight: bold;
+            color: #555;
+        }
+        .metadata-value {
+            word-break: break-word;
+        }
         .risk-low { background-color: #d4edda; color: #155724; }
         .risk-some_concerns { background-color: #fff3cd; color: #856404; }
         .risk-high { background-color: #f8d7da; color: #721c24; }
@@ -144,6 +165,52 @@
             <h1>ROB2 风险偏倚评估报告</h1>
             <p>生成时间: {{ generated_at }}</p>
             <p>PDF 文件: {{ pdf_name }}</p>
+        </div>
+
+        <div class="metadata-card">
+            <h2>文献元信息</h2>
+            {% if document_metadata %}
+            <div class="metadata-grid">
+                <div class="metadata-label">标题</div>
+                <div class="metadata-value">{{ document_metadata.title or '' }}</div>
+
+                <div class="metadata-label">作者</div>
+                <div class="metadata-value">{{ (document_metadata.authors or [])|join('; ') }}</div>
+
+                <div class="metadata-label">年份</div>
+                <div class="metadata-value">{{ document_metadata.year or '' }}</div>
+
+                <div class="metadata-label">机构</div>
+                <div class="metadata-value">{{ (document_metadata.affiliations or [])|join('; ') }}</div>
+
+                <div class="metadata-label">基金</div>
+                <div class="metadata-value">{{ (document_metadata.funders or [])|join('; ') }}</div>
+            </div>
+
+            {% if document_metadata.extraction %}
+            <div class="metadata-value">
+                <strong>提取信息:</strong>
+                method={{ document_metadata.extraction.method or '' }},
+                model={{ document_metadata.extraction.model_id or '' }},
+                provider={{ document_metadata.extraction.provider or '' }},
+                confidence={{ document_metadata.extraction.confidence if document_metadata.extraction.confidence is not none else '' }},
+                error={{ document_metadata.extraction.error or '' }}
+            </div>
+            {% endif %}
+
+            {% if document_metadata.sources %}
+            <div class="metadata-value" style="margin-top: 10px;">
+                <strong>元信息来源:</strong>
+                <ul>
+                    {% for src in document_metadata.sources %}
+                    <li>{{ src.paragraph_id }}: {{ src.quote }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            {% else %}
+            <p>未提取到文献元信息。</p>
+            {% endif %}
         </div>
 
         <div class="overall-risk risk-{{ data.overall.risk }}">

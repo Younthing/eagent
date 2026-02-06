@@ -67,6 +67,8 @@ def test_batch_run_resumes_failed_items(tmp_path: Path, monkeypatch) -> None:
             cache_scope=None,
             plot=True,
             plot_output=None,
+            excel=True,
+            excel_output=None,
         )
     except typer.Exit as exc:
         assert exc.exit_code == 1
@@ -77,6 +79,7 @@ def test_batch_run_resumes_failed_items(tmp_path: Path, monkeypatch) -> None:
     assert summary_1["counts"]["success"] == 1
     assert summary_1["counts"]["failed"] == 1
     assert (output_dir / "batch_traffic_light.png").exists()
+    assert (output_dir / "batch_summary.xlsx").exists()
 
     mode["fail_two"] = False
     batch_command.run_batch(
@@ -100,6 +103,8 @@ def test_batch_run_resumes_failed_items(tmp_path: Path, monkeypatch) -> None:
         cache_scope=None,
         plot=True,
         plot_output=None,
+        excel=True,
+        excel_output=None,
     )
 
     summary_2 = json.loads((output_dir / "batch_summary.json").read_text(encoding="utf-8"))
@@ -107,6 +112,7 @@ def test_batch_run_resumes_failed_items(tmp_path: Path, monkeypatch) -> None:
     assert summary_2["counts"]["success"] == 1
     assert summary_2["counts"]["skipped"] == 1
     assert (output_dir / "batch_traffic_light.png").exists()
+    assert (output_dir / "batch_summary.xlsx").exists()
 
     assert calls == ["one.pdf", "two.pdf", "two.pdf"]
 
@@ -160,6 +166,9 @@ def test_batch_run_no_plot_does_not_generate_png(tmp_path: Path, monkeypatch) ->
         cache_scope=None,
         plot=False,
         plot_output=None,
+        excel=True,
+        excel_output=None,
     )
 
     assert not (output_dir / "batch_traffic_light.png").exists()
+    assert (output_dir / "batch_summary.xlsx").exists()

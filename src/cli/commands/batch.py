@@ -25,6 +25,10 @@ from reporting.batch_plot import (
     generate_batch_traffic_light_png,
     load_batch_summary,
 )
+from reporting.batch_excel import (
+    DEFAULT_BATCH_EXCEL_FILE,
+    generate_batch_summary_excel,
+)
 from schemas.requests import Rob2Input
 from services.rob2_runner import run_rob2
 
@@ -44,6 +48,7 @@ _CHECKPOINT_FILE = "batch_checkpoint.json"
 _SUMMARY_JSON_FILE = SUMMARY_FILE_NAME
 _SUMMARY_CSV_FILE = "batch_summary.csv"
 _BATCH_PLOT_FILE = DEFAULT_BATCH_PLOT_FILE
+_BATCH_EXCEL_FILE = DEFAULT_BATCH_EXCEL_FILE
 _CSV_COLUMNS = [
     "relative_path",
     "status",
@@ -163,6 +168,16 @@ def run_batch(
         None,
         "--plot-output",
         help="红绿灯图输出路径（默认: <output-dir>/batch_traffic_light.png）",
+    ),
+    excel: bool = typer.Option(
+        True,
+        "--excel/--no-excel",
+        help="批量结束后生成 Excel 汇总（XLSX）",
+    ),
+    excel_output: Path | None = typer.Option(
+        None,
+        "--excel-output",
+        help="Excel 汇总输出路径（默认: <output-dir>/batch_summary.xlsx）",
     ),
 ) -> None:
     input_dir_abs = input_dir.resolve()
@@ -324,6 +339,21 @@ def run_batch(
         except Exception as exc:  # pragma: no cover - defensive
             typer.echo(f"Warning: 红绿灯图生成失败: {exc}")
 
+    if excel:
+        if excel_output is None:
+            resolved_excel_output = output_dir_abs / _BATCH_EXCEL_FILE
+        else:
+            resolved_excel_output = excel_output.resolve()
+        try:
+            exported = _generate_batch_excel(
+                summary,
+                output_dir_abs / _SUMMARY_JSON_FILE,
+                resolved_excel_output,
+            )
+            typer.echo(f"已写入: {resolved_excel_output} (rows={exported})")
+        except Exception as exc:  # pragma: no cover - defensive
+            typer.echo(f"Warning: Excel 汇总生成失败: {exc}")
+
     if json_out:
         emit_json(summary)
 
@@ -362,6 +392,30 @@ def plot_batch(
         include_non_success=include_non_success,
     )
     typer.echo(f"已写入: {output_path} (rows={plotted})")
+
+
+@app.command("excel", help="根据批量 summary 生成 Excel 汇总（XLSX）")
+def excel_batch(
+    source: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=True,
+        readable=True,
+        metavar="目录或summary路径",
+    ),
+    output: Path | None = typer.Option(
+        None,
+        "--output",
+        help="输出 Excel 路径（默认: <batch-output-dir>/batch_summary.xlsx）",
+    ),
+) -> None:
+    summary_path, _ = _resolve_summary_input(source.resolve())
+    summary = _load_summary_or_raise(summary_path)
+    default_output = _default_excel_output(summary_path)
+    output_path = output.resolve() if output is not None else default_output
+    exported = _generate_batch_excel(summary, summary_path, output_path)
+    typer.echo(f"已写入: {output_path} (rows={exported})")
 
 
 def _build_initial_checkpoint(
@@ -594,6 +648,25 @@ def _generate_batch_plot(
         )
     except ValueError as exc:
         raise typer.BadParameter(f"红绿灯图生成失败: {exc}") from exc
+
+
+def _default_excel_output(summary_path: Path) -> Path:
+    return summary_path.parent / _BATCH_EXCEL_FILE
+
+
+def _generate_batch_excel(
+    summary: dict[str, Any],
+    summary_path: Path,
+    output_path: Path,
+) -> int:
+    try:
+        return generate_batch_summary_excel(
+            summary,
+            summary_path=summary_path,
+            output_path=output_path,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(f"Excel 汇总生成失败: {exc}") from exc
 
 
 def _format_error(exc: Exception) -> str:
