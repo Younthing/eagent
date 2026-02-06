@@ -115,19 +115,19 @@ def run_batch(
         help="每文件输出 ROB2 Markdown 表格",
     ),
     html: bool = typer.Option(
-        False,
-        "--html",
-        help="每文件生成交互式 HTML 报告",
+        True,
+        "--html/--no-html",
+        help="每文件生成交互式 HTML 报告（默认开启）",
     ),
     docx: bool = typer.Option(
-        False,
-        "--docx",
-        help="每文件生成 Word 报告",
+        True,
+        "--docx/--no-docx",
+        help="每文件生成 Word 报告（默认开启）",
     ),
     pdf: bool = typer.Option(
-        False,
-        "--pdf",
-        help="每文件生成 PDF 报告",
+        True,
+        "--pdf/--no-pdf",
+        help="每文件生成 PDF 报告（默认开启）",
     ),
     reset: bool = typer.Option(
         False,

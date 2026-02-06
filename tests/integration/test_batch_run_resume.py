@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import typer
+from typer.testing import CliRunner
 
 from cli.commands import batch as batch_command
 
@@ -172,3 +173,59 @@ def test_batch_run_no_plot_does_not_generate_png(tmp_path: Path, monkeypatch) ->
 
     assert not (output_dir / "batch_traffic_light.png").exists()
     assert (output_dir / "batch_summary.xlsx").exists()
+
+
+def test_batch_run_defaults_enable_all_report_formats(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    input_dir = tmp_path / "pdfs"
+    input_dir.mkdir()
+    (input_dir / "one.pdf").write_bytes(b"%PDF-1.4")
+
+    output_dir = tmp_path / "out"
+    captured_kwargs: dict | None = None
+
+    def fake_run_rob2(input_data, *_args, **_kwargs):
+        name = Path(str(input_data.pdf_path)).name
+        domain = SimpleNamespace(domain="D1", risk="low")
+        overall = SimpleNamespace(risk="low")
+        result_payload = SimpleNamespace(overall=overall, domains=[domain])
+        return SimpleNamespace(
+            run_id=f"run_{name}",
+            runtime_ms=42,
+            result=result_payload,
+        )
+
+    def fake_write_run_output_dir(result, path, **kwargs):
+        nonlocal captured_kwargs
+        captured_kwargs = kwargs
+        path.mkdir(parents=True, exist_ok=True)
+        (path / "result.json").write_text(
+            json.dumps({"run_id": result.run_id}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(batch_command, "run_rob2", fake_run_rob2)
+    monkeypatch.setattr(batch_command, "write_run_output_dir", fake_write_run_output_dir)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        batch_command.app,
+        [
+            "run",
+            str(input_dir),
+            "--output-dir",
+            str(output_dir),
+            "--no-persist",
+            "--no-plot",
+            "--no-excel",
+        ],
+    )
+    assert result.exit_code == 0
+
+    assert captured_kwargs is not None
+    assert captured_kwargs["include_table"] is True
+    assert captured_kwargs["html"] is True
+    assert captured_kwargs["docx"] is True
+    assert captured_kwargs["pdf"] is True
