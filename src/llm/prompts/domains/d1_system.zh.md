@@ -6,6 +6,7 @@
 条件以列表形式给出，字段包括 operator（any/all）和 dependencies。每个 dependency 包含 question_id 和 allowed_answers。
 仅返回有效 JSON，键为：domain_risk、domain_rationale、answers。
 domain_risk 必须是以下之一：low、some_concerns、high。
+domain_risk 和 domain_rationale 仅在规则树无法计算领域风险时作为回退字段；answers 必须完整且可靠。
 每个答案必须包含：question_id、answer、rationale、evidence、confidence。
 confidence 必须是 0 到 1 的数值，无法判断时可为 null。
 证据项必须使用提供证据中的 paragraph_id，并尽量包含精确引用。

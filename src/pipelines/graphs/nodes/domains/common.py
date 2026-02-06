@@ -55,8 +55,8 @@ class _AnswerOutput(BaseModel):
 
 
 class _DecisionOutput(BaseModel):
-    domain_risk: str
-    domain_rationale: str
+    domain_risk: Optional[str] = None
+    domain_rationale: Optional[str] = None
     answers: List[_AnswerOutput]
 
     model_config = ConfigDict(extra="ignore")
@@ -82,6 +82,7 @@ _RISK_MAP = {
 _PROMPTS_DIR = Path(__file__).resolve().parents[4] / "llm" / "prompts" / "domains"
 _SYSTEM_PROMPT_FALLBACK = "rob2_domain_system.md"
 _EFFECT_NOTE_PATTERN = re.compile(r"{{\s*effect_note\s*}}")
+_RULE_TRACE_QUESTION_PATTERN = re.compile(r"q\d+[ab]?_\d+")
 
 
 @lru_cache(maxsize=1)
@@ -359,28 +360,90 @@ def _normalize_decision(
             )
         )
 
-    llm_risk = _normalize_risk(response.domain_risk)
     rule_risk, rule_trace = evaluate_domain_risk_with_trace(
         domain,
         normalized_answers,
         effect_type=effect_type,
     )
-    risk = rule_risk or llm_risk
+    if rule_risk is not None:
+        risk: DomainRisk = rule_risk
+        risk_rationale = _build_rule_based_rationale(
+            domain=domain,
+            effect_type=effect_type,
+            rule_trace=rule_trace,
+            normalized_answers=normalized_answers,
+        )
+        final_rule_trace = list(rule_trace)
+    else:
+        llm_risk = _normalize_llm_risk(response.domain_risk)
+        if llm_risk is None:
+            raise ValueError(
+                "LLM fallback domain_risk is missing or invalid "
+                f"(domain={domain}, effect_type={effect_type}, rule_trace={rule_trace})"
+            )
+        risk = llm_risk
+        risk_rationale = (
+            str(response.domain_rationale or "").strip()
+            or "No domain-level rationale provided."
+        )
+        final_rule_trace = [
+            *rule_trace,
+            "FALLBACK: rule_unavailable -> llm_domain_risk",
+        ]
+
     return DomainDecision(
         domain=domain,
         effect_type=effect_type,
-        risk=cast(DomainRisk, risk),
-        risk_rationale=str(response.domain_rationale or "").strip()
-        or "No domain-level rationale provided.",
+        risk=risk,
+        risk_rationale=risk_rationale,
         answers=answers,
         missing_questions=missing_questions,
-        rule_trace=rule_trace,
+        rule_trace=final_rule_trace,
     )
 
 
-def _normalize_risk(value: str) -> str:
+def _build_rule_based_rationale(
+    *,
+    domain: DomainId,
+    effect_type: Optional[EffectType],
+    rule_trace: Sequence[str],
+    normalized_answers: Mapping[str, AnswerOption],
+) -> str:
+    trace_line = rule_trace[0] if rule_trace else f"{domain}:R0 no rule trace"
+    question_ids = _extract_rule_question_ids(rule_trace)
+    if not question_ids:
+        question_ids = list(normalized_answers.keys())
+    key_answers = ", ".join(
+        f"{question_id}={normalized_answers.get(question_id, 'NI')}"
+        for question_id in question_ids[:6]
+    )
+    effect_suffix = f"/{effect_type}" if effect_type else ""
+    if key_answers:
+        return (
+            f"Rule tree determined risk for {domain}{effect_suffix}. "
+            f"Matched rule: {trace_line}. Key answers: {key_answers}."
+        )
+    return f"Rule tree determined risk for {domain}{effect_suffix}. Matched rule: {trace_line}."
+
+
+def _extract_rule_question_ids(rule_trace: Sequence[str]) -> List[str]:
+    question_ids: List[str] = []
+    seen: set[str] = set()
+    for line in rule_trace:
+        for question_id in _RULE_TRACE_QUESTION_PATTERN.findall(line):
+            if question_id in seen:
+                continue
+            seen.add(question_id)
+            question_ids.append(question_id)
+    return question_ids
+
+
+def _normalize_llm_risk(value: Optional[str]) -> DomainRisk | None:
     key = str(value or "").strip().lower()
-    return _RISK_MAP.get(key, "some_concerns")
+    normalized = _RISK_MAP.get(key)
+    if normalized is None:
+        return None
+    return cast(DomainRisk, normalized)
 
 
 def _normalize_answer(value: str, options: Sequence[str]) -> str:

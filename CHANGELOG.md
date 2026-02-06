@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.7 - 2026-02-06
+- 领域风险判定改为“规则树优先，规则不可算时回退 LLM”，消除规则结论与 LLM 总评冲突。
+- `risk_rationale` 与 `risk` 来源绑定：规则命中时使用规则侧确定性解释（含命中规则与关键问答），回退时使用 `domain_rationale`。
+- 回退路径新增严格校验：LLM `domain_risk` 缺失或非法时抛出可定位错误，并在 `rule_trace` 追加 `FALLBACK: rule_unavailable -> llm_domain_risk`。
+- 更新领域提示词语义（键名不变）与相关单测、ADR、架构/系统文档。
+
 ## 0.1.6 - 2026-02-05
 - 新增 `rob2 batch plot` 命令，可从批量输出目录或 `batch_summary.json` 生成经典红绿灯矩阵图（PNG）。
 - `rob2 batch run` 新增 `--plot/--no-plot` 与 `--plot-output`，默认自动生成 `batch_traffic_light.png`。

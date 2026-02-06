@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import cast
 
+import pytest
+
 from pipelines.graphs.nodes.domains.common import (
     ChatModelLike,
     build_domain_prompts,
@@ -119,6 +121,9 @@ def test_d1_reasoning_parses_answers_and_evidence() -> None:
 
     assert decision.domain == "D1"
     assert decision.risk == "low"
+    assert decision.risk_rationale != "Randomization described."
+    assert "D1:R3" in decision.risk_rationale
+    assert "q1_2=Y" in decision.risk_rationale
     assert decision.answers[0].answer == "Y"
     assert decision.answers[0].evidence_refs[0].paragraph_id == "p1"
 
@@ -458,6 +463,122 @@ def test_d2_adherence_rule_override() -> None:
     )
 
     assert decision.risk == "low"
+
+
+def test_d2_falls_back_to_llm_risk_when_rule_unavailable() -> None:
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q2a_6",
+                rob2_id="q2_6",
+                domain="D2",
+                effect_type="assignment",
+                text="Was an appropriate analysis used to estimate the effect of assignment?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            ),
+            Rob2Question(
+                question_id="q2a_7",
+                rob2_id="q2_7",
+                domain="D2",
+                effect_type="assignment",
+                text="Was there potential impact of failure to analyze?",
+                options=["NA", "Y", "PY", "PN", "N", "NI"],
+                order=2,
+            ),
+        ],
+    )
+    validated_candidates = {
+        "q2a_6": [_candidate("q2a_6", "p1", "Appropriate analysis was used.")],
+        "q2a_7": [_candidate("q2a_7", "p2", "No impact expected.")],
+    }
+    llm = _DummyLLM(
+        json.dumps(
+            {
+                "domain_risk": "some concerns",
+                "domain_rationale": "Fallback from LLM because rule tree is unavailable.",
+                "answers": [
+                    {
+                        "question_id": "q2a_6",
+                        "answer": "Y",
+                        "rationale": "Appropriate analysis.",
+                        "evidence": [{"paragraph_id": "p1", "quote": "appropriate"}],
+                    },
+                    {
+                        "question_id": "q2a_7",
+                        "answer": "NA",
+                        "rationale": "Not applicable.",
+                        "evidence": [{"paragraph_id": "p2", "quote": "no impact"}],
+                    },
+                ],
+            }
+        )
+    )
+
+    decision = run_domain_reasoning(
+        domain="D2",
+        question_set=question_set,
+        validated_candidates=validated_candidates,
+        llm=cast(ChatModelLike, llm),
+        llm_config=None,
+        effect_type=None,
+    )
+
+    assert decision.risk == "some_concerns"
+    assert decision.risk_rationale == "Fallback from LLM because rule tree is unavailable."
+    assert decision.rule_trace[-1] == "FALLBACK: rule_unavailable -> llm_domain_risk"
+
+
+def test_d2_fallback_requires_valid_llm_domain_risk() -> None:
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q2a_6",
+                rob2_id="q2_6",
+                domain="D2",
+                effect_type="assignment",
+                text="Was an appropriate analysis used to estimate the effect of assignment?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            )
+        ],
+    )
+    validated_candidates = {
+        "q2a_6": [_candidate("q2a_6", "p1", "Appropriate analysis was used.")],
+    }
+    llm = _DummyLLM(
+        json.dumps(
+            {
+                "domain_rationale": "No risk value returned.",
+                "answers": [
+                    {
+                        "question_id": "q2a_6",
+                        "answer": "Y",
+                        "rationale": "Appropriate analysis.",
+                        "evidence": [{"paragraph_id": "p1", "quote": "appropriate"}],
+                    }
+                ],
+            }
+        )
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        run_domain_reasoning(
+            domain="D2",
+            question_set=question_set,
+            validated_candidates=validated_candidates,
+            llm=cast(ChatModelLike, llm),
+            llm_config=None,
+            effect_type=None,
+        )
+    message = str(exc_info.value)
+    assert "domain=D2" in message
+    assert "effect_type=None" in message
+    assert "rule_trace" in message
 
 
 def test_d3_reasoning_condition_chain_sets_na() -> None:

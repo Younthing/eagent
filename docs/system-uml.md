@@ -132,7 +132,7 @@ Notes:
 - Validation failures trigger retry scoped to failed questions; if retries exhaust, a full-text audit fallback is enabled (Milestone 7/9).
 - Domain reasoning loads system prompts from `src/llm/prompts/domains/{domain}_system.{lang}.md` using `PROMPT_LANG` (default `zh`), with fallback to `{domain}_system.md`, then `rob2_domain_system.{lang}.md`, then `rob2_domain_system.md`.
 - Domain audit loads system prompts from `src/llm/prompts/validators/domain_audit_system.{lang}.md` (falls back to `domain_audit_system.md` if missing).
-- Domain reasoning normalizes answers and applies decision-tree rules (`src/rob2/decision_rules.py`) to set domain risk when defined.
+- Domain reasoning normalizes answers, applies decision-tree rules (`src/rob2/decision_rules.py`) with rule-first priority, and only falls back to LLM `domain_risk/domain_rationale` when rule risk is unavailable; `risk_rationale` is always bound to the chosen risk source.
 - Per-domain `*_audit_node` steps (Milestone 9) read the full document, propose citations, patch `validated_candidates`, and re-run the corresponding domain only when `domain_audit_mode=llm` and `domain_audit_rerun_domains=true` (default: true).
 - `final_domain_audit_node` is optional and emits an all-domain audit report (no rerun) when `domain_audit_mode=llm` and `domain_audit_final=true`.
 - `aggregate_node` produces `rob2_result` (JSON) + `rob2_table_markdown` (human-readable).
