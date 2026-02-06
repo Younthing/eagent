@@ -1,0 +1,10 @@
+{
+  "$schema": "https://langgra.ph/schema.json",
+  "dependencies": [
+    "."
+  ],
+  "graphs": {
+    "rob2": "./src/pipelines/graphs/langgraph_entry.py:graph"
+  },
+  "env": ".env"
+}
