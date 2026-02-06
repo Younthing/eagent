@@ -1,0 +1,94 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+PROMPT_DIR = Path(__file__).resolve().parents[2] / "src" / "llm" / "prompts" / "domains"
+
+ALL_PROMPTS = [
+    "d1_system.md",
+    "d1_system.en.md",
+    "d1_system.zh.md",
+    "d2_system.md",
+    "d2_system.en.md",
+    "d2_system.zh.md",
+    "d3_system.md",
+    "d3_system.en.md",
+    "d3_system.zh.md",
+    "d4_system.md",
+    "d4_system.en.md",
+    "d4_system.zh.md",
+    "d5_system.md",
+    "d5_system.en.md",
+    "d5_system.zh.md",
+    "rob2_domain_system.md",
+    "rob2_domain_system.en.md",
+    "rob2_domain_system.zh.md",
+]
+
+
+def _load(name: str) -> str:
+    return (PROMPT_DIR / name).read_text(encoding="utf-8")
+
+
+def test_all_domain_prompts_include_core_contract_and_placeholder() -> None:
+    required_tokens = [
+        "domain_risk",
+        "domain_rationale",
+        "answers",
+        "domain_questions",
+        "question_id",
+        "options",
+        "conditions",
+        "evidence",
+        "confidence",
+        "NI",
+        "NA",
+        "{{effect_note}}",
+    ]
+    for name in ALL_PROMPTS:
+        text = _load(name)
+        for token in required_tokens:
+            assert token in text, f"{name} missing token: {token}"
+
+        if name.endswith(".zh.md"):
+            assert "回退字段" in text, f"{name} missing fallback semantics"
+            assert "逐字" in text, f"{name} missing verbatim quote constraint"
+            assert "缺失" in text, f"{name} missing NI missing-info guidance"
+            assert "仅输出一条答案" in text, f"{name} missing non-omission constraint"
+        else:
+            lowered = text.lower()
+            assert "fallback fields" in lowered, f"{name} missing fallback semantics"
+            assert "verbatim" in lowered, f"{name} missing verbatim quote constraint"
+            assert "missing" in lowered, f"{name} missing NI missing-info guidance"
+            assert "exactly one answer item" in lowered, f"{name} missing non-omission constraint"
+
+
+def test_d2_prompts_cover_assignment_and_adherence_calibration() -> None:
+    for name in ["d2_system.md", "d2_system.en.md", "d2_system.zh.md"]:
+        text = _load(name).lower()
+        assert "assignment" in text, f"{name} missing assignment calibration"
+        assert "adherence" in text, f"{name} missing adherence calibration"
+
+
+def test_d4_prompts_include_tool_and_assessor_calibration() -> None:
+    for name in ["d4_system.md", "d4_system.en.md"]:
+        text = _load(name).lower()
+        assert "mmse" in text, f"{name} missing standard-tool example"
+        assert "assessor" in text, f"{name} missing assessor emphasis"
+
+    zh_text = _load("d4_system.zh.md")
+    assert "MMSE" in zh_text
+    assert "评估者" in zh_text
+
+
+def test_fallback_prompt_templates_keep_strong_constraints() -> None:
+    for name in [
+        "rob2_domain_system.md",
+        "rob2_domain_system.en.md",
+        "rob2_domain_system.zh.md",
+    ]:
+        text = _load(name)
+        assert "domain_questions" in text
+        assert "question_id" in text
+        assert "evidence" in text
+        assert "{{effect_note}}" in text
