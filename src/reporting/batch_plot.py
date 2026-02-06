@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -28,6 +29,24 @@ _COLORS = {
     "high": "#c62828",
     "not_applicable": "#9e9e9e",
 }
+_PLOT_FONT_SIZE = 14
+_FONT_ENV_VAR = "ROB2_BATCH_PLOT_FONT_PATH"
+_FONT_CANDIDATES = (
+    # macOS
+    "/System/Library/Fonts/PingFang.ttc",
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",
+    "/System/Library/Fonts/Supplemental/Songti.ttc",
+    "/Library/Fonts/Arial Unicode.ttf",
+    # Linux
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+    # Windows
+    "C:/Windows/Fonts/msyh.ttc",
+    "C:/Windows/Fonts/simhei.ttf",
+    "C:/Windows/Fonts/simsun.ttc",
+)
 
 
 @dataclass(frozen=True)
@@ -123,7 +142,7 @@ def generate_batch_traffic_light_png(
 
 
 def _draw_matrix(rows: list[TrafficLightRow]) -> Image.Image:
-    font: Any = ImageFont.load_default()
+    font: Any = _load_plot_font(_PLOT_FONT_SIZE)
     probe = Image.new("RGB", (1, 1), "white")
     probe_draw = ImageDraw.Draw(probe)
 
@@ -144,7 +163,7 @@ def _draw_matrix(rows: list[TrafficLightRow]) -> Image.Image:
     draw = ImageDraw.Draw(image)
 
     title = "ROB2 Batch Traffic Light Plot"
-    draw.text((margin, margin), title, fill="#111111", font=font)
+    _draw_text(draw, (margin, margin), title, fill="#111111", font=font)
 
     grid_top = margin + title_height
     matrix_left = margin + label_col_width
@@ -156,7 +175,7 @@ def _draw_matrix(rows: list[TrafficLightRow]) -> Image.Image:
         x = matrix_left + idx * cell_width + cell_width // 2
         y = grid_top + header_height // 2
         tw, th = _text_size(draw, label, font)
-        draw.text((x - tw // 2, y - th // 2), label, fill="#2c2c2c", font=font)
+        _draw_text(draw, (x - tw // 2, y - th // 2), label, fill="#2c2c2c", font=font)
 
     draw.line((margin, grid_top + header_height, width - margin, grid_top + header_height), fill="#dddddd")
 
@@ -167,7 +186,13 @@ def _draw_matrix(rows: list[TrafficLightRow]) -> Image.Image:
 
         clipped_label = _clip_text(draw, row.label, font, label_col_width - 12)
         tw, th = _text_size(draw, clipped_label, font)
-        draw.text((margin + 6, row_center - th // 2), clipped_label, fill="#1f1f1f", font=font)
+        _draw_text(
+            draw,
+            (margin + 6, row_center - th // 2),
+            clipped_label,
+            fill="#1f1f1f",
+            font=font,
+        )
 
         for col_index, key in enumerate(_COLUMN_KEYS):
             cx = matrix_left + col_index * cell_width + cell_width // 2
@@ -196,7 +221,7 @@ def _draw_matrix(rows: list[TrafficLightRow]) -> Image.Image:
     for key, text in legend_items:
         color = _COLORS[key]
         draw.ellipse((cursor, legend_top, cursor + 12, legend_top + 12), fill=color, outline="#5f5f5f", width=1)
-        draw.text((cursor + 18, legend_top - 1), text, fill="#2c2c2c", font=font)
+        _draw_text(draw, (cursor + 18, legend_top - 1), text, fill="#2c2c2c", font=font)
         cursor += 120
 
     return image
@@ -207,7 +232,12 @@ def _has_risk_value(value: Any) -> bool:
 
 
 def _text_size(draw: ImageDraw.ImageDraw, text: str, font: Any) -> tuple[int, int]:
-    left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+    try:
+        left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+    except UnicodeEncodeError:
+        fallback_font = ImageFont.load_default()
+        fallback_text = _ascii_fallback_text(text)
+        left, top, right, bottom = draw.textbbox((0, 0), fallback_text, font=fallback_font)
     return int(right - left), int(bottom - top)
 
 
@@ -224,6 +254,48 @@ def _clip_text(
     while clipped and _text_size(draw, f"{clipped}...", font)[0] > max_width:
         clipped = clipped[:-1]
     return f"{clipped}..." if clipped else "..."
+
+
+def _draw_text(
+    draw: ImageDraw.ImageDraw,
+    position: tuple[int, int],
+    text: str,
+    *,
+    fill: str,
+    font: Any,
+) -> None:
+    try:
+        draw.text(position, text, fill=fill, font=font)
+    except UnicodeEncodeError:
+        fallback_font = ImageFont.load_default()
+        draw.text(position, _ascii_fallback_text(text), fill=fill, font=fallback_font)
+
+
+def _load_plot_font(size: int) -> Any:
+    env_path = os.getenv(_FONT_ENV_VAR, "").strip()
+    if env_path:
+        env_font = _load_truetype_font(Path(env_path), size)
+        if env_font is not None:
+            return env_font
+
+    for candidate in _FONT_CANDIDATES:
+        candidate_font = _load_truetype_font(Path(candidate), size)
+        if candidate_font is not None:
+            return candidate_font
+    return ImageFont.load_default()
+
+
+def _load_truetype_font(path: Path, size: int) -> Any | None:
+    if not path.exists():
+        return None
+    try:
+        return ImageFont.truetype(str(path), size=size)
+    except Exception:
+        return None
+
+
+def _ascii_fallback_text(text: str) -> str:
+    return text.encode("ascii", "replace").decode("ascii")
 
 
 __all__ = [
