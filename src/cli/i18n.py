@@ -3,18 +3,24 @@
 from __future__ import annotations
 
 import click
+import typer.main as typer_main
 import typer.rich_utils as rich_utils
+from typing import Callable, cast
 from typer.core import TyperCommand, TyperGroup
 
 
 _USAGE_PREFIX = "用法: "
 _HELP_TEXT = "显示帮助并退出"
+_INSTALL_COMPLETION_HELP = "为当前 shell 安装命令补全。"
+_SHOW_COMPLETION_HELP = "显示当前 shell 的补全脚本，可复制或自定义安装。"
+_COMPLETION_ARGS_FACTORY = Callable[[], tuple[click.Parameter, click.Parameter]]
 
 
 def apply_cli_localization() -> None:
     _patch_rich_labels()
     _patch_usage_labels()
     _patch_help_option()
+    _patch_completion_options()
     _patch_click_errors()
 
 
@@ -58,6 +64,26 @@ def _patch_help_option() -> None:
 
     TyperCommand.get_help_option = _get_help_option  # type: ignore[assignment]
     TyperGroup.get_help_option = _get_help_option  # type: ignore[assignment]
+
+
+def _patch_completion_options() -> None:
+    original_factory = cast(
+        _COMPLETION_ARGS_FACTORY | None,
+        getattr(typer_main, "_eagent_original_completion_args", None),
+    )
+    if original_factory is None:
+        original_factory = typer_main.get_install_completion_arguments
+        setattr(typer_main, "_eagent_original_completion_args", original_factory)
+
+    def _get_install_completion_arguments() -> tuple[click.Parameter, click.Parameter]:
+        install_option, show_option = original_factory()
+        if isinstance(install_option, click.Option):
+            install_option.help = _INSTALL_COMPLETION_HELP
+        if isinstance(show_option, click.Option):
+            show_option.help = _SHOW_COMPLETION_HELP
+        return install_option, show_option
+
+    setattr(typer_main, "get_install_completion_arguments", _get_install_completion_arguments)
 
 
 def _patch_click_errors() -> None:
