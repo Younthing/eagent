@@ -2,37 +2,36 @@
 
 from __future__ import annotations
 
+import os
+import shlex
+import sys
+from importlib import import_module
 from pathlib import Path
+from typing import Any
 
 import typer
 
 from eagent import __version__
 from cli.i18n import apply_cli_localization
-from schemas.requests import Rob2Input
-from schemas.responses import Rob2RunResult
-from services.rob2_runner import run_rob2
-from cli.common import (
-    build_options,
-    emit_json,
-    load_options_payload,
-    write_run_output_dir,
-)
-from cli.commands import (
-    audit as audit_command,
-    batch as batch_command,
-    cache as cache_command,
-    config as config_command,
-    fusion as fusion_command,
-    graph as graph_command,
-    locator as locator_command,
-    playground as playground_command,
-    preprocess as preprocess_command,
-    questions as questions_command,
-    retrieval as retrieval_command,
-    validate as validate_command,
-)
 
 apply_cli_localization()
+
+_SUBCOMMAND_SPECS: list[tuple[str, str, str]] = [
+    ("config", "cli.commands.config", "配置查看与导出"),
+    ("questions", "cli.commands.questions", "题库查看与导出"),
+    ("graph", "cli.commands.graph", "查看或运行 LangGraph 图"),
+    ("validate", "cli.commands.validate", "验证层调试"),
+    ("retrieval", "cli.commands.retrieval", "检索与召回调试"),
+    ("batch", "cli.commands.batch", "批量运行 ROB2"),
+    ("fusion", "cli.commands.fusion", "证据融合调试"),
+    ("locator", "cli.commands.locator", "证据定位调试"),
+    ("audit", "cli.commands.audit", "领域审计调试"),
+    ("cache", "cli.commands.cache", "缓存查看与清理"),
+    ("preprocess", "cli.commands.preprocess", "预处理调试"),
+    ("playground", "cli.commands.playground", "交互式调试工具"),
+]
+_SUBCOMMAND_NAMES = {name for name, _, _ in _SUBCOMMAND_SPECS}
+_SUBCOMMANDS_REGISTERED = False
 
 app = typer.Typer(
     help=(
@@ -40,23 +39,10 @@ app = typer.Typer(
     ),
     context_settings={"help_option_names": ["-h", "--help"]},
     invoke_without_command=True,
-    add_completion=False,
+    add_completion=True,
     options_metavar="[选项]",
     subcommand_metavar="命令 [参数]",
 )
-
-app.add_typer(config_command.app, name="config")
-app.add_typer(questions_command.app, name="questions")
-app.add_typer(graph_command.app, name="graph")
-app.add_typer(validate_command.app, name="validate")
-app.add_typer(retrieval_command.app, name="retrieval")
-app.add_typer(batch_command.app, name="batch")
-app.add_typer(fusion_command.app, name="fusion")
-app.add_typer(locator_command.app, name="locator")
-app.add_typer(audit_command.app, name="audit")
-app.add_typer(cache_command.app, name="cache")
-app.add_typer(preprocess_command.app, name="preprocess")
-app.add_typer(playground_command.app, name="playground")
 
 
 @app.callback()
@@ -187,6 +173,10 @@ def run(
         help="生成 PDF 报告 (需要 --output-dir)",
     ),
 ) -> None:
+    from cli.common import build_options, load_options_payload
+    from schemas.requests import Rob2Input
+    from services.rob2_runner import run_rob2
+
     if output_dir is None:
         output_dir = Path("results")
 
@@ -237,7 +227,9 @@ def run(
     )
 
 
-def _emit_result(result: Rob2RunResult, *, json_out: bool, table: bool) -> None:
+def _emit_result(result: Any, *, json_out: bool, table: bool) -> None:
+    from cli.common import emit_json
+
     if json_out:
         emit_json(result.model_dump())
 
@@ -257,7 +249,7 @@ def _normalize_include(values: list[str] | None) -> set[str]:
 
 
 def _write_output_dir(
-    result: Rob2RunResult,
+    result: Any,
     output_dir: Path,
     *,
     include_table: bool,
@@ -266,6 +258,8 @@ def _write_output_dir(
     pdf: bool = False,
     pdf_name: str = "Unknown",
 ) -> None:
+    from cli.common import write_run_output_dir
+
     write_run_output_dir(
         result,
         output_dir,
@@ -277,7 +271,55 @@ def _write_output_dir(
     )
 
 
+def _parse_invoked_subcommand() -> str | None:
+    completion_args = os.getenv("_TYPER_COMPLETE_ARGS")
+    tokens: list[str]
+    if completion_args:
+        try:
+            tokens = shlex.split(completion_args)
+        except ValueError:
+            tokens = completion_args.split()
+        if tokens:
+            tokens = tokens[1:]
+    else:
+        tokens = sys.argv[1:]
+
+    for token in tokens:
+        if token in _SUBCOMMAND_NAMES:
+            return token
+        if token.startswith("-"):
+            continue
+        break
+    return None
+
+
+def _register_subcommands() -> None:
+    global _SUBCOMMANDS_REGISTERED
+    if _SUBCOMMANDS_REGISTERED:
+        return
+
+    selected = _parse_invoked_subcommand()
+    for name, module_path, help_text in _SUBCOMMAND_SPECS:
+        if selected == name:
+            module = import_module(module_path)
+            app.add_typer(module.app, name=name)
+            continue
+        app.add_typer(
+            typer.Typer(
+                help=help_text,
+                add_completion=False,
+                no_args_is_help=True,
+                options_metavar="[选项]",
+                subcommand_metavar="命令 [参数]",
+            ),
+            name=name,
+        )
+
+    _SUBCOMMANDS_REGISTERED = True
+
+
 def main() -> None:
+    _register_subcommands()
     app()
 
 

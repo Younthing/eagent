@@ -4,20 +4,18 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Iterable
+from typing import TYPE_CHECKING, Any, Iterable
 
 import typer
 
-from core.config import get_settings
-from pipelines.graphs.nodes.preprocess import parse_docling_pdf, filter_reference_sections
-from retrieval.engines.splade import DEFAULT_SPLADE_MODEL_ID
-from rob2.question_bank import DEFAULT_QUESTION_BANK, load_question_bank
-from schemas.internal.documents import DocStructure
-from schemas.internal.evidence import EvidenceCandidate, FusedEvidenceCandidate
-from schemas.internal.rob2 import QuestionSet
+if TYPE_CHECKING:
+    from schemas.internal.documents import DocStructure
+    from schemas.internal.evidence import EvidenceCandidate, FusedEvidenceCandidate
+    from schemas.internal.rob2 import QuestionSet
 
 
 DEFAULT_LOCAL_SPLADE = Path(__file__).resolve().parents[3] / "models" / "splade_distil_CoCodenser_large"
+DEFAULT_SPLADE_MODEL_ID = "naver/splade-v3"
 
 
 def load_doc_structure(
@@ -25,7 +23,13 @@ def load_doc_structure(
     *,
     drop_references: bool | None = None,
     reference_titles: list[str] | str | None = None,
-) -> DocStructure:
+) -> "DocStructure":
+    from core.config import get_settings
+    from pipelines.graphs.nodes.preprocess import (
+        filter_reference_sections,
+        parse_docling_pdf,
+    )
+
     if not pdf_path.exists():
         raise typer.BadParameter(f"PDF not found: {pdf_path}")
     settings = get_settings()
@@ -41,7 +45,9 @@ def load_doc_structure(
     return doc_structure
 
 
-def load_question_set(path: Path | None = None) -> QuestionSet:
+def load_question_set(path: Path | None = None) -> "QuestionSet":
+    from rob2.question_bank import DEFAULT_QUESTION_BANK, load_question_bank
+
     resolved = path or DEFAULT_QUESTION_BANK
     return load_question_bank(resolved)
 
@@ -51,6 +57,8 @@ def resolve_splade_model(model_id: str | None) -> str:
         return model_id
     if DEFAULT_LOCAL_SPLADE.exists():
         return str(DEFAULT_LOCAL_SPLADE)
+    from core.config import get_settings
+
     settings = get_settings()
     if settings.splade_model_id:
         return settings.splade_model_id
@@ -70,7 +78,7 @@ def emit_json(data: Any) -> None:
 
 def print_candidates(
     question_id: str,
-    candidates: Iterable[EvidenceCandidate | FusedEvidenceCandidate],
+    candidates: Iterable["EvidenceCandidate | FusedEvidenceCandidate"],
     *,
     limit: int,
     full: bool,

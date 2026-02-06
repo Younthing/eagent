@@ -2,20 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable
+
 import typer
 
-from pathlib import Path
-
-from core.config import get_settings
-from persistence.cache import CacheManager
-from persistence.sqlite_store import SqliteStore
-from pipelines.graphs.nodes.domain_audit import _load_audit_system_prompt
-from pipelines.graphs.nodes.domains.common import _load_system_prompt_template
-from retrieval.engines.splade import get_splade_encoder
-from retrieval.rerankers.cross_encoder import get_cross_encoder_reranker
-from rob2.locator_rules import get_locator_rules
-from rob2.question_bank import get_question_bank
 from .shared import emit_json
+
+if TYPE_CHECKING:
+    from persistence.cache import CacheManager
 
 
 app = typer.Typer(
@@ -28,21 +23,30 @@ app = typer.Typer(
 )
 
 
-_CACHED_FUNCS = {
-    "settings": get_settings,
-    "locator_rules": get_locator_rules,
-    "question_bank": get_question_bank,
-    "splade_encoder": get_splade_encoder,
-    "cross_encoder": get_cross_encoder_reranker,
-    "domain_prompt": _load_system_prompt_template,
-    "audit_prompt": _load_audit_system_prompt,
-}
+def _cached_funcs() -> dict[str, Callable[..., Any]]:
+    from core.config import get_settings
+    from pipelines.graphs.nodes.domain_audit import _load_audit_system_prompt
+    from pipelines.graphs.nodes.domains.common import _load_system_prompt_template
+    from retrieval.engines.splade import get_splade_encoder
+    from retrieval.rerankers.cross_encoder import get_cross_encoder_reranker
+    from rob2.locator_rules import get_locator_rules
+    from rob2.question_bank import get_question_bank
+
+    return {
+        "settings": get_settings,
+        "locator_rules": get_locator_rules,
+        "question_bank": get_question_bank,
+        "splade_encoder": get_splade_encoder,
+        "cross_encoder": get_cross_encoder_reranker,
+        "domain_prompt": _load_system_prompt_template,
+        "audit_prompt": _load_audit_system_prompt,
+    }
 
 
 @app.command("stats", help="查看缓存状态")
 def cache_stats() -> None:
     payload: dict[str, dict] = {}
-    for name, func in _CACHED_FUNCS.items():
+    for name, func in _cached_funcs().items():
         info = getattr(func, "cache_info", None)
         payload[name] = info()._asdict() if callable(info) else {"cached": False}
     persistent = _persistent_cache_stats()
@@ -54,7 +58,7 @@ def cache_stats() -> None:
 @app.command("clear", help="清理缓存")
 def cache_clear() -> None:
     cleared: list[str] = []
-    for name, func in _CACHED_FUNCS.items():
+    for name, func in _cached_funcs().items():
         clear = getattr(func, "cache_clear", None)
         if callable(clear):
             clear()
@@ -79,7 +83,11 @@ def cache_prune(
     emit_json({"removed": removed})
 
 
-def _build_cache_manager() -> CacheManager | None:
+def _build_cache_manager() -> "CacheManager | None":
+    from core.config import get_settings
+    from persistence.cache import CacheManager
+    from persistence.sqlite_store import SqliteStore
+
     settings = get_settings()
     scope = str(getattr(settings, "cache_scope", "none") or "none").strip().lower()
     if scope == "none":
