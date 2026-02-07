@@ -54,13 +54,19 @@ def test_all_domain_prompts_include_core_contract_and_placeholder() -> None:
             assert "回退字段" in text, f"{name} missing fallback semantics"
             assert "逐字" in text, f"{name} missing verbatim quote constraint"
             assert "缺失" in text, f"{name} missing NI missing-info guidance"
-            assert "仅输出一条答案" in text, f"{name} missing non-omission constraint"
+            assert "未被当前逻辑路径触及" in text, f"{name} missing path reachability guidance"
+            assert "不输出该问题" in text, f"{name} missing omit-on-unreached guidance"
         else:
             lowered = text.lower()
             assert "fallback fields" in lowered, f"{name} missing fallback semantics"
             assert "verbatim" in lowered, f"{name} missing verbatim quote constraint"
             assert "missing" in lowered, f"{name} missing NI missing-info guidance"
-            assert "exactly one answer item" in lowered, f"{name} missing non-omission constraint"
+            assert (
+                "not reached by the active logical path" in lowered
+            ), f"{name} missing path reachability guidance"
+            assert (
+                "omit it, or answer na when required by the json structure" in lowered
+            ), f"{name} missing omit-or-na guidance"
 
 
 def test_d2_prompts_cover_assignment_and_adherence_calibration() -> None:
