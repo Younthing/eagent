@@ -145,10 +145,12 @@ def _compute_overall_risk(
     # ROB2 overall judgement rule (Standard):
     # 1) If any domain is high -> overall high.
     # 2) If all domains are low -> overall low.
-    # 3) Else if any domain is some concerns -> overall some concerns.
-    # 4) If no domain results -> not_applicable.
+    # 3) If 1-3 domains are some concerns -> overall some concerns.
+    # 4) If 4-5 domains are some concerns -> overall high.
     if not domains:
-        return "not_applicable", "No domain assessments provided."
+        # Preserve original fallback behavior: return not_applicable
+        # and a human-readable rationale rather than raising here.
+        return "not_applicable", "No applicable domain assessments provided."
 
     risks = [domain.risk for domain in domains]
     if any(risk == "high" for risk in risks):
@@ -156,14 +158,17 @@ def _compute_overall_risk(
         return "high", f"Overall risk is high because {', '.join(highs)} is high."
     if all(risk == "low" for risk in risks):
         return "low", "Overall risk is low because all domains are low."
+    
     concerns = [domain.domain for domain in domains if domain.risk == "some_concerns"]
-    if concerns:
+    concern_count = len(concerns)
+    
+    if concern_count >= 4:  # 4-5 domains with some_concerns -> high
+        return "high", f"Overall risk is high because {concern_count} domains ({', '.join(concerns)}) have some concerns."
+    else:  # 1-3 domains with some_concerns -> some_concerns
         return (
             "some_concerns",
-            "Overall risk has some concerns because "
-            f"{', '.join(concerns)} has some concerns.",
+            f"Overall risk has some concerns because {concern_count} domain(s) ({', '.join(concerns)}) have some concerns.",
         )
-    return "not_applicable", "No applicable domain assessments provided."
 
 
 def _sorted_citations(items: Iterable[Citation]) -> List[Citation]:

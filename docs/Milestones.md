@@ -279,7 +279,7 @@
 ### 核心任务
 
 * 汇总五域
-* 生成 overall risk（遵循 ROB2 Standard 规则）
+* 生成 overall risk（当前实现口径：任一 High→High；全 Low→Low；无 High 且 4-5 个 Some concerns→High；无 High 且 1-3 个 Some concerns→Some concerns；无域结果→Not applicable）
 * 输出表格 + JSON + 引文索引
 
 ### 当前实现

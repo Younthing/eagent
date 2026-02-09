@@ -1,6 +1,6 @@
 # ADR-0006：Overall Risk 聚合规则采用 ROB2 Standard 规则（非“多 Some concerns 升级 High”）
 
-状态：已接受
+状态：已取代（Superseded by ADR-0009）
 
 背景
 - Milestone 10 需要从五个 domain risk 汇总 overall risk。
@@ -22,4 +22,3 @@
 影响
 - 输出更贴近 ROB2 Standard，可用于后续评测对齐与论文级输出。
 - 去除“多 Some concerns 升级 High”的额外假设，避免过度保守导致与金标准偏离。
-

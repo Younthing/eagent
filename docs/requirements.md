@@ -252,6 +252,8 @@
 
 * 不允许跨 domain 推理
 * 不允许无证据判断
+* D5 的 q5_2/q5_3 仅在存在“直接选择性报告证据”时可回答 Y/PY；仅有多时间点/多阈值/多检验/多候选分析信息不足以判 Y/PY。
+* 当无法核验预设方案与选择透明度时，D5 的 q5_2/q5_3 默认倾向 NI。
 
 ---
 
@@ -269,7 +271,12 @@
 ### 13.1 功能需求
 
 * 汇总五个 domain 风险
-* 按 ROB2 规则生成 overall risk
+* 按当前实现口径生成 overall risk：
+  - 任一 domain 为 High → overall High
+  - 所有 domain 为 Low → overall Low
+  - 无 High 且 Some concerns 的 domain 数量为 4–5 → overall High
+  - 无 High 且 Some concerns 的 domain 数量为 1–3 → overall Some concerns
+  - 无任何 domain 结果 → overall Not applicable
 * 输出结构化结果
 
 ---

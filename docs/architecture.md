@@ -267,9 +267,9 @@ Notes:
 * **Evidence Location**：规则/检索/LLM ReAct 并集定位候选证据，LLM 线可迭代扩展检索线索。
 * **Evidence Fusion**：合并、去重、排序，形成每题 Top-k 证据包。
 * **Evidence Validation**：存在性/相关性/一致性/完整性校验，失败仅重试失败问题，重试耗尽触发全文审计降级。
-* **Domain Reasoning (D1-D5)**：LLM 产出子问题答案与回退字段（`domain_risk/domain_rationale`）；最终风险采用规则树优先（`rob2/decision_rules.py`），规则不可算时回退 LLM，并保证 `risk` 与 `risk_rationale` 同源。
+* **Domain Reasoning (D1-D5)**：LLM 产出子问题答案与回退字段（`domain_risk/domain_rationale`）；最终风险采用规则树优先（`rob2/decision_rules.py`），规则不可算时回退 LLM，并保证 `risk` 与 `risk_rationale` 同源。D5 的 q5_2/q5_3 采用保守口径：仅在存在直接选择性报告证据时回答 Y/PY，证据不足时倾向 NI。
 * **Full-Text Domain Audit（可选）**：全文审核信号答案，提供引用并补全证据后重跑受影响 domain。
-* **ROB2 Aggregator**：汇总五域与 overall risk（ROB2 Standard 规则），输出结构化结果。
+* **ROB2 Aggregator**：汇总五域与 overall risk（当前实现口径：任一 High→High；全 Low→Low；无 High 且 4–5 个 Some concerns→High；无 High 且 1–3 个 Some concerns→Some concerns；无域结果→Not applicable），输出结构化结果。
 * **Batch Exporter**：基于批量 `batch_summary.json` + 各 `result.json` 生成红绿灯图（PNG）与多 sheet 审计工作簿（XLSX）。
 * **Runtime/Orchestration**：LangGraph 装配、并行调度与中断恢复。
 
