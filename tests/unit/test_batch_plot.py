@@ -138,3 +138,32 @@ def test_load_plot_font_scans_candidates_when_env_missing(monkeypatch) -> None:
     font = batch_plot._load_plot_font(12)
     assert font is sentinel
     assert calls == [Path(candidates[0]), Path(candidates[1])]
+
+
+def test_draw_matrix_legend_excludes_not_applicable_label(monkeypatch) -> None:
+    rows = [
+        batch_plot.TrafficLightRow(
+            label="paper-a",
+            status="success",
+            risks={
+                "overall": "low",
+                "D1": "low",
+                "D2": "some_concerns",
+                "D3": "high",
+                "D4": "not_applicable",
+                "D5": "low",
+            },
+        )
+    ]
+    drawn_texts: list[str] = []
+    original_draw_text = batch_plot._draw_text
+
+    def spy_draw_text(draw, position, text, *, fill, font):
+        drawn_texts.append(text)
+        return original_draw_text(draw, position, text, fill=fill, font=font)
+
+    monkeypatch.setattr(batch_plot, "_draw_text", spy_draw_text)
+
+    batch_plot._draw_matrix(rows)
+
+    assert "N/A" not in drawn_texts

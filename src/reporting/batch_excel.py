@@ -19,7 +19,7 @@ _SHEET_COLUMNS: dict[str, list[str]] = {
         "relative_path",
         "status",
         "run_id",
-        "runtime_ms",
+        "runtime_seconds",
         "overall_risk",
         "D1_risk",
         "D2_risk",
@@ -182,7 +182,7 @@ def _build_rows(
         relative_path = _to_str(raw_item.get("relative_path"))
         status = _to_str(raw_item.get("status")).strip().lower()
         run_id = _to_str(raw_item.get("run_id"))
-        runtime_ms = _empty_if_none(raw_item.get("runtime_ms"))
+        runtime_seconds = _runtime_seconds(raw_item.get("runtime_ms"))
         overall_risk = _to_str(raw_item.get("overall_risk"))
         domain_risks = raw_item.get("domain_risks")
         if not isinstance(domain_risks, Mapping):
@@ -202,7 +202,7 @@ def _build_rows(
                 "relative_path": relative_path,
                 "status": status,
                 "run_id": run_id,
-                "runtime_ms": runtime_ms,
+                "runtime_seconds": runtime_seconds,
                 "overall_risk": overall_risk,
                 "D1_risk": _to_str(domain_risks.get("D1")),
                 "D2_risk": _to_str(domain_risks.get("D2")),
@@ -589,6 +589,15 @@ def _empty_if_none(value: Any) -> Any:
     if value is None:
         return ""
     return value
+
+
+def _runtime_seconds(value: Any) -> Any:
+    if value is None:
+        return ""
+    try:
+        return round(float(value) / 1000.0, 3)
+    except (TypeError, ValueError):
+        return ""
 
 
 __all__ = ["DEFAULT_BATCH_EXCEL_FILE", "generate_batch_summary_excel"]

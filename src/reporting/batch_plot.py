@@ -215,7 +215,6 @@ def _draw_matrix(rows: list[TrafficLightRow]) -> Image.Image:
         ("low", "Low"),
         ("some_concerns", "Some concerns"),
         ("high", "High"),
-        ("not_applicable", "N/A"),
     ]
     cursor = margin + 4
     for key, text in legend_items:

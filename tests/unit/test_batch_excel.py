@@ -170,7 +170,7 @@ def test_generate_batch_summary_excel_writes_all_sheets(tmp_path: Path) -> None:
         "relative_path",
         "status",
         "run_id",
-        "runtime_ms",
+        "runtime_seconds",
         "overall_risk",
         "D1_risk",
         "D2_risk",
@@ -180,6 +180,7 @@ def test_generate_batch_summary_excel_writes_all_sheets(tmp_path: Path) -> None:
         "error",
         "result_json_path",
     ]
+    assert overview_sheet[2][3].value == 1.2
     assert overview_sheet.max_row == 3
 
     domain_sheet = workbook["01_域风险"]
