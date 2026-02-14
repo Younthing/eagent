@@ -124,7 +124,7 @@ def test_settings_preprocess_defaults():
     assert settings.figure_description_max_images == 8
     assert settings.figure_description_max_tokens == 256
     assert settings.figure_description_max_retries == 2
-    assert settings.document_metadata_mode == "llm"
+    assert settings.document_metadata_mode == "none"
     assert settings.document_metadata_model == "anthropic-claude-3-5-sonnet-latest"
     assert settings.document_metadata_max_chars == 4000
     assert settings.document_metadata_extraction_passes == 1

@@ -336,7 +336,7 @@ def _build_run_state(
         "preprocess_reference_titles": reference_titles,
         "document_metadata_mode": _resolve_choice(
             options.document_metadata_mode,
-            _resolve_choice(settings.document_metadata_mode, "llm"),
+            _resolve_choice(settings.document_metadata_mode, "none"),
         ),
         "document_metadata_model": _resolve_str(options.document_metadata_model)
         or _resolve_str(settings.document_metadata_model)

@@ -164,7 +164,7 @@ def preprocess_node(state: dict) -> dict:
             "mode": str(
                 state.get("document_metadata_mode")
                 or settings.document_metadata_mode
-                or "llm"
+                or "none"
             )
             .strip()
             .lower(),
@@ -216,7 +216,7 @@ def preprocess_node(state: dict) -> dict:
         mode=str(
             state.get("document_metadata_mode")
             or settings.document_metadata_mode
-            or "llm"
+            or "none"
         ).strip().lower(),
         model_id=str(
             state.get("document_metadata_model")

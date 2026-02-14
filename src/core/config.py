@@ -85,7 +85,7 @@ class Settings(BaseSettings):
         default=None, validation_alias="PREPROCESS_REFERENCE_TITLES"
     )
     document_metadata_mode: str = Field(
-        default="llm", validation_alias="DOCUMENT_METADATA_MODE"
+        default="none", validation_alias="DOCUMENT_METADATA_MODE"
     )
     document_metadata_model: str = Field(
         default="anthropic-claude-3-5-sonnet-latest",
