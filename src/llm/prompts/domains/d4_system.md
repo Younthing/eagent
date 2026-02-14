@@ -11,10 +11,26 @@ Hard constraints:
 - Each evidence item must include a valid `paragraph_id` from provided evidence and a quote copied verbatim from that paragraph text (no paraphrase, no summary).
 
 Calibration rules for D4:
-- Recognized standard instruments (for example MMSE, NIHSS, ADL, or prespecified outcome definitions such as "any drinking") should not be treated as inappropriate measurement methods by default. Without evidence of inappropriate modification, q4_1 should default to N.
-- Distinguish participant blinding from assessor blinding. If participants are hard to blind, place higher weight on whether outcome assessors were blinded.
-- When q4_3 is applicable and assessor blinding is not clearly reported, q4_3 must be NI with missing-assessor-blinding explanation.
-- If outcome measurement/ascertainment plausibly differed between groups, q4_2 should reflect concern based on direct evidence.
+- Standard, recognized instruments and prespecified outcome definitions (e.g., MMSE, NIHSS, ADL, or a prespecified definition like “any drinking”) should NOT be treated as inappropriate by default. If there is no evidence of inappropriate modification or an unreliable method, q4_1 should default to N.
+- If the outcome measurement method is not described, q4_1 answer must be NI (missing measurement method).
+- If the measurement method is clearly inappropriate or cannot reliably measure the intervention effect (e.g., outside detection range) or is described as having poor reliability, q4_1 answer must be Y.
+- If outcome ascertainment/measurement is comparable between groups (same method, same thresholds, comparable timepoints), q4_2 answer must be N.
+- If there is direct evidence that measurement/ascertainment plausibly differed between groups (e.g., one group had more visits/follow-up leading to more opportunities to detect events), q4_2 answer must be Y.
+- If there is insufficient information to judge comparability, q4_2 answer must be NI.
+- Distinguish participant blinding from assessor blinding. Do not infer assessor blinding from participant blinding unless the evidence explicitly links them.
+- If the outcome is PRO and participants knew their assigned intervention, q4_3 answer must be Y.
+- If the outcome is NOT PRO and outcome assessors knew assignment, q4_3 answer must be Y.
+- If the outcome is PRO and participants were blinded (e.g., placebo/sham described), q4_3 answer must be N.
+- If the outcome is NOT PRO and outcome assessors were blinded, q4_3 answer must be N.
+- If assessor/participant awareness for the relevant outcome type is not reported, q4_3 answer must be NI and the rationale must state what is missing (assessor blinding or participant blinding, depending on PRO vs non-PRO).
+- If the outcome is objective (e.g., all-cause mortality), and knowledge of intervention is unlikely to affect measurement, q4_4 answer must be N.
+- If the outcome is subjective and it is unclear whether it is assessor-rated or participant-reported, q4_4 answer should be PY.
+- If the outcome is participant-reported subjective (e.g., pain severity), q4_4 answer must be Y.
+- If the outcome is assessor-judged subjective (observer-reported with judgment), q4_4 answer must be Y.
+- If the outcome measurement method is not reported, q4_4 answer must be NI.
+- If knowledge of intervention could influence outcome measurement but there is no clear reason to believe it did, q4_5 answer must be N.
+- If there is clear evidence that knowledge of intervention is very likely to have influenced measurement (e.g., patient self-reported symptoms in contexts prone to expectancy effects; intervention provider assessing functional recovery), q4_5 answer must be Y.
+- If there is insufficient information to judge, q4_5 answer must be NI.
 
 Output contract:
 - Return ONLY valid JSON with keys: domain_risk, domain_rationale, answers.
