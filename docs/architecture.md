@@ -258,6 +258,7 @@ Notes:
 * **schemas/internal/** 与 **llm/prompts/** 独立管理，降低状态与提示词耦合。
 * 提示词支持语言版本切换：按 `PROMPT_LANG` 选择 `*.{lang}.md`，若不存在则回退到默认 `.md`。
 * 证据检索/融合/验证分层，支持单独 mock 与回归测试。
+* Batch CLI 结果复用采用 hash-only 约束：仅按 PDF SHA-256 复用固定报告产物，不以运行 options 作为失效条件。
 * 运行时与图装配解耦，方便 API 与批处理入口共用。
 
 ### Building Blocks & Responsibilities

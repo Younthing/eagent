@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import csv
 import json
+import os
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -17,7 +19,7 @@ from cli.common import (
     write_run_output_dir,
 )
 from core.config import get_settings
-from persistence.hashing import hash_payload
+from persistence.hashing import hash_payload, sha256_file
 from persistence.sqlite_store import SqliteStore
 from reporting.batch_plot import (
     DEFAULT_BATCH_PLOT_FILE,
@@ -43,12 +45,25 @@ app = typer.Typer(
 )
 
 
-_CHECKPOINT_VERSION = 1
+_CHECKPOINT_VERSION = 2
 _CHECKPOINT_FILE = "batch_checkpoint.json"
 _SUMMARY_JSON_FILE = SUMMARY_FILE_NAME
 _SUMMARY_CSV_FILE = "batch_summary.csv"
 _BATCH_PLOT_FILE = DEFAULT_BATCH_PLOT_FILE
 _BATCH_EXCEL_FILE = DEFAULT_BATCH_EXCEL_FILE
+_BATCH_ITEM_META_VERSION = 1
+_BATCH_ITEM_META_FILE = "batch_item_meta.json"
+_MANAGED_RESULT_FILES = (
+    "result.json",
+    "table.md",
+    "report.html",
+    "report.docx",
+    "report.pdf",
+    "reports.json",
+    "audit_reports.json",
+    "debug.json",
+    _BATCH_ITEM_META_FILE,
+)
 _CSV_COLUMNS = [
     "relative_path",
     "status",
@@ -189,8 +204,9 @@ def run_batch(
     if not pdf_files:
         raise typer.BadParameter(f"目录中未发现 PDF: {input_dir_abs}")
 
-    relative_paths = [path.relative_to(input_dir_abs).as_posix() for path in pdf_files]
-    file_list_hash = hash_payload(relative_paths)
+    file_entries = _build_file_entries(input_dir_abs, pdf_files)
+    relative_paths = [str(entry["relative_path"]) for entry in file_entries]
+    file_list_hash = _build_file_list_hash(file_entries)
 
     payload = load_options_payload(options, options_file, set_values)
     options_obj = build_options(payload)
@@ -225,7 +241,6 @@ def run_batch(
             checkpoint,
             input_dir_abs=str(input_dir_abs),
             output_dir_abs=str(output_dir_abs),
-            options_hash=options_hash,
             file_list_hash=file_list_hash,
             batch_id=batch_id,
             batch_name=batch_name,
@@ -238,7 +253,7 @@ def run_batch(
             file_list_hash=file_list_hash,
             batch_id=batch_id,
             batch_name=batch_name,
-            relative_paths=relative_paths,
+            file_entries=file_entries,
         )
 
     effective_batch_id = _resolve_batch_id(
@@ -261,20 +276,53 @@ def run_batch(
         raise typer.BadParameter(
             "checkpoint 缺少文件条目，请使用 --reset 重新执行。"
         )
+    reusable_by_hash = _build_reusable_result_index(output_dir_abs)
     total = len(relative_paths)
 
-    for index, (rel_path, pdf_path) in enumerate(zip(relative_paths, pdf_files), start=1):
+    for index, entry in enumerate(file_entries, start=1):
+        rel_path = str(entry["relative_path"])
+        pdf_path = Path(str(entry["pdf_path"]))
+        pdf_sha256 = str(entry["pdf_sha256"])
         item = items[rel_path]
         subdir = output_dir_abs / str(item["output_subdir"])
         result_file = subdir / "result.json"
 
         if item.get("status") in {"success", "skipped"} and result_file.exists():
+            _write_batch_item_meta(
+                output_dir=subdir,
+                pdf_sha256=pdf_sha256,
+                relative_path=rel_path,
+            )
             item["status"] = "skipped"
             item["updated_at"] = _now_iso()
+            reusable_by_hash[pdf_sha256] = subdir.resolve()
             _write_checkpoint(checkpoint_path, checkpoint)
             _write_summary_files(checkpoint, output_dir_abs)
             typer.echo(f"[{index}/{total}] skip {rel_path}")
             continue
+
+        reusable_dir = reusable_by_hash.get(pdf_sha256)
+        if reusable_dir is not None:
+            _materialize_reused_output(source_dir=reusable_dir, target_dir=subdir)
+            reused_summary = _read_result_summary(result_file)
+            if reused_summary is not None:
+                _write_batch_item_meta(
+                    output_dir=subdir,
+                    pdf_sha256=pdf_sha256,
+                    relative_path=rel_path,
+                )
+                item["status"] = "skipped"
+                item["run_id"] = reused_summary["run_id"]
+                item["runtime_ms"] = reused_summary["runtime_ms"]
+                item["overall_risk"] = reused_summary["overall_risk"]
+                item["domain_risks"] = reused_summary["domain_risks"]
+                item["error"] = None
+                item["updated_at"] = _now_iso()
+                reusable_by_hash[pdf_sha256] = subdir.resolve()
+                _write_checkpoint(checkpoint_path, checkpoint)
+                _write_summary_files(checkpoint, output_dir_abs)
+                typer.echo(f"[{index}/{total}] skip {rel_path} (hash)")
+                continue
 
         item["status"] = "running"
         item["error"] = None
@@ -302,6 +350,11 @@ def run_batch(
                 pdf=pdf,
                 pdf_name=pdf_path.name,
             )
+            _write_batch_item_meta(
+                output_dir=subdir,
+                pdf_sha256=pdf_sha256,
+                relative_path=rel_path,
+            )
             domain_risks = {
                 str(domain.domain): domain.risk for domain in result.result.domains
             }
@@ -311,6 +364,7 @@ def run_batch(
             item["overall_risk"] = result.result.overall.risk
             item["domain_risks"] = domain_risks
             item["error"] = None
+            reusable_by_hash[pdf_sha256] = subdir.resolve()
         except Exception as exc:  # pragma: no cover - exercised via integration tests
             item["status"] = "failed"
             item["error"] = _format_error(exc)
@@ -426,14 +480,17 @@ def _build_initial_checkpoint(
     file_list_hash: str,
     batch_id: str | None,
     batch_name: str | None,
-    relative_paths: list[str],
+    file_entries: list[dict[str, Any]],
 ) -> dict[str, Any]:
     items = []
-    for rel_path in relative_paths:
+    for entry in file_entries:
+        rel_path = str(entry["relative_path"])
+        pdf_sha256 = str(entry["pdf_sha256"])
         output_subdir = str(Path(rel_path).with_suffix(""))
         items.append(
             {
                 "relative_path": rel_path,
+                "pdf_sha256": pdf_sha256,
                 "output_subdir": output_subdir,
                 "status": "pending",
                 "run_id": None,
@@ -465,8 +522,20 @@ def _load_checkpoint(path: Path) -> dict[str, Any]:
 
     if not isinstance(data, dict):
         raise typer.BadParameter(f"checkpoint 格式错误: {path}")
+    if data.get("version") != _CHECKPOINT_VERSION:
+        raise typer.BadParameter(
+            f"checkpoint 版本不兼容: {path}。请使用 --reset 重新执行。"
+        )
     if not isinstance(data.get("items"), list):
         raise typer.BadParameter(f"checkpoint items 缺失: {path}")
+    for raw_item in data["items"]:
+        if not isinstance(raw_item, dict):
+            raise typer.BadParameter(f"checkpoint item 格式错误: {path}")
+        pdf_sha256 = raw_item.get("pdf_sha256")
+        if not isinstance(pdf_sha256, str) or not pdf_sha256.strip():
+            raise typer.BadParameter(
+                f"checkpoint 缺少 pdf_sha256: {path}。请使用 --reset 重新执行。"
+            )
     return data
 
 
@@ -475,7 +544,6 @@ def _assert_checkpoint_compatible(
     *,
     input_dir_abs: str,
     output_dir_abs: str,
-    options_hash: str,
     file_list_hash: str,
     batch_id: str | None,
     batch_name: str | None,
@@ -485,8 +553,6 @@ def _assert_checkpoint_compatible(
         errors.append("input_dir_abs")
     if checkpoint.get("output_dir_abs") != output_dir_abs:
         errors.append("output_dir_abs")
-    if checkpoint.get("options_hash") != options_hash:
-        errors.append("options_hash")
     if checkpoint.get("file_list_hash") != file_list_hash:
         errors.append("file_list_hash")
     if batch_id is not None and checkpoint.get("batch_id") not in {None, batch_id}:
@@ -541,6 +607,30 @@ def _discover_pdfs(input_dir: Path) -> list[Path]:
     return files
 
 
+def _build_file_entries(input_dir: Path, pdf_files: list[Path]) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for path in pdf_files:
+        entries.append(
+            {
+                "relative_path": path.relative_to(input_dir).as_posix(),
+                "pdf_path": path,
+                "pdf_sha256": sha256_file(path),
+            }
+        )
+    return entries
+
+
+def _build_file_list_hash(entries: list[dict[str, Any]]) -> str:
+    signature = [
+        {
+            "relative_path": str(entry["relative_path"]),
+            "pdf_sha256": str(entry["pdf_sha256"]),
+        }
+        for entry in entries
+    ]
+    return hash_payload(signature)
+
+
 def _ensure_output_dir_writable(output_dir: Path) -> None:
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -555,6 +645,127 @@ def _write_checkpoint(path: Path, payload: dict[str, Any]) -> None:
     temp = path.with_suffix(path.suffix + ".tmp")
     temp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     temp.replace(path)
+
+
+def _build_reusable_result_index(output_dir: Path) -> dict[str, Path]:
+    index: dict[str, Path] = {}
+    for meta_path in sorted(output_dir.rglob(_BATCH_ITEM_META_FILE)):
+        meta = _load_batch_item_meta(meta_path)
+        if meta is None:
+            continue
+        pdf_sha256 = meta.get("pdf_sha256")
+        if not isinstance(pdf_sha256, str) or not pdf_sha256.strip():
+            continue
+        result_dir = meta_path.parent.resolve()
+        if not (result_dir / "result.json").exists():
+            continue
+        index[pdf_sha256] = result_dir
+    return index
+
+
+def _load_batch_item_meta(path: Path) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
+def _write_batch_item_meta(
+    *,
+    output_dir: Path,
+    pdf_sha256: str,
+    relative_path: str,
+) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "version": _BATCH_ITEM_META_VERSION,
+        "pdf_sha256": pdf_sha256,
+        "relative_path": relative_path,
+        "updated_at": _now_iso(),
+    }
+    (output_dir / _BATCH_ITEM_META_FILE).write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _materialize_reused_output(*, source_dir: Path, target_dir: Path) -> None:
+    source = source_dir.resolve()
+    target = target_dir.resolve()
+    if source == target:
+        return
+
+    target.mkdir(parents=True, exist_ok=True)
+    for name in _MANAGED_RESULT_FILES:
+        source_path = source / name
+        target_path = target / name
+        if source_path.exists() and source_path.is_file():
+            _copy_or_link_file(source_path, target_path)
+            continue
+        if target_path.exists():
+            if target_path.is_file() or target_path.is_symlink():
+                target_path.unlink()
+            else:
+                shutil.rmtree(target_path)
+
+
+def _copy_or_link_file(source: Path, target: Path) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        if target.is_file() or target.is_symlink():
+            target.unlink()
+        else:
+            shutil.rmtree(target)
+    try:
+        os.link(source, target)
+    except OSError:
+        shutil.copy2(source, target)
+
+
+def _read_result_summary(result_path: Path) -> dict[str, Any] | None:
+    if not result_path.exists():
+        return None
+    try:
+        payload = json.loads(result_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+
+    result_obj = payload.get("result")
+    if not isinstance(result_obj, dict):
+        return None
+    overall = result_obj.get("overall")
+    if not isinstance(overall, dict):
+        return None
+    overall_risk = overall.get("risk")
+    if not isinstance(overall_risk, str) or not overall_risk.strip():
+        return None
+
+    run_id = payload.get("run_id")
+    runtime_ms = payload.get("runtime_ms")
+    domains = result_obj.get("domains")
+    if not isinstance(domains, list):
+        domains = []
+
+    domain_risks: dict[str, str] = {}
+    for domain in domains:
+        if not isinstance(domain, dict):
+            continue
+        domain_id = domain.get("domain")
+        domain_risk = domain.get("risk")
+        if isinstance(domain_id, str) and isinstance(domain_risk, str):
+            domain_risks[domain_id] = domain_risk
+
+    return {
+        "run_id": run_id if isinstance(run_id, str) else None,
+        "runtime_ms": runtime_ms if isinstance(runtime_ms, int) else None,
+        "overall_risk": overall_risk,
+        "domain_risks": domain_risks,
+    }
 
 
 def _build_summary_payload(checkpoint: dict[str, Any]) -> dict[str, Any]:

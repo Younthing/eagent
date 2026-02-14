@@ -29,7 +29,7 @@ def test_checkpoint_compatibility_requires_reset() -> None:
         "input_dir_abs": "/input",
         "output_dir_abs": "/out",
         "options_hash": "old",
-        "file_list_hash": "same",
+        "file_list_hash": "old_file_list",
         "batch_id": None,
         "batch_name": None,
         "items": [],
@@ -40,11 +40,31 @@ def test_checkpoint_compatibility_requires_reset() -> None:
             checkpoint,
             input_dir_abs="/input",
             output_dir_abs="/out",
-            options_hash="new",
-            file_list_hash="same",
+            file_list_hash="new_file_list",
             batch_id=None,
             batch_name=None,
         )
+
+
+def test_checkpoint_compatibility_ignores_options_hash() -> None:
+    checkpoint = {
+        "input_dir_abs": "/input",
+        "output_dir_abs": "/out",
+        "options_hash": "old",
+        "file_list_hash": "same",
+        "batch_id": None,
+        "batch_name": None,
+        "items": [],
+    }
+
+    batch_command._assert_checkpoint_compatible(
+        checkpoint,
+        input_dir_abs="/input",
+        output_dir_abs="/out",
+        file_list_hash="same",
+        batch_id=None,
+        batch_name=None,
+    )
 
 
 def test_checkpoint_compatibility_ignores_batch_name_when_batch_id_provided() -> None:
@@ -62,11 +82,107 @@ def test_checkpoint_compatibility_ignores_batch_name_when_batch_id_provided() ->
         checkpoint,
         input_dir_abs="/input",
         output_dir_abs="/out",
-        options_hash="same",
         file_list_hash="same",
         batch_id="batch_1",
         batch_name="new_name",
     )
+
+
+def test_file_list_hash_changes_when_pdf_content_changes(tmp_path: Path) -> None:
+    pdf = tmp_path / "paper.pdf"
+    pdf.write_bytes(b"%PDF-1.4\nfirst")
+    files = batch_command._discover_pdfs(tmp_path)
+    first_entries = batch_command._build_file_entries(tmp_path, files)
+    first_hash = batch_command._build_file_list_hash(first_entries)
+
+    pdf.write_bytes(b"%PDF-1.4\nsecond")
+    files = batch_command._discover_pdfs(tmp_path)
+    second_entries = batch_command._build_file_entries(tmp_path, files)
+    second_hash = batch_command._build_file_list_hash(second_entries)
+
+    assert first_hash != second_hash
+
+
+def test_build_reusable_result_index_uses_batch_meta(tmp_path: Path) -> None:
+    reusable_dir = tmp_path / "cache" / "x"
+    reusable_dir.mkdir(parents=True)
+    (reusable_dir / "result.json").write_text(
+        json.dumps(
+            {
+                "run_id": "run_1",
+                "runtime_ms": 100,
+                "result": {"overall": {"risk": "low"}, "domains": []},
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    (reusable_dir / "batch_item_meta.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "pdf_sha256": "hash_abc",
+                "relative_path": "foo.pdf",
+                "updated_at": "2026-01-01T00:00:00+00:00",
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    index = batch_command._build_reusable_result_index(tmp_path)
+    assert index == {"hash_abc": reusable_dir.resolve()}
+
+
+def test_materialize_reused_output_copies_managed_files(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    target_dir = tmp_path / "target"
+    source_dir.mkdir()
+    target_dir.mkdir()
+
+    (source_dir / "result.json").write_text("{}", encoding="utf-8")
+    (source_dir / "report.html").write_text("<html/>", encoding="utf-8")
+    (target_dir / "result.json").write_text('{"old":true}', encoding="utf-8")
+    (target_dir / "report.pdf").write_text("old", encoding="utf-8")
+
+    batch_command._materialize_reused_output(source_dir=source_dir, target_dir=target_dir)
+
+    assert (target_dir / "result.json").read_text(encoding="utf-8") == "{}"
+    assert (target_dir / "report.html").read_text(encoding="utf-8") == "<html/>"
+    assert not (target_dir / "report.pdf").exists()
+
+
+def test_load_checkpoint_requires_v2_and_pdf_hash(tmp_path: Path) -> None:
+    checkpoint_path = tmp_path / "batch_checkpoint.json"
+    checkpoint_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "items": [],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(typer.BadParameter):
+        batch_command._load_checkpoint(checkpoint_path)
+
+    checkpoint_path.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "items": [{"relative_path": "a.pdf"}],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(typer.BadParameter):
+        batch_command._load_checkpoint(checkpoint_path)
 
 
 def test_write_summary_files_contains_expected_columns(tmp_path: Path) -> None:
