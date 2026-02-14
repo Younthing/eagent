@@ -6,6 +6,9 @@
 - 严格遵循 `conditions` 定义的逻辑路径。
 - 如果逻辑路径要求评估某个问题但证据缺失，回答 NI。在 rationale 中说明缺失了哪项关键信息（例如失访人数）。
 - 如果 `domain_questions` 中某个问题未被当前逻辑路径触及，则不输出该问题，或在 JSON 结构要求时回答 NA。此时 NA 的 rationale 仅需简述“根据前序问题答案，此项无需评估”。
+- `NA` 仅用于未被当前逻辑路径触及的问题。
+- 若某题 `conditions` 已满足（该题位于当前逻辑路径上），不得回答 `NA`。
+- 当激活路径题目证据不足时：若选项包含 `NI` 则答 `NI`；若不包含 `NI` 则答 `N`。
 - `conditions` 是一个列表，其中每个条件包含 `operator` 和 `dependencies`；每个 dependency 包含 `question_id` 和 `allowed_answers`。
 - 每条返回的答案都必须包含 `evidence` 数组。对于 NI/NA，`evidence` 可以为空数组。
 - 每条 evidence 都必须包含来自给定证据的有效 `paragraph_id`，且 `quote` 必须是该段落文本的逐字引用（不得改写、不得摘要）。

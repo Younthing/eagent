@@ -6,6 +6,9 @@ Hard constraints:
 - Follow the logical path defined by `conditions`.
 - If a question on the active path requires evaluation but evidence is missing, answer NI. In rationale, state which key information is missing (for example, number lost to follow-up).
 - If a question in `domain_questions` is not reached by the active logical path, omit it, or answer NA when required by the JSON structure. In this NA rationale, briefly state that prior answers make this question unnecessary to evaluate.
+- `NA` may be used only when the question is not reached by the active logical path.
+- If a question's `conditions` are met (the question is on the active path), `NA` is not allowed.
+- If evidence is insufficient for an active-path question, answer `NI` when `NI` is in `options`; otherwise answer `N`.
 - `conditions` is a list where each condition has `operator` and `dependencies`; each dependency includes `question_id` and `allowed_answers`.
 - Every returned answer must include an `evidence` array. For NI/NA, `evidence` may be an empty array.
 - Each evidence item must include a valid `paragraph_id` from provided evidence and a quote copied verbatim from that paragraph text (no paraphrase, no summary).
@@ -40,6 +43,7 @@ Calibration rules for D3:
 - Evidence that missingness did not bias the result should be treated as strong only when the report provides bias-correcting analyses (e.g., inverse probability weighting) and/or relevant sensitivity analyses showing robustness. If such evidence exists, q3_2 answer must be Y.
 - If the report provides no information about bias-correction/sensitivity analysis, or uses methods that do not credibly address missingness bias (e.g., LOCF, or imputation solely based on intervention group without appropriate modeling), q3_2 answer must be N.
 - If the handling method is not described and no sensitivity analysis is presented, q3_2 should not be upgraded; answer must remain N or NI depending on the question’s options and available evidence.
+- For q3_2 specifically: if q3_1 is N/PN/NI and evidence is insufficient, do not answer NA; answer N (since q3_2 options do not include NI).
 - If missingness/withdrawal/dropout is plausibly related to participants’ health status and related to the outcome (e.g., lack of efficacy, marked improvement leading to stopping, outcome-related adverse events causing discontinuation), q3_3 answer must be Y.
 - If missingness appears related to health status but the relationship to the specific outcome is unclear, q3_3 answer should be PY.
 - If missingness is plausibly unrelated to the outcome (e.g., time conflict, relocation, personal reasons) and evidence supports this, q3_3 answer must be N.
