@@ -25,9 +25,27 @@ def test_rule_trace_includes_rule_id() -> None:
 
 
 def test_d2_assignment_rules() -> None:
-    low_answers: dict[str, AnswerOption] = {"q2a_6": "Y", "q2a_7": "NA"}
-    some_answers: dict[str, AnswerOption] = {"q2a_6": "N", "q2a_7": "N"}
-    high_answers: dict[str, AnswerOption] = {"q2a_6": "N", "q2a_7": "NI"}
+    low_answers: dict[str, AnswerOption] = {
+        "q2a_1": "N",
+        "q2a_2": "N",
+        "q2a_6": "Y",
+        "q2a_7": "NA",
+    }
+    some_answers: dict[str, AnswerOption] = {
+        "q2a_1": "N",
+        "q2a_2": "N",
+        "q2a_6": "N",
+        "q2a_7": "N",
+    }
+    high_answers: dict[str, AnswerOption] = {
+        "q2a_1": "Y",
+        "q2a_2": "N",
+        "q2a_3": "Y",
+        "q2a_4": "Y",
+        "q2a_5": "N",
+        "q2a_6": "Y",
+        "q2a_7": "NA",
+    }
     adherence_answers: dict[str, AnswerOption] = {"q2b_6": "Y"}
     assert (
         evaluate_domain_risk_with_trace("D2", low_answers, effect_type="assignment")[0]

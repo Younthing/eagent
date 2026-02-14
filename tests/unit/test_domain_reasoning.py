@@ -187,6 +187,15 @@ def test_d2_reasoning_enforces_conditions() -> None:
                 order=1,
             ),
             Rob2Question(
+                question_id="q2a_2",
+                rob2_id="q2_2",
+                domain="D2",
+                effect_type="assignment",
+                text="Were carers and people delivering the interventions aware of participants' assigned intervention during the trial?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=2,
+            ),
+            Rob2Question(
                 question_id="q2a_3",
                 rob2_id="q2_3",
                 domain="D2",
@@ -200,12 +209,16 @@ def test_d2_reasoning_enforces_conditions() -> None:
                             QuestionDependency(
                                 question_id="q2a_1",
                                 allowed_answers=["Y", "PY", "NI"],
-                            )
+                            ),
+                            QuestionDependency(
+                                question_id="q2a_2",
+                                allowed_answers=["Y", "PY", "NI"],
+                            ),
                         ],
-                        note="If Y/PY/NI to 2.1",
+                        note="If Y/PY/NI to 2.1 or 2.2",
                     )
                 ],
-                order=2,
+                order=3,
             ),
             Rob2Question(
                 question_id="q2a_6",
@@ -214,7 +227,7 @@ def test_d2_reasoning_enforces_conditions() -> None:
                 effect_type="assignment",
                 text="Was an appropriate analysis used to estimate the effect of assignment?",
                 options=["Y", "PY", "PN", "N", "NI"],
-                order=3,
+                order=4,
             ),
             Rob2Question(
                 question_id="q2a_7",
@@ -235,7 +248,7 @@ def test_d2_reasoning_enforces_conditions() -> None:
                         note="If N/PN/NI to 2.6",
                     )
                 ],
-                order=4,
+                order=5,
             ),
         ],
     )
@@ -243,14 +256,17 @@ def test_d2_reasoning_enforces_conditions() -> None:
         "q2a_1": [
             _candidate("q2a_1", "p1", "Participants were blinded."),
         ],
+        "q2a_2": [
+            _candidate("q2a_2", "p2", "Carers were blinded."),
+        ],
         "q2a_3": [
-            _candidate("q2a_3", "p2", "No deviations were reported."),
+            _candidate("q2a_3", "p3", "No deviations were reported."),
         ],
         "q2a_6": [
-            _candidate("q2a_6", "p3", "Analysis followed ITT."),
+            _candidate("q2a_6", "p4", "Analysis followed ITT."),
         ],
         "q2a_7": [
-            _candidate("q2a_7", "p4", "No substantial impact expected."),
+            _candidate("q2a_7", "p5", "No substantial impact expected."),
         ],
     }
     llm = _DummyLLM(
@@ -266,16 +282,22 @@ def test_d2_reasoning_enforces_conditions() -> None:
                         "evidence": [{"paragraph_id": "p1", "quote": "blinded"}],
                     },
                     {
+                        "question_id": "q2a_2",
+                        "answer": "N",
+                        "rationale": "Blinded carers.",
+                        "evidence": [{"paragraph_id": "p2", "quote": "blinded"}],
+                    },
+                    {
                         "question_id": "q2a_3",
                         "answer": "Y",
                         "rationale": "Deviations occurred.",
-                        "evidence": [{"paragraph_id": "p2", "quote": "deviations"}],
+                        "evidence": [{"paragraph_id": "p3", "quote": "deviations"}],
                     },
                     {
                         "question_id": "q2a_6",
                         "answer": "Y",
                         "rationale": "Appropriate analysis.",
-                        "evidence": [{"paragraph_id": "p3", "quote": "ITT"}],
+                        "evidence": [{"paragraph_id": "p4", "quote": "ITT"}],
                     },
                     {
                         "question_id": "q2a_7",
@@ -299,6 +321,7 @@ def test_d2_reasoning_enforces_conditions() -> None:
     answers = {answer.question_id: answer.answer for answer in decision.answers}
     assert decision.risk == "low"
     assert answers["q2a_1"] == "N"
+    assert answers["q2a_2"] == "N"
     assert answers["q2a_3"] == "NA"
 
 

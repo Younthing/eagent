@@ -71,17 +71,74 @@ def _risk_d1(answers: Mapping[str, AnswerOption]) -> tuple[DomainRisk, RuleTrace
 
 
 def _risk_d2_assignment(answers: Mapping[str, AnswerOption]) -> tuple[DomainRisk, RuleTrace]:
+    part1_risk, part1_trace = _risk_d2_assignment_part1(answers)
+    part2_risk, part2_trace = _risk_d2_assignment_part2(answers)
+
+    trace = [*part1_trace, *part2_trace]
+    if part1_risk == "high" or part2_risk == "high":
+        return "high", [
+            *trace,
+            f"D2A:R1 part1={part1_risk} or part2={part2_risk} is high -> high",
+        ]
+    if part1_risk == "low" and part2_risk == "low":
+        return "low", [*trace, "D2A:R2 part1=low & part2=low -> low"]
+    return "some_concerns", [
+        *trace,
+        f"D2A:R3 part1={part1_risk} & part2={part2_risk} with no high -> some_concerns",
+    ]
+
+
+def _risk_d2_assignment_part1(
+    answers: Mapping[str, AnswerOption],
+) -> tuple[DomainRisk, RuleTrace]:
+    q2_1 = _answer(answers, "q2a_1")
+    q2_2 = _answer(answers, "q2a_2")
+    q2_3 = _answer(answers, "q2a_3")
+    q2_4 = _answer(answers, "q2a_4")
+    q2_5 = _answer(answers, "q2a_5")
+
+    if q2_1 in NO and q2_2 in NO:
+        return "low", ["D2A:P1R1 q2a_1/q2a_2 in NO -> low"]
+
+    if q2_1 in YES_OR_NI or q2_2 in YES_OR_NI:
+        if q2_3 in NO:
+            return "low", ["D2A:P1R2 aware_any & q2a_3 in NO -> low"]
+        if q2_3 in NO_INFO:
+            return "some_concerns", ["D2A:P1R3 aware_any & q2a_3=NI -> some_concerns"]
+        if q2_3 in YES:
+            if q2_4 in NO:
+                return "some_concerns", [
+                    "D2A:P1R4 aware_any & q2a_3 in YES & q2a_4 in NO -> some_concerns"
+                ]
+            if q2_4 in YES_OR_NI:
+                if q2_5 in YES:
+                    return "some_concerns", [
+                        "D2A:P1R5 aware_any & q2a_3 in YES & q2a_4 in YES/NI & q2a_5 in YES -> some_concerns"
+                    ]
+                if q2_5 in NO_OR_NI:
+                    return "high", [
+                        "D2A:P1R6 aware_any & q2a_3 in YES & q2a_4 in YES/NI & q2a_5 in NO/NI -> high"
+                    ]
+
+    return "some_concerns", ["D2A:P1R0 default -> some_concerns"]
+
+
+def _risk_d2_assignment_part2(
+    answers: Mapping[str, AnswerOption],
+) -> tuple[DomainRisk, RuleTrace]:
     q2_6 = _answer(answers, "q2a_6")
     q2_7 = _answer(answers, "q2a_7")
 
     if q2_6 in YES:
-        return "low", ["D2A:R1 q2a_6 in YES -> low"]
+        return "low", ["D2A:P2R1 q2a_6 in YES -> low"]
     if q2_6 in NO_OR_NI:
         if q2_7 in NO:
-            return "some_concerns", ["D2A:R2 q2a_6 in NO/NI & q2a_7 in NO -> some_concerns"]
+            return "some_concerns", [
+                "D2A:P2R2 q2a_6 in NO/NI & q2a_7 in NO -> some_concerns"
+            ]
         if q2_7 in YES_OR_NI:
-            return "high", ["D2A:R3 q2a_6 in NO/NI & q2a_7 in YES/NI -> high"]
-    return "some_concerns", ["D2A:R0 default -> some_concerns"]
+            return "high", ["D2A:P2R3 q2a_6 in NO/NI & q2a_7 in YES/NI -> high"]
+    return "some_concerns", ["D2A:P2R0 default -> some_concerns"]
 
 
 def _risk_d2_adherence(answers: Mapping[str, AnswerOption]) -> tuple[DomainRisk, RuleTrace]:
