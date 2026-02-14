@@ -217,19 +217,35 @@ def _risk_d4(answers: Mapping[str, AnswerOption]) -> tuple[DomainRisk, RuleTrace
         return "high", ["D4:R1 q4_1 in YES -> high"]
     if q4_2 in YES:
         return "high", ["D4:R2 q4_2 in YES -> high"]
-    if q4_2 == "NI":
-        return "some_concerns", ["D4:R3 q4_2=NI -> some_concerns"]
+
     if q4_2 in NO:
         if q4_3 in NO:
-            return "low", ["D4:R4 q4_2 in NO & q4_3 in NO -> low"]
+            return "low", ["D4:R3 q4_2 in NO & q4_3 in NO -> low"]
         if q4_3 in YES_OR_NI:
             if q4_4 in NO:
-                return "low", ["D4:R5 q4_2 in NO & q4_3 in YES/NI & q4_4 in NO -> low"]
+                return "low", ["D4:R4 q4_2 in NO & q4_3 in YES/NI & q4_4 in NO -> low"]
             if q4_4 in YES_OR_NI:
                 if q4_5 in NO:
-                    return "some_concerns", ["D4:R6 q4_2 in NO & q4_3 in YES/NI & q4_4 in YES/NI & q4_5 in NO -> some_concerns"]
+                    return "some_concerns", ["D4:R5 q4_2 in NO & q4_3 in YES/NI & q4_4 in YES/NI & q4_5 in NO -> some_concerns"]
                 if q4_5 in YES_OR_NI:
-                    return "high", ["D4:R7 q4_2 in NO & q4_3 in YES/NI & q4_4 in YES/NI & q4_5 in YES/NI -> high"]
+                    return "high", ["D4:R6 q4_2 in NO & q4_3 in YES/NI & q4_4 in YES/NI & q4_5 in YES/NI -> high"]
+    if q4_2 in NO_INFO:
+        if q4_3 in NO:
+            return "some_concerns", ["D4:R7 q4_2=NI & q4_3 in NO -> some_concerns"]
+        if q4_3 in YES_OR_NI:
+            if q4_4 in NO:
+                return "some_concerns", [
+                    "D4:R8 q4_2=NI & q4_3 in YES/NI & q4_4 in NO -> some_concerns"
+                ]
+            if q4_4 in YES_OR_NI:
+                if q4_5 in NO:
+                    return "some_concerns", [
+                        "D4:R9 q4_2=NI & q4_3 in YES/NI & q4_4 in YES/NI & q4_5 in NO -> some_concerns"
+                    ]
+                if q4_5 in YES_OR_NI:
+                    return "high", [
+                        "D4:R10 q4_2=NI & q4_3 in YES/NI & q4_4 in YES/NI & q4_5 in YES/NI -> high"
+                    ]
     return "some_concerns", ["D4:R0 default -> some_concerns"]
 
 

@@ -131,7 +131,6 @@ def test_d3_rules() -> None:
 
 def test_d4_rules() -> None:
     high_answers: dict[str, AnswerOption] = {"q4_1": "Y"}
-    some_answers: dict[str, AnswerOption] = {"q4_1": "N", "q4_2": "NI"}
     low_answers: dict[str, AnswerOption] = {"q4_1": "N", "q4_2": "N", "q4_3": "N"}
     high_answers_2: dict[str, AnswerOption] = {
         "q4_1": "N",
@@ -140,10 +139,38 @@ def test_d4_rules() -> None:
         "q4_4": "Y",
         "q4_5": "Y",
     }
+    ni_some_q3_no: dict[str, AnswerOption] = {
+        "q4_1": "N",
+        "q4_2": "NI",
+        "q4_3": "N",
+    }
+    ni_some_q4_no: dict[str, AnswerOption] = {
+        "q4_1": "N",
+        "q4_2": "NI",
+        "q4_3": "Y",
+        "q4_4": "N",
+    }
+    ni_some_q5_no: dict[str, AnswerOption] = {
+        "q4_1": "N",
+        "q4_2": "NI",
+        "q4_3": "Y",
+        "q4_4": "Y",
+        "q4_5": "N",
+    }
+    ni_high: dict[str, AnswerOption] = {
+        "q4_1": "N",
+        "q4_2": "NI",
+        "q4_3": "Y",
+        "q4_4": "Y",
+        "q4_5": "Y",
+    }
     assert evaluate_domain_risk_with_trace("D4", high_answers)[0] == "high"
-    assert evaluate_domain_risk_with_trace("D4", some_answers)[0] == "some_concerns"
     assert evaluate_domain_risk_with_trace("D4", low_answers)[0] == "low"
     assert evaluate_domain_risk_with_trace("D4", high_answers_2)[0] == "high"
+    assert evaluate_domain_risk_with_trace("D4", ni_some_q3_no)[0] == "some_concerns"
+    assert evaluate_domain_risk_with_trace("D4", ni_some_q4_no)[0] == "some_concerns"
+    assert evaluate_domain_risk_with_trace("D4", ni_some_q5_no)[0] == "some_concerns"
+    assert evaluate_domain_risk_with_trace("D4", ni_high)[0] == "high"
 
 
 def test_d5_rules() -> None:

@@ -142,7 +142,12 @@
 | 4.1 ≠ Y/PY 且 4.2 = **N/PN** 且 4.3 = **Y/PY/NI** 且 4.4 = **N/PN**                        | **Low**           |
 | 4.1 ≠ Y/PY 且 4.2 = **N/PN** 且 4.3 = **Y/PY/NI** 且 4.4 = **Y/PY/NI** 且 4.5 = **N/PN**    | **Some concerns** |
 | 4.1 ≠ Y/PY 且 4.2 = **N/PN** 且 4.3 = **Y/PY/NI** 且 4.4 = **Y/PY/NI** 且 4.5 = **Y/PY/NI** | **High**          |
-| 4.2 = **NI**（且未触发 High）                                                                 | **Some concerns** |
+| 4.1 ≠ Y/PY 且 4.2 = **NI** 且 4.3 = **N/PN**                                              | **Some concerns** |
+| 4.1 ≠ Y/PY 且 4.2 = **NI** 且 4.3 = **Y/PY/NI** 且 4.4 = **N/PN**                          | **Some concerns** |
+| 4.1 ≠ Y/PY 且 4.2 = **NI** 且 4.3 = **Y/PY/NI** 且 4.4 = **Y/PY/NI** 且 4.5 = **N/PN**      | **Some concerns** |
+| 4.1 ≠ Y/PY 且 4.2 = **NI** 且 4.3 = **Y/PY/NI** 且 4.4 = **Y/PY/NI** 且 4.5 = **Y/PY/NI**   | **High**          |
+
+注：当 4.2 = **NI** 时，仍需继续按 4.3→4.4→4.5 进行分流，不应直接结束判定。
 
 ---
 
