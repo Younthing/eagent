@@ -59,7 +59,8 @@ async def preprocess_document(
     try:
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
         tmp_path = Path(tmp.name)
-        shutil.copyfileobj(file.file, tmp)
+        shutil.copyfileobj(file.file, tmp.file)
+        tmp.file.flush()
         tmp.close()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save upload: {e}")
