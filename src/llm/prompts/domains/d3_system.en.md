@@ -5,13 +5,21 @@ Hard constraints:
 - Answers must be selected strictly from each question's `options`.
 - Follow the logical path defined by `conditions`.
 - If a question on the active path requires evaluation but evidence is missing, answer NI. In rationale, state which key information is missing (for example, number lost to follow-up).
-- If a question in `domain_questions` is not reached by the active logical path, omit it, or answer NA when required by the JSON structure. In this NA rationale, briefly state that prior answers make this question unnecessary to evaluate.
+- If a question in `domain_questions` is not reached by the active logical path, baseline guidance may say to omit it, or answer NA when required by the JSON structure. For this task, you must return all question_ids: unreached questions must be answered as NA. In this NA rationale, briefly state that prior answers make this question unnecessary to evaluate.
 - `NA` may be used only when the question is not reached by the active logical path.
 - If a question's `conditions` are met (the question is on the active path), `NA` is not allowed.
 - If evidence is insufficient for an active-path question, answer `NI` when `NI` is in `options`; otherwise answer `N`.
 - `conditions` is a list where each condition has `operator` and `dependencies`; each dependency includes `question_id` and `allowed_answers`.
 - Every returned answer must include an `evidence` array. For NI/NA, `evidence` may be an empty array.
 - Each evidence item must include a valid `paragraph_id` from provided evidence and a quote copied verbatim from that paragraph text (no paraphrase, no summary).
+- Before outputting final JSON, run an internal consistency self-check (do not output the self-check process):
+- Determine activation question-by-question using `conditions`.
+- For active-path questions, `NA` is forbidden.
+- For active-path questions with insufficient evidence: answer `NI` when `NI` is in options; otherwise answer `N`.
+- For unreached questions, answer `NA` and do not omit the question.
+- If `answer=NA`, the rationale must only indicate "not reached/not required" and must not mention "needs evaluation/should evaluate/insufficient evidence/should be NI or N".
+- If rationale states that evaluation is required, answer must not be `NA`.
+- If any question violates these rules, rewrite that question before returning final JSON.
 
 Calibration rules for D3:
 - General principle: For q3_1, prioritize verifiable counts OR verifiable equivalent statements. Do NOT default to NI solely because dropout/loss numbers are not separately reported.
@@ -44,6 +52,8 @@ Calibration rules for D3:
 - If the report provides no information about bias-correction/sensitivity analysis, or uses methods that do not credibly address missingness bias (e.g., LOCF, or imputation solely based on intervention group without appropriate modeling), q3_2 answer must be N.
 - If the handling method is not described and no sensitivity analysis is presented, q3_2 should not be upgraded; answer must remain N or NI depending on the question’s options and available evidence.
 - For q3_2 specifically: if q3_1 is N/PN/NI and evidence is insufficient, do not answer NA; answer N (since q3_2 options do not include NI).
+- q3_3 path calibration: when `q3_2` is `N` or `PN`, q3_3 is active-path and `NA` is forbidden.
+- q3_4 path calibration: when `q3_3` is `Y`, `PY`, or `NI`, q3_4 is active-path and `NA` is forbidden.
 - If missingness/withdrawal/dropout is plausibly related to participants’ health status and related to the outcome (e.g., lack of efficacy, marked improvement leading to stopping, outcome-related adverse events causing discontinuation), q3_3 answer must be Y.
 - If missingness appears related to health status but the relationship to the specific outcome is unclear, q3_3 answer should be PY.
 - If missingness is plausibly unrelated to the outcome (e.g., time conflict, relocation, personal reasons) and evidence supports this, q3_3 answer must be N.

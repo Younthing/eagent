@@ -5,10 +5,21 @@ Hard constraints:
 - Answers must be selected strictly from each question's `options`.
 - Follow the logical path defined by `conditions`.
 - If a question on the active path requires evaluation but evidence is missing, answer NI. In rationale, state which key information is missing (for example, number lost to follow-up).
-- If a question in `domain_questions` is not reached by the active logical path, omit it, or answer NA when required by the JSON structure. In this NA rationale, briefly state that prior answers make this question unnecessary to evaluate.
+- If a question in `domain_questions` is not reached by the active logical path, baseline guidance may say to omit it, or answer NA when required by the JSON structure. For this task, you must return all question_ids: unreached questions must be answered as NA. In this NA rationale, briefly state that prior answers make this question unnecessary to evaluate.
+- `NA` may be used only when the question is not reached by the active logical path.
+- If a question's `conditions` are met (the question is on the active path), `NA` is not allowed.
+- If evidence is insufficient for an active-path question, answer `NI` when `NI` is in options; otherwise answer `N`.
 - `conditions` is a list where each condition has `operator` and `dependencies`; each dependency includes `question_id` and `allowed_answers`.
 - Every returned answer must include an `evidence` array. For NI/NA, `evidence` may be an empty array.
 - Each evidence item must include a valid `paragraph_id` from provided evidence and a quote copied verbatim from that paragraph text (no paraphrase, no summary).
+- Before outputting final JSON, run an internal consistency self-check (do not output the self-check process):
+- Determine activation question-by-question using `conditions`.
+- For active-path questions, `NA` is forbidden.
+- For active-path questions with insufficient evidence: answer `NI` when `NI` is in options; otherwise answer `N`.
+- For unreached questions, answer `NA` and do not omit the question.
+- If `answer=NA`, the rationale must only indicate "not reached/not required" and must not mention "needs evaluation/should evaluate/insufficient evidence/should be NI or N".
+- If rationale states that evaluation is required, answer must not be `NA`.
+- If any question violates these rules, rewrite that question before returning final JSON.
 
 Calibration rules for D4:
 - Standard, recognized instruments and prespecified outcome definitions (e.g., MMSE, NIHSS, ADL, or a prespecified definition like “any drinking”) should NOT be treated as inappropriate by default. If there is no evidence of inappropriate modification or an unreliable method, q4_1 should default to N.
@@ -26,6 +37,8 @@ Calibration rules for D4:
 - If the outcome is participant-reported subjective (e.g., pain severity), q4_4 answer must be Y.
 - If the outcome is assessor-judged subjective (observer-reported with judgment), q4_4 answer must be Y.
 - If the outcome measurement method is not reported, q4_4 answer must be NI.
+- q4_4 path calibration: when `q4_3` is `Y`, `PY`, or `NI`, q4_4 is active-path and `NA` is forbidden.
+- q4_5 path calibration: when `q4_4` is `Y`, `PY`, or `NI`, q4_5 is active-path and `NA` is forbidden.
 - If knowledge of intervention could influence outcome measurement but there is no clear reason to believe it did, q4_5 answer must be N.
 - If there is clear evidence that knowledge of intervention is very likely to have influenced measurement (e.g., patient self-reported symptoms in contexts prone to expectancy effects; intervention provider assessing functional recovery), q4_5 answer must be Y.
 - If there is insufficient information to judge, q4_5 answer must be NI.
