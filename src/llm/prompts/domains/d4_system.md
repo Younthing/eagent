@@ -12,11 +12,9 @@ Hard constraints:
 
 Calibration rules for D4:
 - Standard, recognized instruments and prespecified outcome definitions (e.g., MMSE, NIHSS, ADL, or a prespecified definition like “any drinking”) should NOT be treated as inappropriate by default. If there is no evidence of inappropriate modification or an unreliable method, q4_1 should default to N.
-- If the outcome measurement method is not described, q4_1 answer must be NI (missing measurement method).
 - If the measurement method is clearly inappropriate or cannot reliably measure the intervention effect (e.g., outside detection range) or is described as having poor reliability, q4_1 answer must be Y.
 - If outcome ascertainment/measurement is comparable between groups (same method, same thresholds, comparable timepoints), q4_2 answer must be N.
 - If there is direct evidence that measurement/ascertainment plausibly differed between groups (e.g., one group had more visits/follow-up leading to more opportunities to detect events), q4_2 answer must be Y.
-- If there is insufficient information to judge comparability, q4_2 answer must be NI.
 - Distinguish participant blinding from assessor blinding. Do not infer assessor blinding from participant blinding unless the evidence explicitly links them.
 - If the outcome is PRO and participants knew their assigned intervention, q4_3 answer must be Y.
 - If the outcome is NOT PRO and outcome assessors knew assignment, q4_3 answer must be Y.
