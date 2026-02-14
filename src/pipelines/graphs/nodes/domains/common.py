@@ -342,11 +342,6 @@ def _normalize_decision(
     for question in questions:
         raw = answer_map[question.question_id]
         answer = normalized_answers.get(question.question_id, "NI")
-        if not _conditions_met(question.conditions, normalized_answers):
-            if "NA" in question.options:
-                answer = "NA"
-            else:
-                answer = "NI"
         normalized_answers[question.question_id] = answer
 
         rationale = str(raw.rationale).strip() if raw and raw.rationale else ""
@@ -526,26 +521,6 @@ def _normalize_llm_risk(value: Optional[str]) -> DomainRisk | None:
     if normalized is None:
         return None
     return cast(DomainRisk, normalized)
-
-
-def _conditions_met(
-    conditions: Sequence[QuestionCondition],
-    answers: Mapping[str, str],
-) -> bool:
-    if not conditions:
-        return True
-    for condition in conditions:
-        hits = [
-            answers.get(dependency.question_id) in dependency.allowed_answers
-            for dependency in condition.dependencies
-        ]
-        if condition.operator == "any":
-            if any(hits):
-                return True
-        else:
-            if all(hits):
-                return True
-    return False
 
 
 def _collect_evidence_refs(

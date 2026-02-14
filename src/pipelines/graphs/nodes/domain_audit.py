@@ -534,8 +534,6 @@ def _normalize_audit_answers(
 
     for question in questions:
         answer = normalized.get(question.question_id, cast(AnswerOption, "NI"))
-        if not _conditions_met(question.conditions, normalized):
-            answer = cast(AnswerOption, "NA" if "NA" in question.options else "NI")
         normalized[question.question_id] = answer
 
         raw = answer_map[question.question_id]
@@ -621,26 +619,6 @@ def _answer_validation_error(
         f"(domain={domain}, error_type={error_type}, question_id={question_id}, "
         f"answer={answer}, allowed_options={list(allowed_options)})"
     )
-
-
-def _conditions_met(
-    conditions: Sequence[QuestionCondition],
-    answers: Mapping[str, str],
-) -> bool:
-    if not conditions:
-        return True
-    for condition in conditions:
-        hits = [
-            answers.get(dependency.question_id) in dependency.allowed_answers
-            for dependency in condition.dependencies
-        ]
-        if condition.operator == "any":
-            if any(hits):
-                return True
-        else:
-            if all(hits):
-                return True
-    return False
 
 
 def _domain_answer_map_from_state(

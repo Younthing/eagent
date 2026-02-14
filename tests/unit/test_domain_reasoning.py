@@ -172,7 +172,7 @@ def test_domain_reasoning_parses_json_with_noise() -> None:
     assert decision.answers[0].evidence_refs[0].paragraph_id == "p1"
 
 
-def test_d2_reasoning_enforces_conditions() -> None:
+def test_d2_reasoning_keeps_answers_without_gate_backfill() -> None:
     question_set = QuestionSet(
         version="test",
         variant="standard",
@@ -322,7 +322,7 @@ def test_d2_reasoning_enforces_conditions() -> None:
     assert decision.risk == "low"
     assert answers["q2a_1"] == "N"
     assert answers["q2a_2"] == "N"
-    assert answers["q2a_3"] == "NA"
+    assert answers["q2a_3"] == "Y"
 
 
 def test_d2_adherence_rule_override() -> None:
@@ -604,7 +604,7 @@ def test_d2_fallback_requires_valid_llm_domain_risk() -> None:
     assert "rule_trace" in message
 
 
-def test_d3_reasoning_condition_chain_sets_na() -> None:
+def test_d3_reasoning_condition_chain_does_not_backfill_na() -> None:
     question_set = QuestionSet(
         version="test",
         variant="standard",
@@ -730,12 +730,12 @@ def test_d3_reasoning_condition_chain_sets_na() -> None:
     assert decision.risk == "low"
     answers = {answer.question_id: answer.answer for answer in decision.answers}
     assert answers["q3_1"] == "Y"
-    assert answers["q3_2"] == "NA"
-    assert answers["q3_3"] == "NA"
-    assert answers["q3_4"] == "NA"
+    assert answers["q3_2"] == "Y"
+    assert answers["q3_3"] == "Y"
+    assert answers["q3_4"] == "Y"
 
 
-def test_d4_reasoning_condition_chain_sets_na() -> None:
+def test_d4_reasoning_condition_chain_does_not_backfill_na() -> None:
     question_set = QuestionSet(
         version="test",
         variant="standard",
@@ -881,9 +881,9 @@ def test_d4_reasoning_condition_chain_sets_na() -> None:
     answers = {answer.question_id: answer.answer for answer in decision.answers}
     assert answers["q4_1"] == "Y"
     assert answers["q4_2"] == "N"
-    assert answers["q4_3"] == "NA"
-    assert answers["q4_4"] == "NA"
-    assert answers["q4_5"] == "NA"
+    assert answers["q4_3"] == "Y"
+    assert answers["q4_4"] == "Y"
+    assert answers["q4_5"] == "Y"
 
 
 def test_d5_reasoning_parses_answers() -> None:
