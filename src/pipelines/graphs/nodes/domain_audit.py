@@ -17,7 +17,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, cast
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from core.config import get_settings
 from schemas.internal.decisions import AnswerOption, DomainDecision
@@ -62,12 +62,19 @@ class _AuditEvidence(BaseModel):
 
 class _AuditAnswer(BaseModel):
     question_id: str
-    answer: str
+    answer: AnswerOption
     rationale: str = ""
     evidence: List[_AuditEvidence] = Field(default_factory=list)
     confidence: Optional[float] = Field(default=None, ge=0, le=1)
 
     model_config = ConfigDict(extra="ignore")
+
+    @field_validator("answer", mode="before")
+    @classmethod
+    def _normalize_answer_token(cls, value: object) -> object:
+        if value is None:
+            return value
+        return str(value).strip().upper()
 
 
 class _AuditOutput(BaseModel):
@@ -173,7 +180,7 @@ def _run_domain_audit_node(
     audit_output = _invoke_audit_model(llm=llm, messages=messages, **model_kwargs)
 
     audit_answer_map, audit_evidence_map, audit_confidence_map = _normalize_audit_answers(
-        audit_questions, audit_output
+        audit_questions, audit_output, domain=domain
     )
     domain_answer_map = _domain_answer_map_from_state(state, domain=domain)
 
@@ -278,7 +285,7 @@ def _run_all_domains_audit_node(state: dict, *, effect_type: str) -> dict:
     audit_output = _invoke_audit_model(llm=llm, messages=messages, **model_kwargs)
 
     audit_answer_map, audit_evidence_map, audit_confidence_map = _normalize_audit_answers(
-        audit_questions, audit_output
+        audit_questions, audit_output, domain="ALL"
     )
     domain_answer_map = _domain_answer_map_from_state(state, domain=None)
     mismatches = _compute_mismatches(
@@ -509,17 +516,21 @@ def _extract_json_object(text: str) -> str:
 def _normalize_audit_answers(
     questions: Sequence[Rob2Question],
     output: _AuditOutput,
+    *,
+    domain: DomainId | str,
 ) -> tuple[dict[str, AnswerOption], dict[str, List[dict]], dict[str, Optional[float]]]:
-    answer_map = {item.question_id: item for item in output.answers or []}
+    answer_map = _validate_and_index_audit_answers(
+        questions=questions,
+        raw_answers=output.answers or [],
+        domain=domain,
+    )
     normalized: Dict[str, AnswerOption] = {}
     evidence_map: Dict[str, List[dict]] = {}
     confidence_map: Dict[str, Optional[float]] = {}
 
     for question in questions:
-        raw = answer_map.get(question.question_id)
-        raw_answer = str(raw.answer).strip().upper() if raw else "NI"
-        normalized_answer = cast(AnswerOption, _normalize_answer(raw_answer, question.options))
-        normalized[question.question_id] = normalized_answer
+        raw = answer_map[question.question_id]
+        normalized[question.question_id] = raw.answer
 
     for question in questions:
         answer = normalized.get(question.question_id, cast(AnswerOption, "NI"))
@@ -527,24 +538,89 @@ def _normalize_audit_answers(
             answer = cast(AnswerOption, "NA" if "NA" in question.options else "NI")
         normalized[question.question_id] = answer
 
-        raw = answer_map.get(question.question_id)
+        raw = answer_map[question.question_id]
         evidence_map[question.question_id] = [
             {"paragraph_id": item.paragraph_id, "quote": item.quote}
-            for item in (raw.evidence if raw else [])
+            for item in raw.evidence
             if (item.paragraph_id or item.quote)
         ]
-        confidence_map[question.question_id] = raw.confidence if raw else None
+        confidence_map[question.question_id] = raw.confidence
 
     return normalized, evidence_map, confidence_map
 
 
-def _normalize_answer(value: str, options: Sequence[str]) -> str:
-    candidate = value.strip().upper()
-    if candidate in options:
-        return candidate
-    if candidate == "NA" and "NA" in options:
-        return "NA"
-    return "NI"
+def _validate_and_index_audit_answers(
+    *,
+    questions: Sequence[Rob2Question],
+    raw_answers: Sequence[_AuditAnswer],
+    domain: DomainId | str,
+) -> Dict[str, _AuditAnswer]:
+    question_by_id = {question.question_id: question for question in questions}
+    indexed: Dict[str, _AuditAnswer] = {}
+
+    for item in raw_answers:
+        question = question_by_id.get(item.question_id)
+        if question is None:
+            raise ValueError(
+                _answer_validation_error(
+                    domain=domain,
+                    error_type="unknown",
+                    question_id=item.question_id,
+                    answer=item.answer,
+                    allowed_options=[],
+                )
+            )
+        if item.question_id in indexed:
+            raise ValueError(
+                _answer_validation_error(
+                    domain=domain,
+                    error_type="duplicate",
+                    question_id=item.question_id,
+                    answer=item.answer,
+                    allowed_options=question.options,
+                )
+            )
+        if item.answer not in question.options:
+            raise ValueError(
+                _answer_validation_error(
+                    domain=domain,
+                    error_type="invalid",
+                    question_id=item.question_id,
+                    answer=item.answer,
+                    allowed_options=question.options,
+                )
+            )
+        indexed[item.question_id] = item
+
+    for question in questions:
+        if question.question_id in indexed:
+            continue
+        raise ValueError(
+            _answer_validation_error(
+                domain=domain,
+                error_type="missing",
+                question_id=question.question_id,
+                answer="<missing>",
+                allowed_options=question.options,
+            )
+        )
+
+    return indexed
+
+
+def _answer_validation_error(
+    *,
+    domain: DomainId | str,
+    error_type: str,
+    question_id: str,
+    answer: object,
+    allowed_options: Sequence[str],
+) -> str:
+    return (
+        "LLM answers validation failed "
+        f"(domain={domain}, error_type={error_type}, question_id={question_id}, "
+        f"answer={answer}, allowed_options={list(allowed_options)})"
+    )
 
 
 def _conditions_met(

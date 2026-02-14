@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from pipelines.graphs.nodes.domain_audit import _build_user_prompt, d1_audit_node
 from schemas.internal.decisions import DomainAnswer, DomainDecision
 from schemas.internal.documents import DocStructure, SectionSpan
@@ -290,3 +292,202 @@ def test_domain_audit_parses_json_with_noise() -> None:
 
     validated = out["validated_candidates"]["q1"]
     assert validated[0]["paragraph_id"] == "p1"
+
+
+def test_domain_audit_rejects_question_level_invalid_answer() -> None:
+    doc = DocStructure(
+        body="Example.",
+        sections=[SectionSpan(paragraph_id="p1", title="Methods", page=1, text="Example.")],
+    )
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q1",
+                rob2_id="q1",
+                domain="D1",
+                text="Was randomization described?",
+                options=["Y", "N"],
+                order=1,
+            )
+        ],
+    )
+    audit_llm = _DummyLLM(
+        json.dumps(
+            {
+                "answers": [
+                    {
+                        "question_id": "q1",
+                        "answer": "NI",
+                        "rationale": "Unknown.",
+                        "evidence": [],
+                    }
+                ]
+            }
+        )
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        d1_audit_node(
+            {
+                "doc_structure": doc.model_dump(),
+                "question_set": question_set.model_dump(),
+                "validated_candidates": {},
+                "domain_audit_mode": "llm",
+                "domain_audit_llm": audit_llm,
+            }
+        )
+    message = str(exc_info.value)
+    assert "domain=D1" in message
+    assert "error_type=invalid" in message
+    assert "question_id=q1" in message
+
+
+def test_domain_audit_rejects_missing_question_answer() -> None:
+    doc = DocStructure(
+        body="Example.",
+        sections=[SectionSpan(paragraph_id="p1", title="Methods", page=1, text="Example.")],
+    )
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q1",
+                rob2_id="q1",
+                domain="D1",
+                text="Was randomization described?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            )
+        ],
+    )
+    audit_llm = _DummyLLM(json.dumps({"answers": []}))
+
+    with pytest.raises(ValueError) as exc_info:
+        d1_audit_node(
+            {
+                "doc_structure": doc.model_dump(),
+                "question_set": question_set.model_dump(),
+                "validated_candidates": {},
+                "domain_audit_mode": "llm",
+                "domain_audit_llm": audit_llm,
+            }
+        )
+    message = str(exc_info.value)
+    assert "domain=D1" in message
+    assert "error_type=missing" in message
+    assert "question_id=q1" in message
+
+
+def test_domain_audit_rejects_unknown_question_id() -> None:
+    doc = DocStructure(
+        body="Example.",
+        sections=[SectionSpan(paragraph_id="p1", title="Methods", page=1, text="Example.")],
+    )
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q1",
+                rob2_id="q1",
+                domain="D1",
+                text="Was randomization described?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            )
+        ],
+    )
+    audit_llm = _DummyLLM(
+        json.dumps(
+            {
+                "answers": [
+                    {
+                        "question_id": "q1",
+                        "answer": "Y",
+                        "rationale": "Supported.",
+                        "evidence": [],
+                    },
+                    {
+                        "question_id": "q99",
+                        "answer": "N",
+                        "rationale": "Unknown question.",
+                        "evidence": [],
+                    },
+                ]
+            }
+        )
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        d1_audit_node(
+            {
+                "doc_structure": doc.model_dump(),
+                "question_set": question_set.model_dump(),
+                "validated_candidates": {},
+                "domain_audit_mode": "llm",
+                "domain_audit_llm": audit_llm,
+            }
+        )
+    message = str(exc_info.value)
+    assert "domain=D1" in message
+    assert "error_type=unknown" in message
+    assert "question_id=q99" in message
+
+
+def test_domain_audit_rejects_duplicate_question_id() -> None:
+    doc = DocStructure(
+        body="Example.",
+        sections=[SectionSpan(paragraph_id="p1", title="Methods", page=1, text="Example.")],
+    )
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q1",
+                rob2_id="q1",
+                domain="D1",
+                text="Was randomization described?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            )
+        ],
+    )
+    audit_llm = _DummyLLM(
+        json.dumps(
+            {
+                "answers": [
+                    {
+                        "question_id": "q1",
+                        "answer": "Y",
+                        "rationale": "Supported.",
+                        "evidence": [],
+                    },
+                    {
+                        "question_id": "q1",
+                        "answer": "N",
+                        "rationale": "Duplicate.",
+                        "evidence": [],
+                    },
+                ]
+            }
+        )
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        d1_audit_node(
+            {
+                "doc_structure": doc.model_dump(),
+                "question_set": question_set.model_dump(),
+                "validated_candidates": {},
+                "domain_audit_mode": "llm",
+                "domain_audit_llm": audit_llm,
+            }
+        )
+    message = str(exc_info.value)
+    assert "domain=D1" in message
+    assert "error_type=duplicate" in message
+    assert "question_id=q1" in message

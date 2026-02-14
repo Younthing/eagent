@@ -9,7 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, TYPE_CHECKING, cast, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from core.config import get_settings
 from rob2.decision_rules import evaluate_domain_risk_with_trace
@@ -46,12 +46,19 @@ class _AnswerEvidence(BaseModel):
 
 class _AnswerOutput(BaseModel):
     question_id: str
-    answer: str
+    answer: AnswerOption
     rationale: str
     evidence: List[_AnswerEvidence] = Field(default_factory=list)
     confidence: Optional[float] = Field(default=None, ge=0, le=1)
 
     model_config = ConfigDict(extra="ignore")
+
+    @field_validator("answer", mode="before")
+    @classmethod
+    def _normalize_answer_token(cls, value: object) -> object:
+        if value is None:
+            return value
+        return str(value).strip().upper()
 
 
 class _DecisionOutput(BaseModel):
@@ -320,19 +327,20 @@ def _normalize_decision(
     *,
     effect_type: Optional[EffectType],
 ) -> DomainDecision:
-    answer_map = {answer.question_id: answer for answer in response.answers or []}
+    answer_map = _validate_and_index_answers(
+        domain=domain,
+        questions=questions,
+        raw_answers=response.answers or [],
+    )
     answers: List[DomainAnswer] = []
     missing_questions: List[str] = []
 
-    normalized_answers: Dict[str, AnswerOption] = {}
-    for question in questions:
-        raw = answer_map.get(question.question_id)
-        raw_answer = str(raw.answer).strip().upper() if raw else "NI"
-        normalized = _normalize_answer(raw_answer, question.options)
-        normalized_answers[question.question_id] = cast(AnswerOption, normalized)
+    normalized_answers: Dict[str, AnswerOption] = {
+        question.question_id: answer_map[question.question_id].answer for question in questions
+    }
 
     for question in questions:
-        raw = answer_map.get(question.question_id)
+        raw = answer_map[question.question_id]
         answer = normalized_answers.get(question.question_id, "NI")
         if not _conditions_met(question.conditions, normalized_answers):
             if "NA" in question.options:
@@ -402,6 +410,80 @@ def _normalize_decision(
     )
 
 
+def _validate_and_index_answers(
+    *,
+    domain: DomainId,
+    questions: Sequence[Rob2Question],
+    raw_answers: Sequence[_AnswerOutput],
+) -> Dict[str, _AnswerOutput]:
+    question_by_id = {question.question_id: question for question in questions}
+    indexed: Dict[str, _AnswerOutput] = {}
+
+    for item in raw_answers:
+        question = question_by_id.get(item.question_id)
+        if question is None:
+            raise ValueError(
+                _answer_validation_error(
+                    domain=domain,
+                    error_type="unknown",
+                    question_id=item.question_id,
+                    answer=item.answer,
+                    allowed_options=[],
+                )
+            )
+        if item.question_id in indexed:
+            raise ValueError(
+                _answer_validation_error(
+                    domain=domain,
+                    error_type="duplicate",
+                    question_id=item.question_id,
+                    answer=item.answer,
+                    allowed_options=question.options,
+                )
+            )
+        if item.answer not in question.options:
+            raise ValueError(
+                _answer_validation_error(
+                    domain=domain,
+                    error_type="invalid",
+                    question_id=item.question_id,
+                    answer=item.answer,
+                    allowed_options=question.options,
+                )
+            )
+        indexed[item.question_id] = item
+
+    for question in questions:
+        if question.question_id in indexed:
+            continue
+        raise ValueError(
+            _answer_validation_error(
+                domain=domain,
+                error_type="missing",
+                question_id=question.question_id,
+                answer="<missing>",
+                allowed_options=question.options,
+            )
+        )
+
+    return indexed
+
+
+def _answer_validation_error(
+    *,
+    domain: DomainId,
+    error_type: str,
+    question_id: str,
+    answer: object,
+    allowed_options: Sequence[str],
+) -> str:
+    return (
+        "LLM answers validation failed "
+        f"(domain={domain}, error_type={error_type}, question_id={question_id}, "
+        f"answer={answer}, allowed_options={list(allowed_options)})"
+    )
+
+
 def _build_rule_based_rationale(
     *,
     domain: DomainId,
@@ -444,15 +526,6 @@ def _normalize_llm_risk(value: Optional[str]) -> DomainRisk | None:
     if normalized is None:
         return None
     return cast(DomainRisk, normalized)
-
-
-def _normalize_answer(value: str, options: Sequence[str]) -> str:
-    candidate = value.strip().upper()
-    if candidate in options:
-        return candidate
-    if candidate == "NA" and "NA" in options:
-        return "NA"
-    return "NI"
 
 
 def _conditions_met(

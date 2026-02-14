@@ -965,6 +965,316 @@ def test_d5_reasoning_parses_answers() -> None:
     assert answers["q5_3"] == "PN"
 
 
+def test_domain_reasoning_rejects_invalid_answer_token() -> None:
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q1_1",
+                rob2_id="q1_1",
+                domain="D1",
+                text="Was the allocation sequence random?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            )
+        ],
+    )
+    validated_candidates = {"q1_1": [_candidate("q1_1", "p1", "Randomized.")]}
+    llm = _DummyLLM(
+        json.dumps(
+            {
+                "domain_risk": "some concerns",
+                "answers": [
+                    {
+                        "question_id": "q1_1",
+                        "answer": "MAYBE",
+                        "rationale": "Unclear.",
+                        "evidence": [{"paragraph_id": "p1", "quote": "Randomized."}],
+                    }
+                ],
+            }
+        )
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        run_domain_reasoning(
+            domain="D1",
+            question_set=question_set,
+            validated_candidates=validated_candidates,
+            llm=cast(ChatModelLike, llm),
+            llm_config=None,
+        )
+    assert "did not match schema" in str(exc_info.value)
+
+
+def test_domain_reasoning_rejects_question_level_invalid_answer() -> None:
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q3_1",
+                rob2_id="q3_1",
+                domain="D3",
+                text="Were data available for all participants?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            ),
+            Rob2Question(
+                question_id="q3_2",
+                rob2_id="q3_2",
+                domain="D3",
+                text="If N/PN/NI to 3.1: Is there evidence of no bias?",
+                options=["NA", "Y", "PY", "PN", "N"],
+                conditions=[
+                    QuestionCondition(
+                        operator="any",
+                        dependencies=[
+                            QuestionDependency(
+                                question_id="q3_1",
+                                allowed_answers=["N", "PN", "NI"],
+                            )
+                        ],
+                    )
+                ],
+                order=2,
+            ),
+        ],
+    )
+    llm = _DummyLLM(
+        json.dumps(
+            {
+                "domain_risk": "some concerns",
+                "answers": [
+                    {
+                        "question_id": "q3_1",
+                        "answer": "N",
+                        "rationale": "Incomplete follow-up.",
+                        "evidence": [],
+                    },
+                    {
+                        "question_id": "q3_2",
+                        "answer": "NI",
+                        "rationale": "Missing details.",
+                        "evidence": [],
+                    },
+                ],
+            }
+        )
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        run_domain_reasoning(
+            domain="D3",
+            question_set=question_set,
+            validated_candidates={},
+            llm=cast(ChatModelLike, llm),
+            llm_config=None,
+        )
+    message = str(exc_info.value)
+    assert "domain=D3" in message
+    assert "error_type=invalid" in message
+    assert "question_id=q3_2" in message
+    assert "answer=NI" in message
+
+
+def test_domain_reasoning_rejects_missing_question_answer() -> None:
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q1_1",
+                rob2_id="q1_1",
+                domain="D1",
+                text="Was the allocation sequence random?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            ),
+            Rob2Question(
+                question_id="q1_2",
+                rob2_id="q1_2",
+                domain="D1",
+                text="Was allocation concealed?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=2,
+            ),
+        ],
+    )
+    llm = _DummyLLM(
+        json.dumps(
+            {
+                "domain_risk": "some concerns",
+                "answers": [
+                    {
+                        "question_id": "q1_1",
+                        "answer": "Y",
+                        "rationale": "Randomized.",
+                        "evidence": [],
+                    }
+                ],
+            }
+        )
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        run_domain_reasoning(
+            domain="D1",
+            question_set=question_set,
+            validated_candidates={},
+            llm=cast(ChatModelLike, llm),
+            llm_config=None,
+        )
+    message = str(exc_info.value)
+    assert "domain=D1" in message
+    assert "error_type=missing" in message
+    assert "question_id=q1_2" in message
+
+
+def test_domain_reasoning_rejects_unknown_question_id() -> None:
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q1_1",
+                rob2_id="q1_1",
+                domain="D1",
+                text="Was the allocation sequence random?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            )
+        ],
+    )
+    llm = _DummyLLM(
+        json.dumps(
+            {
+                "domain_risk": "some concerns",
+                "answers": [
+                    {
+                        "question_id": "q1_1",
+                        "answer": "Y",
+                        "rationale": "Randomized.",
+                        "evidence": [],
+                    },
+                    {
+                        "question_id": "q9_9",
+                        "answer": "N",
+                        "rationale": "Not a valid question.",
+                        "evidence": [],
+                    },
+                ],
+            }
+        )
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        run_domain_reasoning(
+            domain="D1",
+            question_set=question_set,
+            validated_candidates={},
+            llm=cast(ChatModelLike, llm),
+            llm_config=None,
+        )
+    message = str(exc_info.value)
+    assert "domain=D1" in message
+    assert "error_type=unknown" in message
+    assert "question_id=q9_9" in message
+
+
+def test_domain_reasoning_rejects_duplicate_question_id() -> None:
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q1_1",
+                rob2_id="q1_1",
+                domain="D1",
+                text="Was the allocation sequence random?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            )
+        ],
+    )
+    llm = _DummyLLM(
+        json.dumps(
+            {
+                "domain_risk": "some concerns",
+                "answers": [
+                    {
+                        "question_id": "q1_1",
+                        "answer": "Y",
+                        "rationale": "Randomized.",
+                        "evidence": [],
+                    },
+                    {
+                        "question_id": "q1_1",
+                        "answer": "N",
+                        "rationale": "Duplicate answer.",
+                        "evidence": [],
+                    },
+                ],
+            }
+        )
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        run_domain_reasoning(
+            domain="D1",
+            question_set=question_set,
+            validated_candidates={},
+            llm=cast(ChatModelLike, llm),
+            llm_config=None,
+        )
+    message = str(exc_info.value)
+    assert "domain=D1" in message
+    assert "error_type=duplicate" in message
+    assert "question_id=q1_1" in message
+
+
+def test_domain_reasoning_normalizes_lowercase_answer() -> None:
+    question_set = QuestionSet(
+        version="test",
+        variant="standard",
+        questions=[
+            Rob2Question(
+                question_id="q1_1",
+                rob2_id="q1_1",
+                domain="D1",
+                text="Was the allocation sequence random?",
+                options=["Y", "PY", "PN", "N", "NI"],
+                order=1,
+            )
+        ],
+    )
+    llm = _DummyLLM(
+        json.dumps(
+            {
+                "domain_risk": "some concerns",
+                "answers": [
+                    {
+                        "question_id": "q1_1",
+                        "answer": "y",
+                        "rationale": "Randomized.",
+                        "evidence": [],
+                    }
+                ],
+            }
+        )
+    )
+
+    decision = run_domain_reasoning(
+        domain="D1",
+        question_set=question_set,
+        validated_candidates={},
+        llm=cast(ChatModelLike, llm),
+        llm_config=None,
+    )
+    assert decision.answers[0].answer == "Y"
+
+
 def test_domain_prompts_preserve_non_ascii_text() -> None:
     question_text = "是否使用随机分配？"
     evidence_text = "分配隐藏采用随机数字表。"
