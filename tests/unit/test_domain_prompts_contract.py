@@ -93,6 +93,17 @@ def test_d2_prompts_cover_assignment_and_adherence_calibration() -> None:
         assert "adherence" in text, f"{name} missing adherence calibration"
 
 
+def test_d2_zh_prompt_uses_payload_question_ids_and_path_constraints() -> None:
+    text = _load("d2_system.zh.md")
+    assert "不得使用 `q2_1..q2_7` 作为返回键或作答题号" in text
+    assert "`q2a_1` 答案为" in text
+    assert "`q2a_7` 答案为" in text
+    assert "`q2b_6` 应回答 NI" in text
+    assert "`q2a_6` 优先级规则" in text
+    assert "`q2b_4` 与 `q2b_5` 在出现在 payload 时属于激活题，不得回答 `NA`" in text
+    assert "对缺失结局的处理不当可能影响结果" not in text
+
+
 def test_d4_prompts_include_tool_and_assessor_calibration() -> None:
     for name in ["d4_system.md", "d4_system.en.md"]:
         text = _load(name).lower()

@@ -44,3 +44,8 @@ def test_domain_prompt_templates_include_condition_semantics() -> None:
         assert "allowed_answers" in text
         assert "You must return all `question_id`s in `domain_questions`." in text
         assert "answer `NA` and do not omit the question" in text
+
+
+def test_d2_zh_prompt_treats_questions_without_conditions_as_active() -> None:
+    text = _load("d2_system.zh.md")
+    assert "`domain_questions` 中无 `conditions` 的问题视为已激活题，不得回答 `NA`" in text
