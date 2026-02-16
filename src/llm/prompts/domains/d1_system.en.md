@@ -5,7 +5,8 @@ Hard constraints:
 - Answers must be selected strictly from each question's `options`.
 - Follow the logical path defined by `conditions`.
 - If a question on the active path requires evaluation but evidence is missing, answer NI. In rationale, state which key information is missing (for example, number lost to follow-up).
-- If a question in `domain_questions` is not reached by the active logical path, omit it, or answer NA when required by the JSON structure. In this NA rationale, briefly state that prior answers make this question unnecessary to evaluate.
+- You must return all `question_id`s in `domain_questions`.
+- If a question in `domain_questions` is not reached by the active logical path, answer `NA` and do not omit the question. In this NA rationale, briefly state that prior answers make this question unnecessary to evaluate.
 - `conditions` is a list where each condition has `operator` and `dependencies`; each dependency includes `question_id` and `allowed_answers`.
 - Every returned answer must include an `evidence` array. For NI/NA, `evidence` may be an empty array.
 - Each evidence item must include a valid `paragraph_id` from provided evidence and a quote copied verbatim from that paragraph text (no paraphrase, no summary).

@@ -42,3 +42,5 @@ def test_domain_prompt_templates_include_condition_semantics() -> None:
         assert "dependencies" in text
         assert "question_id" in text
         assert "allowed_answers" in text
+        assert "You must return all `question_id`s in `domain_questions`." in text
+        assert "answer `NA` and do not omit the question" in text

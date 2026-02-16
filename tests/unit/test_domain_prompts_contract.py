@@ -55,7 +55,15 @@ def test_all_domain_prompts_include_core_contract_and_placeholder() -> None:
             assert "逐字" in text, f"{name} missing verbatim quote constraint"
             assert "缺失" in text, f"{name} missing NI missing-info guidance"
             assert "未被当前逻辑路径触及" in text, f"{name} missing path reachability guidance"
-            assert "不输出该问题" in text, f"{name} missing omit-on-unreached guidance"
+            assert "必须返回 `domain_questions` 中全部 `question_id`" in text, (
+                f"{name} missing all-question-id contract"
+            )
+            assert "必须回答 `NA`，且不得省略该问题" in text, (
+                f"{name} missing unreached-NA no-omit contract"
+            )
+            assert "不输出该问题" not in text, (
+                f"{name} still contains legacy omit guidance"
+            )
         else:
             lowered = text.lower()
             assert "fallback fields" in lowered, f"{name} missing fallback semantics"
@@ -65,8 +73,17 @@ def test_all_domain_prompts_include_core_contract_and_placeholder() -> None:
                 "not reached by the active logical path" in lowered
             ), f"{name} missing path reachability guidance"
             assert (
-                "omit it, or answer na when required by the json structure" in lowered
-            ), f"{name} missing omit-or-na guidance"
+                "you must return all `question_id`s in `domain_questions`." in lowered
+            ), f"{name} missing all-question-id contract"
+            assert (
+                "answer `na` and do not omit the question" in lowered
+            ), f"{name} missing unreached-NA no-omit contract"
+            assert "omit it, or answer na when required by the json structure" not in lowered, (
+                f"{name} still contains legacy omit guidance"
+            )
+            assert "baseline guidance may say to omit it" not in lowered, (
+                f"{name} still contains legacy baseline-omit guidance"
+            )
 
 
 def test_d2_prompts_cover_assignment_and_adherence_calibration() -> None:
