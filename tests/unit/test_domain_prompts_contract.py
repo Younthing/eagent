@@ -104,6 +104,17 @@ def test_d2_zh_prompt_uses_payload_question_ids_and_path_constraints() -> None:
     assert "对缺失结局的处理不当可能影响结果" not in text
 
 
+def test_d2_en_prompt_uses_payload_question_ids_and_path_constraints() -> None:
+    text = _load("d2_system.en.md")
+    lowered = text.lower()
+    assert "do not use `q2_1..q2_7` as returned keys or answer question ids" in lowered
+    assert "`q2a_1` answer must be y" in lowered
+    assert "`q2a_7` answer must be n" in lowered
+    assert "`q2a_6` priority rule" in lowered
+    assert "`q2b_4` and `q2b_5` are active-path questions whenever they appear in payload; `na` is not allowed" in lowered
+    assert "inappropriate handling of missing outcomes could affect results" not in lowered
+
+
 def test_d4_prompts_include_tool_and_assessor_calibration() -> None:
     for name in ["d4_system.md", "d4_system.en.md"]:
         text = _load(name).lower()
@@ -113,6 +124,13 @@ def test_d4_prompts_include_tool_and_assessor_calibration() -> None:
     zh_text = _load("d4_system.zh.md")
     assert "MMSE" in zh_text
     assert "评估者" in zh_text
+
+
+def test_d4_en_prompt_orders_q4_4_ni_before_py() -> None:
+    text = _load("d4_system.en.md").lower()
+    assert "q4_4 decision order" in text
+    assert "if missing, q4_4 answer must be ni" in text
+    assert "only when measurement/ascertainment method is reported" in text
 
 
 def test_fallback_prompt_templates_keep_strong_constraints() -> None:

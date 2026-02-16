@@ -33,8 +33,10 @@ Calibration rules for D4:
 - If the outcome is PRO and participants were blinded (e.g., placebo/sham described), q4_3 answer must be N.
 - If the outcome is NOT PRO and outcome assessors were blinded, q4_3 answer must be N.
 - If assessor/participant awareness for the relevant outcome type is not reported, q4_3 answer must be NI and the rationale must state what is missing (assessor blinding or participant blinding, depending on PRO vs non-PRO).
+- q4_4 decision order: first check whether key information about outcome measurement/ascertainment method is missing; if missing, q4_4 answer must be NI.
+- Only when measurement/ascertainment method is reported but the rater source (assessor-rated vs participant-reported) remains unclear may q4_4 be PY.
 - If the outcome is objective (e.g., all-cause mortality), and knowledge of intervention is unlikely to affect measurement, q4_4 answer must be N.
-- If the outcome is subjective and it is unclear whether it is assessor-rated or participant-reported, q4_4 answer should be PY.
+- If the outcome is subjective and, under reported measurement/ascertainment method, it remains unclear whether it is assessor-rated or participant-reported, q4_4 answer should be PY.
 - If the outcome is participant-reported subjective (e.g., pain severity), q4_4 answer must be Y.
 - If the outcome is assessor-judged subjective (observer-reported with judgment), q4_4 answer must be Y.
 - If the outcome measurement method is not reported, q4_4 answer must be NI.
