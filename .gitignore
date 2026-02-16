@@ -5,6 +5,7 @@ build/
 dist/
 wheels/
 *.egg-info
+/验证集
 
 # Virtual environments
 .venv

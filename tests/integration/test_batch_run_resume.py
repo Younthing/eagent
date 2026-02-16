@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import Future
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -70,6 +71,14 @@ def test_batch_run_resumes_failed_items(tmp_path: Path, monkeypatch) -> None:
             plot_output=None,
             excel=True,
             excel_output=None,
+            workers=1,
+            max_inflight_llm=1,
+            rate_limit_mode="fixed",
+            rate_limit_init=1,
+            rate_limit_max=1,
+            retry_429_max=0,
+            retry_429_backoff_ms=1,
+            prefetch=1,
         )
     except typer.Exit as exc:
         assert exc.exit_code == 1
@@ -106,6 +115,14 @@ def test_batch_run_resumes_failed_items(tmp_path: Path, monkeypatch) -> None:
         plot_output=None,
         excel=True,
         excel_output=None,
+        workers=1,
+        max_inflight_llm=1,
+        rate_limit_mode="fixed",
+        rate_limit_init=1,
+        rate_limit_max=1,
+        retry_429_max=0,
+        retry_429_backoff_ms=1,
+        prefetch=1,
     )
 
     summary_2 = json.loads((output_dir / "batch_summary.json").read_text(encoding="utf-8"))
@@ -169,6 +186,14 @@ def test_batch_run_no_plot_does_not_generate_png(tmp_path: Path, monkeypatch) ->
         plot_output=None,
         excel=True,
         excel_output=None,
+        workers=1,
+        max_inflight_llm=1,
+        rate_limit_mode="fixed",
+        rate_limit_init=1,
+        rate_limit_max=1,
+        retry_429_max=0,
+        retry_429_backoff_ms=1,
+        prefetch=1,
     )
 
     assert not (output_dir / "batch_traffic_light.png").exists()
@@ -220,6 +245,8 @@ def test_batch_run_defaults_enable_all_report_formats(
             "--no-persist",
             "--no-plot",
             "--no-excel",
+            "--workers",
+            "1",
         ],
     )
     assert result.exit_code == 0
@@ -340,6 +367,14 @@ def test_batch_run_reuses_fixed_outputs_by_pdf_hash(tmp_path: Path, monkeypatch)
         plot_output=None,
         excel=True,
         excel_output=None,
+        workers=1,
+        max_inflight_llm=1,
+        rate_limit_mode="fixed",
+        rate_limit_init=1,
+        rate_limit_max=1,
+        retry_429_max=0,
+        retry_429_backoff_ms=1,
+        prefetch=1,
     )
 
     assert calls == ["two.pdf"]
@@ -438,6 +473,115 @@ def test_batch_run_does_not_reuse_without_batch_meta(tmp_path: Path, monkeypatch
         plot_output=None,
         excel=False,
         excel_output=None,
+        workers=1,
+        max_inflight_llm=1,
+        rate_limit_mode="fixed",
+        rate_limit_init=1,
+        rate_limit_max=1,
+        retry_429_max=0,
+        retry_429_backoff_ms=1,
+        prefetch=1,
     )
 
     assert calls == ["one.pdf"]
+
+
+def test_batch_run_parallel_with_fake_pool(tmp_path: Path, monkeypatch) -> None:
+    input_dir = tmp_path / "pdfs"
+    input_dir.mkdir()
+    for name in ["one.pdf", "two.pdf", "three.pdf"]:
+        (input_dir / name).write_bytes(f"%PDF-1.4\n{name}".encode("utf-8"))
+
+    output_dir = tmp_path / "out"
+    calls: list[str] = []
+    pool_inits: list[int] = []
+
+    class FakeProcessPoolExecutor:
+        def __init__(self, *, max_workers: int):
+            pool_inits.append(max_workers)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def submit(self, fn, *args, **kwargs):
+            future = Future()
+            try:
+                future.set_result(fn(*args, **kwargs))
+            except Exception as exc:  # pragma: no cover - defensive
+                future.set_exception(exc)
+            return future
+
+    def fake_run_rob2(input_data, *_args, **_kwargs):
+        name = Path(str(input_data.pdf_path)).name
+        calls.append(name)
+        domain = SimpleNamespace(domain="D1", risk="low")
+        overall = SimpleNamespace(risk="low")
+        result_payload = SimpleNamespace(overall=overall, domains=[domain])
+        return SimpleNamespace(
+            run_id=f"run_{name}",
+            runtime_ms=50,
+            result=result_payload,
+        )
+
+    def fake_write_run_output_dir(result, path, **_kwargs):
+        path.mkdir(parents=True, exist_ok=True)
+        (path / "result.json").write_text(
+            json.dumps(
+                {
+                    "run_id": result.run_id,
+                    "runtime_ms": result.runtime_ms,
+                    "result": {
+                        "overall": {"risk": result.result.overall.risk},
+                        "domains": [{"domain": "D1", "risk": "low"}],
+                    },
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(batch_command, "_PROCESS_POOL_EXECUTOR", FakeProcessPoolExecutor)
+    monkeypatch.setattr(batch_command, "run_rob2", fake_run_rob2)
+    monkeypatch.setattr(batch_command, "write_run_output_dir", fake_write_run_output_dir)
+
+    batch_command.run_batch(
+        input_dir=input_dir,
+        output_dir=output_dir,
+        options=None,
+        options_file=None,
+        set_values=None,
+        batch_id=None,
+        batch_name=None,
+        json_out=False,
+        table=True,
+        html=False,
+        docx=False,
+        pdf=False,
+        reset=False,
+        persist=False,
+        persist_dir=None,
+        persist_scope=None,
+        cache_dir=None,
+        cache_scope=None,
+        plot=False,
+        plot_output=None,
+        excel=False,
+        excel_output=None,
+        workers=3,
+        max_inflight_llm=3,
+        rate_limit_mode="fixed",
+        rate_limit_init=3,
+        rate_limit_max=3,
+        retry_429_max=0,
+        retry_429_backoff_ms=1,
+        prefetch=6,
+    )
+
+    assert pool_inits == [3]
+    assert sorted(calls) == ["one.pdf", "three.pdf", "two.pdf"]
+    summary = json.loads((output_dir / "batch_summary.json").read_text(encoding="utf-8"))
+    assert summary["counts"]["success"] == 3

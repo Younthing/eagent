@@ -415,3 +415,42 @@ def test_excel_batch_accepts_summary_file_source(tmp_path: Path) -> None:
     assert output.exists()
     workbook = load_workbook(output)
     assert "00_批次总览" in workbook.sheetnames
+
+
+def test_retryable_error_detection() -> None:
+    assert batch_command._is_retryable_error("RuntimeError: 429 rate limit")
+    assert batch_command._is_retryable_error("TimeoutError: request timeout")
+    assert batch_command._is_retryable_error("ConnectTimeout: upstream timeout")
+    assert not batch_command._is_retryable_error("ValueError: bad input")
+
+
+def test_adaptive_concurrency_controller_down_and_up() -> None:
+    controller = batch_command._AdaptiveConcurrencyController(
+        mode="adaptive",
+        current_limit=3,
+        min_limit=1,
+        max_limit=4,
+        success_window=2,
+    )
+
+    controller.observe(success=True, had_retryable_error=True)
+    assert controller.current_limit == 2
+
+    controller.observe(success=True, had_retryable_error=False)
+    assert controller.current_limit == 2
+    controller.observe(success=True, had_retryable_error=False)
+    assert controller.current_limit == 3
+
+
+def test_fixed_concurrency_controller_keeps_limit() -> None:
+    controller = batch_command._AdaptiveConcurrencyController(
+        mode="fixed",
+        current_limit=3,
+        min_limit=1,
+        max_limit=4,
+        success_window=2,
+    )
+    controller.observe(success=False, had_retryable_error=True)
+    controller.observe(success=True, had_retryable_error=False)
+    controller.observe(success=True, had_retryable_error=False)
+    assert controller.current_limit == 3

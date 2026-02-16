@@ -14,6 +14,24 @@ uv run rob2 -h
 uv run rob2 run /path/to.pdf --json
 ```
 
+### 批量并行运行（1000+ 文献）
+
+```bash
+uv run rob2 batch run /path/to/pdfs \
+  --workers 4 \
+  --max-inflight-llm 8 \
+  --rate-limit-mode adaptive \
+  --rate-limit-init 2 \
+  --rate-limit-max 4 \
+  --retry-429-max 4 \
+  --retry-429-backoff-ms 800
+```
+
+说明：
+* `--workers` 控制文献级并发（单机多进程）。
+* `--rate-limit-mode adaptive` 在出现 429/超时时会自动下调并发额度，连续成功后再小步回升。
+* 批量 summary 会保留 `runtime_meta`（吞吐、平均耗时、p95 等运行指标）。
+
 ---
 
 ## 系统概览

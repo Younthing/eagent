@@ -272,7 +272,7 @@ Notes:
 * **Full-Text Domain Audit（可选）**：全文审核信号答案，提供引用并补全证据后重跑受影响 domain。
 * **ROB2 Aggregator**：汇总五域与 overall risk（当前实现口径：任一 High→High；全 Low→Low；无 High 且 4–5 个 Some concerns→High；无 High 且 1–3 个 Some concerns→Some concerns；无域结果→Not applicable），输出结构化结果。
 * **Batch Exporter**：基于批量 `batch_summary.json` + 各 `result.json` 生成红绿灯图（PNG）与多 sheet 审计工作簿（XLSX）。
-* **Runtime/Orchestration**：LangGraph 装配、并行调度与中断恢复。
+* **Runtime/Orchestration**：LangGraph 装配、并行调度与中断恢复；`rob2 batch run` 支持单机多进程执行（`--workers`）、自适应限流（`--rate-limit-mode adaptive`）以及 429/超时指数退避重试（`--retry-429-*`）。
 
 ### Interface Contracts (Data Schemas)
 

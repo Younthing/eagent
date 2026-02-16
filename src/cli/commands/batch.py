@@ -6,9 +6,13 @@ import csv
 import json
 import os
 import shutil
+from collections import deque
+from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from time import sleep
+from typing import Any, Literal
 
 import typer
 
@@ -77,6 +81,80 @@ _CSV_COLUMNS = [
     "D5_risk",
     "error",
 ]
+
+_RETRYABLE_ERROR_HINTS = (
+    "429",
+    "rate limit",
+    "too many requests",
+    "timeout",
+    "timed out",
+    "connecttimeout",
+    "readtimeout",
+    "temporarily unavailable",
+)
+_ADAPTIVE_SUCCESS_WINDOW = 3
+_DEFAULT_RETRY_BACKOFF_MS = 800
+
+_PROCESS_POOL_EXECUTOR = ProcessPoolExecutor
+
+
+@dataclass(slots=True)
+class _BatchTask:
+    index: int
+    total: int
+    relative_path: str
+    pdf_path: str
+    pdf_sha256: str
+    output_subdir: str
+    batch_output_dir: str
+    pdf_name: str
+    options_payload: dict[str, Any]
+    include_table: bool
+    html: bool
+    docx: bool
+    pdf: bool
+    persist_enabled: bool
+    persistence_dir: str
+    persistence_scope: str
+    cache_dir: str
+    cache_scope: str
+    batch_id: str | None
+    retry_429_max: int
+    retry_429_backoff_ms: int
+
+
+@dataclass(slots=True)
+class _AdaptiveConcurrencyController:
+    mode: Literal["adaptive", "fixed"]
+    current_limit: int
+    min_limit: int
+    max_limit: int
+    success_window: int = _ADAPTIVE_SUCCESS_WINDOW
+    _success_streak: int = 0
+
+    def __post_init__(self) -> None:
+        self.current_limit = max(self.min_limit, min(self.current_limit, self.max_limit))
+        self.success_window = max(1, int(self.success_window))
+        self._success_streak = 0
+
+    def observe(self, *, success: bool, had_retryable_error: bool) -> None:
+        if self.mode == "fixed":
+            return
+
+        if had_retryable_error:
+            self.current_limit = max(self.min_limit, self.current_limit - 1)
+            self._success_streak = 0
+            return
+
+        if success:
+            self._success_streak += 1
+            if self._success_streak >= self.success_window:
+                if self.current_limit < self.max_limit:
+                    self.current_limit += 1
+                self._success_streak = 0
+            return
+
+        self._success_streak = 0
 
 
 @app.command("run", help="批量运行目录中的 PDF")
@@ -194,6 +272,53 @@ def run_batch(
         "--excel-output",
         help="Excel 汇总输出路径（默认: <output-dir>/batch_summary.xlsx）",
     ),
+    workers: int | None = typer.Option(
+        None,
+        "--workers",
+        min=1,
+        help="并发 worker 数（默认使用配置或 CPU 自动值）",
+    ),
+    max_inflight_llm: int | None = typer.Option(
+        None,
+        "--max-inflight-llm",
+        min=1,
+        help="并发上限（用于并发控制）",
+    ),
+    rate_limit_mode: Literal["adaptive", "fixed"] | None = typer.Option(
+        None,
+        "--rate-limit-mode",
+        help="限流模式（adaptive|fixed）",
+    ),
+    rate_limit_init: int | None = typer.Option(
+        None,
+        "--rate-limit-init",
+        min=1,
+        help="自适应限流初始并发额度",
+    ),
+    rate_limit_max: int | None = typer.Option(
+        None,
+        "--rate-limit-max",
+        min=1,
+        help="自适应限流最大并发额度",
+    ),
+    retry_429_max: int = typer.Option(
+        4,
+        "--retry-429-max",
+        min=0,
+        help="429/超时最大重试次数",
+    ),
+    retry_429_backoff_ms: int = typer.Option(
+        _DEFAULT_RETRY_BACKOFF_MS,
+        "--retry-429-backoff-ms",
+        min=1,
+        help="429/超时重试退避基值（毫秒）",
+    ),
+    prefetch: int | None = typer.Option(
+        None,
+        "--prefetch",
+        min=1,
+        help="任务预取长度（默认: workers*2）",
+    ),
 ) -> None:
     input_dir_abs = input_dir.resolve()
     output_dir_abs = output_dir.resolve()
@@ -216,6 +341,35 @@ def run_batch(
     resolved_persist_scope = persist_scope or settings.persistence_scope
     resolved_cache_dir = str(cache_dir) if cache_dir else settings.cache_dir
     resolved_cache_scope = cache_scope or settings.cache_scope
+    resolved_workers = _resolve_workers(workers, getattr(settings, "batch_workers", None))
+    resolved_max_inflight_llm = _resolve_int_with_default(
+        max_inflight_llm,
+        getattr(settings, "max_inflight_llm", None),
+        fallback=max(1, resolved_workers),
+    )
+    if resolved_max_inflight_llm < 1:
+        raise typer.BadParameter("--max-inflight-llm 必须 >= 1")
+
+    resolved_rate_limit_mode = _resolve_rate_limit_mode(
+        rate_limit_mode,
+        getattr(settings, "rate_limit_mode", None),
+    )
+    resolved_rate_limit_init = _resolve_int_with_default(
+        rate_limit_init,
+        getattr(settings, "rate_limit_init", None),
+        fallback=min(resolved_workers, resolved_max_inflight_llm),
+    )
+    resolved_rate_limit_max = _resolve_int_with_default(
+        rate_limit_max,
+        getattr(settings, "rate_limit_max", None),
+        fallback=resolved_max_inflight_llm,
+    )
+    resolved_rate_limit_init = max(1, min(resolved_rate_limit_init, resolved_workers))
+    resolved_rate_limit_max = max(1, min(resolved_rate_limit_max, resolved_workers))
+    if resolved_rate_limit_init > resolved_rate_limit_max:
+        resolved_rate_limit_init = resolved_rate_limit_max
+
+    resolved_prefetch = max(1, prefetch if prefetch is not None else resolved_workers * 2)
 
     options_hash = hash_payload(
         {
@@ -229,6 +383,14 @@ def run_batch(
             "persist_scope": resolved_persist_scope,
             "cache_dir": resolved_cache_dir,
             "cache_scope": resolved_cache_scope,
+            "workers": resolved_workers,
+            "max_inflight_llm": resolved_max_inflight_llm,
+            "rate_limit_mode": resolved_rate_limit_mode,
+            "rate_limit_init": resolved_rate_limit_init,
+            "rate_limit_max": resolved_rate_limit_max,
+            "retry_429_max": retry_429_max,
+            "retry_429_backoff_ms": retry_429_backoff_ms,
+            "prefetch": resolved_prefetch,
         }
     )
 
@@ -278,6 +440,15 @@ def run_batch(
         )
     reusable_by_hash = _build_reusable_result_index(output_dir_abs)
     total = len(relative_paths)
+    _ensure_runtime_meta(
+        checkpoint,
+        workers=resolved_workers,
+        max_inflight_llm=resolved_max_inflight_llm,
+        rate_limit_mode=resolved_rate_limit_mode,
+    )
+
+    run_tasks: deque[_BatchTask] = deque()
+    options_payload = options_obj.model_dump()
 
     for index, entry in enumerate(file_entries, start=1):
         rel_path = str(entry["relative_path"])
@@ -296,6 +467,7 @@ def run_batch(
             item["status"] = "skipped"
             item["updated_at"] = _now_iso()
             reusable_by_hash[pdf_sha256] = subdir.resolve()
+            _increment_runtime_meta(checkpoint, completed=1)
             _write_checkpoint(checkpoint_path, checkpoint)
             _write_summary_files(checkpoint, output_dir_abs)
             typer.echo(f"[{index}/{total}] skip {rel_path}")
@@ -319,63 +491,55 @@ def run_batch(
                 item["error"] = None
                 item["updated_at"] = _now_iso()
                 reusable_by_hash[pdf_sha256] = subdir.resolve()
+                _increment_runtime_meta(checkpoint, completed=1)
                 _write_checkpoint(checkpoint_path, checkpoint)
                 _write_summary_files(checkpoint, output_dir_abs)
                 typer.echo(f"[{index}/{total}] skip {rel_path} (hash)")
                 continue
 
-        item["status"] = "running"
-        item["error"] = None
-        item["updated_at"] = _now_iso()
-        _write_checkpoint(checkpoint_path, checkpoint)
-
-        typer.echo(f"[{index}/{total}] run {rel_path}")
-        try:
-            result = run_rob2(
-                Rob2Input(pdf_path=str(pdf_path)),
-                options_obj,
+        run_tasks.append(
+            _BatchTask(
+                index=index,
+                total=total,
+                relative_path=rel_path,
+                pdf_path=str(pdf_path),
+                pdf_sha256=pdf_sha256,
+                output_subdir=str(item["output_subdir"]),
+                batch_output_dir=str(output_dir_abs),
+                pdf_name=pdf_path.name,
+                options_payload=options_payload,
+                include_table=table,
+                html=html,
+                docx=docx,
+                pdf=pdf,
                 persist_enabled=persist,
                 persistence_dir=resolved_persistence_dir,
                 persistence_scope=resolved_persist_scope,
                 cache_dir=resolved_cache_dir,
                 cache_scope=resolved_cache_scope,
                 batch_id=effective_batch_id,
+                retry_429_max=retry_429_max,
+                retry_429_backoff_ms=retry_429_backoff_ms,
             )
-            write_run_output_dir(
-                result,
-                subdir,
-                include_table=table,
-                html=html,
-                docx=docx,
-                pdf=pdf,
-                pdf_name=pdf_path.name,
-            )
-            _write_batch_item_meta(
-                output_dir=subdir,
-                pdf_sha256=pdf_sha256,
-                relative_path=rel_path,
-            )
-            domain_risks = {
-                str(domain.domain): domain.risk for domain in result.result.domains
-            }
-            item["status"] = "success"
-            item["run_id"] = result.run_id
-            item["runtime_ms"] = result.runtime_ms
-            item["overall_risk"] = result.result.overall.risk
-            item["domain_risks"] = domain_risks
-            item["error"] = None
-            reusable_by_hash[pdf_sha256] = subdir.resolve()
-        except Exception as exc:  # pragma: no cover - exercised via integration tests
-            item["status"] = "failed"
-            item["error"] = _format_error(exc)
-            item["run_id"] = None
-            item["runtime_ms"] = None
-            item["overall_risk"] = None
-            item["domain_risks"] = {}
-        finally:
-            item["updated_at"] = _now_iso()
-            _write_checkpoint(checkpoint_path, checkpoint)
-            _write_summary_files(checkpoint, output_dir_abs)
+        )
+
+    _write_checkpoint(checkpoint_path, checkpoint)
+    _write_summary_files(checkpoint, output_dir_abs)
+
+    if run_tasks:
+        _execute_batch_tasks(
+            tasks=run_tasks,
+            checkpoint=checkpoint,
+            items=items,
+            checkpoint_path=checkpoint_path,
+            output_dir=output_dir_abs,
+            reusable_by_hash=reusable_by_hash,
+            workers=resolved_workers,
+            prefetch=resolved_prefetch,
+            limiter_mode=resolved_rate_limit_mode,
+            limiter_init=min(resolved_rate_limit_init, resolved_workers),
+            limiter_max=min(resolved_rate_limit_max, resolved_workers),
+        )
 
     summary = _build_summary_payload(checkpoint)
     if plot:
@@ -470,6 +634,343 @@ def excel_batch(
     output_path = output.resolve() if output is not None else default_output
     exported = _generate_batch_excel(summary, summary_path, output_path)
     typer.echo(f"已写入: {output_path} (rows={exported})")
+
+
+def _execute_batch_tasks(
+    *,
+    tasks: deque[_BatchTask],
+    checkpoint: dict[str, Any],
+    items: dict[str, dict[str, Any]],
+    checkpoint_path: Path,
+    output_dir: Path,
+    reusable_by_hash: dict[str, Path],
+    workers: int,
+    prefetch: int,
+    limiter_mode: Literal["adaptive", "fixed"],
+    limiter_init: int,
+    limiter_max: int,
+) -> None:
+    limiter = _AdaptiveConcurrencyController(
+        mode=limiter_mode,
+        current_limit=max(1, limiter_init),
+        min_limit=1,
+        max_limit=max(1, limiter_max),
+        success_window=_ADAPTIVE_SUCCESS_WINDOW,
+    )
+
+    if workers <= 1:
+        while tasks:
+            task = tasks.popleft()
+            _mark_task_running(
+                task=task,
+                items=items,
+                checkpoint=checkpoint,
+                checkpoint_path=checkpoint_path,
+                output_dir=output_dir,
+            )
+            typer.echo(f"[{task.index}/{task.total}] run {task.relative_path}")
+            task_result = _run_batch_item_task(task)
+            _apply_task_result(
+                task_result=task_result,
+                checkpoint=checkpoint,
+                items=items,
+                checkpoint_path=checkpoint_path,
+                output_dir=output_dir,
+                reusable_by_hash=reusable_by_hash,
+            )
+            limiter.observe(
+                success=task_result.get("status") == "success",
+                had_retryable_error=bool(task_result.get("had_retryable_error")),
+            )
+        return
+
+    inflight_cap = max(1, prefetch)
+    futures: dict[Future[dict[str, Any]], _BatchTask] = {}
+    with _PROCESS_POOL_EXECUTOR(max_workers=workers) as executor:
+        while tasks or futures:
+            allowed = max(1, min(limiter.current_limit, inflight_cap))
+            while tasks and len(futures) < allowed:
+                task = tasks.popleft()
+                _mark_task_running(
+                    task=task,
+                    items=items,
+                    checkpoint=checkpoint,
+                    checkpoint_path=checkpoint_path,
+                    output_dir=output_dir,
+                )
+                typer.echo(f"[{task.index}/{task.total}] run {task.relative_path}")
+                future = executor.submit(_run_batch_item_task, task)
+                futures[future] = task
+
+            if not futures:
+                continue
+
+            done, _ = wait(set(futures), return_when=FIRST_COMPLETED)
+            for future in done:
+                task = futures.pop(future)
+                try:
+                    task_result = future.result()
+                except Exception as exc:  # pragma: no cover - defensive
+                    task_result = _task_failure_payload(task, exc)
+
+                _apply_task_result(
+                    task_result=task_result,
+                    checkpoint=checkpoint,
+                    items=items,
+                    checkpoint_path=checkpoint_path,
+                    output_dir=output_dir,
+                    reusable_by_hash=reusable_by_hash,
+                )
+
+                before = limiter.current_limit
+                limiter.observe(
+                    success=task_result.get("status") == "success",
+                    had_retryable_error=bool(task_result.get("had_retryable_error")),
+                )
+                after = limiter.current_limit
+                if after != before:
+                    typer.echo(f"[rate-limit] 并发额度调整: {before} -> {after}")
+
+
+def _mark_task_running(
+    *,
+    task: _BatchTask,
+    items: dict[str, dict[str, Any]],
+    checkpoint: dict[str, Any],
+    checkpoint_path: Path,
+    output_dir: Path,
+) -> None:
+    item = items[task.relative_path]
+    item["status"] = "running"
+    item["error"] = None
+    item["updated_at"] = _now_iso()
+    _write_checkpoint(checkpoint_path, checkpoint)
+    _write_summary_files(checkpoint, output_dir)
+
+
+def _run_batch_item_task(task: _BatchTask) -> dict[str, Any]:
+    subdir = Path(task.batch_output_dir) / task.output_subdir
+    retry_count = 0
+    retryable_errors = 0
+    had_retryable_error = False
+
+    for attempt in range(task.retry_429_max + 1):
+        try:
+            result = run_rob2(
+                Rob2Input(pdf_path=task.pdf_path),
+                task.options_payload,
+                persist_enabled=task.persist_enabled,
+                persistence_dir=task.persistence_dir,
+                persistence_scope=task.persistence_scope,
+                cache_dir=task.cache_dir,
+                cache_scope=task.cache_scope,
+                batch_id=task.batch_id,
+            )
+            write_run_output_dir(
+                result,
+                subdir,
+                include_table=task.include_table,
+                html=task.html,
+                docx=task.docx,
+                pdf=task.pdf,
+                pdf_name=task.pdf_name,
+            )
+            _write_batch_item_meta(
+                output_dir=subdir,
+                pdf_sha256=task.pdf_sha256,
+                relative_path=task.relative_path,
+            )
+            domain_risks = {
+                str(domain.domain): domain.risk for domain in result.result.domains
+            }
+            return {
+                "index": task.index,
+                "total": task.total,
+                "relative_path": task.relative_path,
+                "status": "success",
+                "run_id": result.run_id,
+                "runtime_ms": result.runtime_ms,
+                "overall_risk": result.result.overall.risk,
+                "domain_risks": domain_risks,
+                "error": None,
+                "pdf_sha256": task.pdf_sha256,
+                "result_dir": str(subdir),
+                "retry_count": retry_count,
+                "retryable_errors": retryable_errors,
+                "had_retryable_error": had_retryable_error,
+            }
+        except Exception as exc:  # pragma: no cover - exercised via integration tests
+            error_text = _format_error(exc)
+            retryable = _is_retryable_error(error_text)
+            if retryable:
+                had_retryable_error = True
+                retryable_errors += 1
+
+            if retryable and attempt < task.retry_429_max:
+                retry_count += 1
+                backoff_seconds = (task.retry_429_backoff_ms / 1000.0) * (2**attempt)
+                sleep(max(0.0, backoff_seconds))
+                continue
+
+            return {
+                "index": task.index,
+                "total": task.total,
+                "relative_path": task.relative_path,
+                "status": "failed",
+                "run_id": None,
+                "runtime_ms": None,
+                "overall_risk": None,
+                "domain_risks": {},
+                "error": error_text,
+                "pdf_sha256": task.pdf_sha256,
+                "result_dir": str(subdir),
+                "retry_count": retry_count,
+                "retryable_errors": retryable_errors,
+                "had_retryable_error": had_retryable_error,
+            }
+
+    return _task_failure_payload(task, RuntimeError("unexpected retry loop exhaustion"))
+
+
+def _task_failure_payload(task: _BatchTask, exc: Exception) -> dict[str, Any]:
+    error_text = _format_error(exc)
+    return {
+        "index": task.index,
+        "total": task.total,
+        "relative_path": task.relative_path,
+        "status": "failed",
+        "run_id": None,
+        "runtime_ms": None,
+        "overall_risk": None,
+        "domain_risks": {},
+        "error": error_text,
+        "pdf_sha256": task.pdf_sha256,
+        "result_dir": str(Path(task.batch_output_dir) / task.output_subdir),
+        "retry_count": 0,
+        "retryable_errors": 1 if _is_retryable_error(error_text) else 0,
+        "had_retryable_error": _is_retryable_error(error_text),
+    }
+
+
+def _apply_task_result(
+    *,
+    task_result: dict[str, Any],
+    checkpoint: dict[str, Any],
+    items: dict[str, dict[str, Any]],
+    checkpoint_path: Path,
+    output_dir: Path,
+    reusable_by_hash: dict[str, Path],
+) -> None:
+    rel_path = str(task_result["relative_path"])
+    item = items[rel_path]
+    status = str(task_result.get("status") or "failed")
+
+    if status == "success":
+        item["status"] = "success"
+        item["run_id"] = task_result.get("run_id")
+        item["runtime_ms"] = task_result.get("runtime_ms")
+        item["overall_risk"] = task_result.get("overall_risk")
+        item["domain_risks"] = task_result.get("domain_risks") or {}
+        item["error"] = None
+        pdf_sha256 = task_result.get("pdf_sha256")
+        result_dir = task_result.get("result_dir")
+        if isinstance(pdf_sha256, str) and isinstance(result_dir, str):
+            reusable_by_hash[pdf_sha256] = Path(result_dir).resolve()
+        typer.echo(
+            f"[{task_result['index']}/{task_result['total']}] done {rel_path}"
+        )
+    else:
+        item["status"] = "failed"
+        item["run_id"] = None
+        item["runtime_ms"] = None
+        item["overall_risk"] = None
+        item["domain_risks"] = {}
+        item["error"] = str(task_result.get("error") or "unknown error")
+        typer.echo(
+            f"[{task_result['index']}/{task_result['total']}] failed {rel_path}: {item['error']}"
+        )
+
+    item["updated_at"] = _now_iso()
+    _increment_runtime_meta(
+        checkpoint,
+        completed=1,
+        retryable_errors=int(task_result.get("retryable_errors") or 0),
+    )
+    _write_checkpoint(checkpoint_path, checkpoint)
+    _write_summary_files(checkpoint, output_dir)
+
+
+def _ensure_runtime_meta(
+    checkpoint: dict[str, Any],
+    *,
+    workers: int,
+    max_inflight_llm: int,
+    rate_limit_mode: str,
+) -> None:
+    meta = checkpoint.get("runtime_meta")
+    if not isinstance(meta, dict):
+        meta = {}
+        checkpoint["runtime_meta"] = meta
+    meta.setdefault("started_at", _now_iso())
+    meta["workers"] = workers
+    meta["max_inflight_llm"] = max_inflight_llm
+    meta["rate_limit_mode"] = rate_limit_mode
+    meta.setdefault("completed_items", 0)
+    meta.setdefault("retryable_error_count", 0)
+
+
+def _increment_runtime_meta(
+    checkpoint: dict[str, Any],
+    *,
+    completed: int = 0,
+    retryable_errors: int = 0,
+) -> None:
+    meta = checkpoint.get("runtime_meta")
+    if not isinstance(meta, dict):
+        return
+    meta["completed_items"] = int(meta.get("completed_items") or 0) + int(completed)
+    meta["retryable_error_count"] = int(meta.get("retryable_error_count") or 0) + int(
+        retryable_errors
+    )
+
+
+def _resolve_workers(cli_value: int | None, config_value: int | None) -> int:
+    if cli_value is not None:
+        return max(1, int(cli_value))
+    if config_value is not None:
+        return max(1, int(config_value))
+    cpu = os.cpu_count() or 1
+    return max(1, min(4, cpu))
+
+
+def _resolve_int_with_default(
+    cli_value: int | None,
+    config_value: int | None,
+    *,
+    fallback: int,
+) -> int:
+    if cli_value is not None:
+        return int(cli_value)
+    if config_value is not None:
+        return int(config_value)
+    return int(fallback)
+
+
+def _resolve_rate_limit_mode(
+    cli_value: str | None,
+    config_value: str | None,
+) -> Literal["adaptive", "fixed"]:
+    raw = (cli_value or config_value or "adaptive").strip().lower()
+    if raw not in {"adaptive", "fixed"}:
+        raise typer.BadParameter("--rate-limit-mode 仅支持 adaptive|fixed")
+    return "adaptive" if raw == "adaptive" else "fixed"
+
+
+def _is_retryable_error(error_text: str) -> bool:
+    normalized = error_text.strip().lower()
+    if not normalized:
+        return False
+    return any(token in normalized for token in _RETRYABLE_ERROR_HINTS)
 
 
 def _build_initial_checkpoint(
@@ -782,8 +1283,7 @@ def _build_summary_payload(checkpoint: dict[str, Any]) -> dict[str, Any]:
         status = str(item.get("status") or "pending")
         if status in counts:
             counts[status] += 1
-
-    return {
+    summary = {
         "version": checkpoint.get("version"),
         "input_dir_abs": checkpoint.get("input_dir_abs"),
         "output_dir_abs": checkpoint.get("output_dir_abs"),
@@ -792,6 +1292,36 @@ def _build_summary_payload(checkpoint: dict[str, Any]) -> dict[str, Any]:
         "counts": counts,
         "items": sorted(items, key=lambda item: str(item.get("relative_path") or "")),
     }
+
+    runtime_meta = checkpoint.get("runtime_meta")
+    if isinstance(runtime_meta, dict):
+        metrics = dict(runtime_meta)
+        runtime_values = sorted(
+            int(item["runtime_ms"])
+            for item in items
+            if isinstance(item.get("runtime_ms"), int)
+        )
+        if runtime_values:
+            metrics["avg_runtime_ms"] = int(sum(runtime_values) / len(runtime_values))
+            metrics["p95_runtime_ms"] = runtime_values[min(len(runtime_values) - 1, int(len(runtime_values) * 0.95))]
+
+        started_at = metrics.get("started_at")
+        completed_items = int(metrics.get("completed_items") or 0)
+        if isinstance(started_at, str):
+            try:
+                elapsed_seconds = max(
+                    1.0,
+                    (datetime.now(timezone.utc) - datetime.fromisoformat(started_at)).total_seconds(),
+                )
+                metrics["throughput_docs_per_hour"] = round(
+                    (completed_items / elapsed_seconds) * 3600.0,
+                    2,
+                )
+            except ValueError:
+                pass
+        summary["runtime_meta"] = metrics
+
+    return summary
 
 
 def _write_summary_files(checkpoint: dict[str, Any], output_dir: Path) -> None:

@@ -56,6 +56,14 @@ class Rob2RunOptions(BaseModel):
     doc_scope_min_confidence: float | None = Field(default=None, ge=0, le=1)
     doc_scope_abstract_gap_pages: int | None = Field(default=None, ge=0)
 
+    # Runtime concurrency / retry
+    max_concurrency: int | None = Field(default=None, ge=1)
+    rate_limit_mode: Literal["adaptive", "fixed"] | None = None
+    rate_limit_init: int | None = Field(default=None, ge=1)
+    rate_limit_max: int | None = Field(default=None, ge=1)
+    retry_429_max: int | None = Field(default=None, ge=0)
+    retry_429_backoff_ms: int | None = Field(default=None, ge=1)
+
     # Retrieval + fusion
     top_k: int | None = Field(default=None, ge=1)
     per_query_top_n: int | None = Field(default=None, ge=1)

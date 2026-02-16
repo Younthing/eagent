@@ -138,6 +138,8 @@ Notes:
 - `final_domain_audit_node` is optional and emits an all-domain audit report (no rerun) when `domain_audit_mode=llm` and `domain_audit_final=true`.
 - `aggregate_node` produces `rob2_result` (JSON) + `rob2_table_markdown` (human-readable), and computes overall risk with current implementation rules: any High→High; all Low→Low; otherwise 4-5 Some concerns→High and 1-3 Some concerns→Some concerns (no-domain fallback: Not applicable).
 - CLI `rob2 batch run` uses `batch_checkpoint.json` (v2) and `batch_item_meta.json` to reuse fixed outputs by PDF SHA-256 only; matching files are marked `skipped` and do not re-run `run_rob2` even when options differ.
+- `rob2 batch run` supports document-level parallel execution with `--workers` (single-machine multi-process), while checkpoint writes remain centralized to preserve v2 compatibility.
+- `rob2 batch run` supports adaptive concurrency throttling for 429/timeout scenarios (`--rate-limit-mode adaptive`, `--rate-limit-init`, `--rate-limit-max`, `--retry-429-*`); runtime metrics are recorded under `runtime_meta` in `batch_summary.json`.
 - `rob2 batch run` now auto-generates `batch_traffic_light.png` (classic Overall+D1..D5 traffic-light matrix) by default; `--no-plot` disables it and `--plot-output` overrides the target path.
 - `rob2 batch run` now auto-generates `batch_summary.xlsx` by default; `--no-excel` disables it and `--excel-output` overrides the target path.
 - CLI now includes `rob2 batch plot`, which renders the same PNG from an existing batch output directory or a `batch_summary.json` file.

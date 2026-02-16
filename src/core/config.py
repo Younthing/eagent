@@ -26,6 +26,27 @@ class Settings(BaseSettings):
     cache_scope: str = Field(
         default="deterministic", validation_alias="CACHE_SCOPE"
     )
+    batch_workers: int | None = Field(
+        default=None, validation_alias="BATCH_WORKERS"
+    )
+    max_inflight_llm: int | None = Field(
+        default=None, validation_alias="MAX_INFLIGHT_LLM"
+    )
+    rate_limit_mode: str | None = Field(
+        default=None, validation_alias="RATE_LIMIT_MODE"
+    )
+    rate_limit_init: int | None = Field(
+        default=None, validation_alias="RATE_LIMIT_INIT"
+    )
+    rate_limit_max: int | None = Field(
+        default=None, validation_alias="RATE_LIMIT_MAX"
+    )
+    retry_429_max: int | None = Field(
+        default=None, validation_alias="RETRY_429_MAX"
+    )
+    retry_429_backoff_ms: int | None = Field(
+        default=None, validation_alias="RETRY_429_BACKOFF_MS"
+    )
 
     docling_layout_model: str | None = Field(
         default=None, validation_alias="DOCLING_LAYOUT_MODEL"
