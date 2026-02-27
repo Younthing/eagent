@@ -123,6 +123,7 @@ Notes:
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support LLM query planning via LangChain `init_chat_model` (`query_planner=llm`), with deterministic fallback on errors.
 - Preprocessing applies `doc_scope_selector` to trim mixed-document PDFs (auto/manual) and produces `doc_scope_report` in debug/report outputs.
 - Preprocessing supports optional figure extraction (`doc_structure.figures`) with Docling image enrichment (`do_picture_description`) and optional external multimodal LLM description.
+- Preprocessing supports forcing full-page OCR via `DOCLING_FORCE_FULL_PAGE_OCR=true` (or run option `docling_force_full_page_ocr=true`) to mitigate garbled text in some text-layer PDFs.
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support optional cross-encoder reranking (`reranker=cross_encoder`) after RRF.
 - `bm25_retrieval_locator_node` / `splade_retrieval_locator_node` support optional structure-aware filtering/ranking (Milestone 5).
 - `relevance_validator_node` annotates fused candidates with an LLM relevance verdict (Milestone 7).

@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     docling_do_picture_description: bool = Field(
         default=False, validation_alias="DOCLING_DO_PICTURE_DESCRIPTION"
     )
+    docling_force_full_page_ocr: bool = Field(
+        default=True, validation_alias="DOCLING_FORCE_FULL_PAGE_OCR"
+    )
     docling_picture_description_preset: str | None = Field(
         default=None, validation_alias="DOCLING_PICTURE_DESCRIPTION_PRESET"
     )

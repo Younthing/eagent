@@ -300,6 +300,10 @@ def _build_run_state(
             options.docling_do_picture_description,
             settings.docling_do_picture_description,
         ),
+        "docling_force_full_page_ocr": _resolve_bool(
+            options.docling_force_full_page_ocr,
+            settings.docling_force_full_page_ocr,
+        ),
         "docling_picture_description_preset": _resolve_str(
             options.docling_picture_description_preset
         )

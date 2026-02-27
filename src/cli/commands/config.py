@@ -157,6 +157,10 @@ def _options_catalog() -> list[dict[str, Any]]:
                     "desc": "启用 Docling 图片描述",
                 },
                 {
+                    "key": "docling_force_full_page_ocr",
+                    "desc": "强制对整页执行 OCR（可缓解文字版中文 PDF 乱码）",
+                },
+                {
                     "key": "docling_picture_description_preset",
                     "desc": "Docling 图片描述预设（如 smolvlm）",
                 },

@@ -120,6 +120,7 @@ def test_settings_preprocess_defaults():
     assert settings.docling_generate_picture_images is False
     assert settings.docling_do_picture_classification is False
     assert settings.docling_do_picture_description is False
+    assert settings.docling_force_full_page_ocr is True
     assert settings.figure_description_mode == "none"
     assert settings.figure_description_max_images == 8
     assert settings.figure_description_max_tokens == 256

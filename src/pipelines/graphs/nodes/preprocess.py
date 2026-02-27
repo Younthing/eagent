@@ -85,6 +85,10 @@ def preprocess_node(state: dict) -> dict:
                 state.get("docling_do_picture_description"),
                 settings.docling_do_picture_description,
             ),
+            "docling_force_full_page_ocr": _resolve_bool(
+                state.get("docling_force_full_page_ocr"),
+                settings.docling_force_full_page_ocr,
+            ),
             "docling_picture_description_preset": _resolve_str(
                 state.get("docling_picture_description_preset")
             )
@@ -454,6 +458,7 @@ def _build_docling_converter(
     generate_picture_images = bool(settings.docling_generate_picture_images)
     do_picture_classification = bool(settings.docling_do_picture_classification)
     do_picture_description = bool(settings.docling_do_picture_description)
+    force_full_page_ocr = bool(settings.docling_force_full_page_ocr)
     picture_description_preset = _resolve_str(settings.docling_picture_description_preset)
     figure_description_mode = str(settings.figure_description_mode or "none").strip().lower()
 
@@ -484,6 +489,11 @@ def _build_docling_converter(
                 overrides.get("docling_do_picture_description"),
                 do_picture_description,
             )
+        if overrides.get("docling_force_full_page_ocr") is not None:
+            force_full_page_ocr = _resolve_bool(
+                overrides.get("docling_force_full_page_ocr"),
+                force_full_page_ocr,
+            )
         if overrides.get("docling_picture_description_preset") is not None:
             picture_description_preset = _resolve_str(
                 overrides.get("docling_picture_description_preset")
@@ -507,11 +517,21 @@ def _build_docling_converter(
     pipeline_options.generate_picture_images = bool(generate_picture_images)
     pipeline_options.do_picture_classification = bool(do_picture_classification)
     pipeline_options.do_picture_description = bool(do_picture_description)
+    try:
+        if getattr(pipeline_options, "ocr_options", None) is not None:
+            pipeline_options.ocr_options.force_full_page_ocr = bool(force_full_page_ocr)
+    except Exception:
+        logger.warning(
+            "Failed to set Docling force_full_page_ocr=%s",
+            force_full_page_ocr,
+            exc_info=True,
+        )
     config["images_scale"] = float(images_scale)
     config["generate_page_images"] = bool(generate_page_images)
     config["generate_picture_images"] = bool(generate_picture_images)
     config["do_picture_classification"] = bool(do_picture_classification)
     config["do_picture_description"] = bool(do_picture_description)
+    config["force_full_page_ocr"] = bool(force_full_page_ocr)
 
     if do_picture_description and picture_description_preset:
         try:
@@ -632,6 +652,7 @@ def _read_docling_overrides(state: dict) -> Optional[dict[str, object]]:
         "docling_generate_picture_images",
         "docling_do_picture_classification",
         "docling_do_picture_description",
+        "docling_force_full_page_ocr",
         "docling_picture_description_preset",
         "figure_description_mode",
         "figure_description_model",

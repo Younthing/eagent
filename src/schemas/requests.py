@@ -34,6 +34,7 @@ class Rob2RunOptions(BaseModel):
     docling_generate_picture_images: bool | None = None
     docling_do_picture_classification: bool | None = None
     docling_do_picture_description: bool | None = None
+    docling_force_full_page_ocr: bool | None = None
     docling_picture_description_preset: str | None = None
     figure_description_mode: Literal["none", "llm"] | None = None
     figure_description_model: str | None = None
